@@ -1,0 +1,36 @@
+.receptionist { max-width: 860px; margin: auto; min-height: 100svh; padding: 0 20px 20px; background: #fff; color: #202825; letter-spacing: 0; }
+.receptionist * { box-sizing: border-box; }
+.receptionist-header { min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid #d9e1dc; }
+.receptionist-header > a { font-weight: 750; font-size: 18px; }
+.receptionist nav { display: flex; gap: 16px; font-size: 14px; }
+.receptionist a { color: #165943; text-decoration: none; }
+.receptionist-title { padding: 20px 0; display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+.receptionist h1 { font-size: 24px; margin: 0; }
+.receptionist-title span, .receptionist dt { color: #5d6962; font-size: 14px; }
+.receptionist-chat { max-height: 60svh; min-height: 240px; overflow-y: auto; padding: 8px 8px 20px 0; scrollbar-gutter: stable; }
+.receptionist-message { padding: 16px 0; border-bottom: 1px solid #e9eeeb; overflow-wrap: anywhere; }
+.receptionist-message strong { font-size: 13px; color: #52625a; }
+.receptionist-message.user { padding-left: 24px; border-left: 3px solid #b6d7c8; background: #f4f8f5; }
+.receptionist p { margin: 8px 0; line-height: 1.65; }
+.receptionist button { border: 1px solid #a3b9ab; background: #fff; color: #224e3e; min-height: 44px; padding: 10px 14px; border-radius: 6px; font: inherit; cursor: pointer; transition: background .15s; white-space: normal; }
+.receptionist button:hover { background: #ecf3ef; }
+.receptionist button:disabled { opacity: .5; cursor: default; }
+.receptionist button.receptionist-primary { color: #fff; background: #225f49; border-color: #225f49; }
+.receptionist button:focus-visible, .receptionist input:focus-visible, .receptionist textarea:focus-visible { outline: 3px solid #d5ac47; outline-offset: 2px; }
+.receptionist-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; margin-top: 12px; }
+.receptionist-card { border: 1px solid #c0d1c6; border-radius: 6px; padding: 16px; margin-top: 12px; }
+.receptionist h2 { font-size: 18px; margin: 0 0 12px; }
+.receptionist dl { margin: 0; }
+.receptionist dl div { display: grid; grid-template-columns: 140px 1fr; gap: 8px; padding: 6px 0; }
+.receptionist dd { margin: 0; }
+.receptionist-reference { font-family: monospace; font-size: 13px; overflow-wrap: anywhere; }
+.receptionist-compose { display: flex; gap: 12px; align-items: flex-end; padding-top: 16px; border-top: 1px solid #d9e1dc; }
+.receptionist-input { flex: 1; min-width: 0; font-size: 13px; }
+.receptionist textarea, .receptionist input { width: 100%; font: inherit; border: 1px solid #9eafa4; border-radius: 4px; padding: 10px; background: white; color: #202825; }
+.receptionist textarea { resize: vertical; min-height: 64px; max-height: 160px; }
+.receptionist-date { display: flex; align-items: flex-end; gap: 12px; padding-top: 12px; }
+.receptionist-error { color: #9d3030; }
+.receptionist-handoff { color: #755414; background: #fff8df; padding: 10px; }
+.receptionist footer { display: flex; gap: 8px; margin-top: 12px; }
+@media (max-width: 480px) { .receptionist { padding: 0 14px 14px; } .receptionist-header { flex-wrap: wrap; padding: 12px 0; } .receptionist-chat { max-height: 52svh; } .receptionist-compose { gap: 8px; } .receptionist dl div { grid-template-columns: 1fr; gap: 0; } }
+@media (prefers-reduced-motion: reduce) { .receptionist * { transition: none; scroll-behavior: auto; } }

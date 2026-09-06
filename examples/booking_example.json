@@ -1,0 +1,10 @@
+{
+  "customer": {
+    "name": "ลูกค้า A",
+    "phone": "0800000000"
+  },
+  "service": "ตัดผม",
+  "staff": "ช่างแอน",
+  "start_at": "2026-09-10T10:00:00+07:00",
+  "status": "confirmed"
+}

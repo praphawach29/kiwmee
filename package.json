@@ -1,0 +1,33 @@
+{
+  "name": "salon-booking-os-v1",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Salon Booking OS v1 Phase 1 backend core: database rules, availability engine, and booking transactions.",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "node --test",
+    "automation:run": "node scripts/run-automation.js",
+    "test:browser": "playwright test",
+    "admin:hash-password": "node scripts/hash-admin-password.js",
+    "config:check": "node -e \"require('./src/config').validateRuntimeConfig(); console.log('configuration valid')\"",
+    "pilot:preflight": "node scripts/pilot-preflight.js",
+    "automation:schedule": "node scripts/automation-scheduler.js",
+    "test:production-smoke": "node scripts/production-smoke.js"
+  },
+  "dependencies": {
+    "ajv": "^8.20.0",
+    "next": "^15.5.0",
+    "pg": "^8.13.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  }
+}

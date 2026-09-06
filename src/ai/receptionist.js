@@ -2,6 +2,7 @@ const { randomUUID } = require("node:crypto");
 const { MockAIProvider } = require("./provider");
 const { getBookingConfig } = require("../config");
 const { normalizePhone } = require("../security/access");
+const { logEvent } = require("../observability/logger");
 
 class Receptionist {
   constructor(gateway, provider = new MockAIProvider(), handoffService = null) {
@@ -116,6 +117,11 @@ class Receptionist {
       } else { text = "ยังไม่ได้ดำเนินการค่ะ กรุณาเลือกข้อมูลตามขั้นตอน หรือพิมพ์ เริ่มใหม่"; }
     } catch (error) {
       session.pending = null;
+      logEvent("ai_receptionist_error", {
+        code: error.code || "AI_RECEPTIONIST_ERROR",
+        session_id: session?.id,
+        error: error.message
+      }, console.error);
       if (error.code === "CONFLICT" && session.service && session.date) {
         try { await slots(); } catch { session.slots = []; choices = []; }
         text = "ช่วงเวลานี้เพิ่งถูกจอง ยังจองไม่สำเร็จค่ะ กรุณาเลือกเวลาใหม่จากรายการล่าสุด";

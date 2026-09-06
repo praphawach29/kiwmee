@@ -22,6 +22,8 @@ class MockAIProvider extends AIProvider {
   }
 }
 
+const { logEvent } = require("../observability/logger");
+
 class OpenAIProvider extends AIProvider {
   constructor(options = {}) {
     super();
@@ -29,7 +31,10 @@ class OpenAIProvider extends AIProvider {
     this.instructions = options.instructions ?? "คุณเป็นตัวจำแนกเจตนาสำหรับผู้ช่วยจองร้าน ตอบผ่าน tool ที่กำหนดเท่านั้น ห้ามสร้างข้อมูลร้าน ราคา เวลา หรือสิทธิ์ใหม่";
   }
   async interpret({ message, state }) {
-    if (!this.apiKey || !this.model) { const error = new Error("AI provider is not configured"); error.code = "AI_PROVIDER_UNAVAILABLE"; throw error; }
+    if (!this.apiKey || !this.model) {
+      logEvent("ai_provider_error", { code: "AI_PROVIDER_NOT_CONFIGURED", error: "API key or model missing", model: this.model ?? "unset" }, console.error);
+      const error = new Error("AI provider is not configured"); error.code = "AI_PROVIDER_UNAVAILABLE"; throw error;
+    }
     let response;
     try {
       response = await this.fetch("https://api.openai.com/v1/responses", {
@@ -46,11 +51,51 @@ class OpenAIProvider extends AIProvider {
           tool_choice: { type: "function", name: "select_receptionist_action" }, parallel_tool_calls: false,
           max_output_tokens: 200 })
       });
-    } catch { const error = new Error("AI provider unavailable"); error.code = "AI_PROVIDER_UNAVAILABLE"; throw error; }
-    if (!response.ok) { const error = new Error("AI provider unavailable"); error.code = "AI_PROVIDER_UNAVAILABLE"; throw error; }
+    } catch (err) {
+      logEvent("ai_provider_error", {
+        code: "AI_PROVIDER_FETCH_ERROR",
+        status: 0,
+        error: err?.message ?? "Fetch error",
+        model: this.model
+      }, console.error);
+      const error = new Error("AI provider unavailable"); error.code = "AI_PROVIDER_UNAVAILABLE"; throw error;
+    }
+    if (!response.ok) {
+      let rawError = "";
+      try {
+        const errJson = await response.json();
+        rawError = errJson?.error?.message || errJson?.error?.code || response.statusText;
+      } catch {
+        try { rawError = await response.text(); } catch {}
+      }
+      logEvent("ai_provider_error", {
+        code: "AI_PROVIDER_HTTP_ERROR",
+        status: response.status,
+        error: rawError || response.statusText,
+        model: this.model
+      }, console.error);
+      const error = new Error("AI provider unavailable"); error.code = "AI_PROVIDER_UNAVAILABLE"; throw error;
+    }
     const body = await response.json();
     const call = body.output?.find((item) => item.type === "function_call" && item.name === "select_receptionist_action");
-    try { return JSON.parse(call.arguments); } catch { const error = new Error("Invalid AI provider response"); error.code = "AI_PROVIDER_INVALID"; throw error; }
+    if (!call || typeof call.arguments !== "string") {
+      logEvent("ai_provider_error", {
+        code: "AI_PROVIDER_INVALID_OUTPUT",
+        error: `Missing tool call in output: ${body.output ? JSON.stringify(body.output.map((o) => o.type)) : "no_output"}`,
+        model: this.model
+      }, console.error);
+      const error = new Error("Invalid AI provider response"); error.code = "AI_PROVIDER_INVALID"; throw error;
+    }
+    try {
+      return JSON.parse(call.arguments);
+    } catch (err) {
+      logEvent("ai_provider_error", {
+        code: "AI_PROVIDER_JSON_ERROR",
+        error: err?.message ?? "JSON parse error",
+        model: this.model
+      }, console.error);
+      const error = new Error("Invalid AI provider response"); error.code = "AI_PROVIDER_INVALID"; throw error;
+    }
   }
 }
 

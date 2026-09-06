@@ -32,7 +32,13 @@ class Receptionist {
     try {
       // User text can request handoff, but neither user text nor provider output grants permissions.
       const sensitive = /ร้องเรียน|ส่วนลด|ลดราคา|ยกเว้น|คุยกับคน|คุยกับพนักงาน|complaint|discount|exception|human/i.test(message);
-      const plan = sensitive ? { intent: "handoff" } : await this.provider.interpret({ message, state: {
+      const directSlot = session.stage === "slot" && session.slots?.find((s) =>
+        `${s.staff_id} ${s.start_at}` === message.trim() ||
+        s.start_at === message.trim() ||
+        formatTime(s.start_at) === message.trim() ||
+        `${formatTime(s.start_at)} · ${session.staffList?.find((st) => st.id === s.staff_id)?.name ?? "ช่าง"}` === message.trim()
+      );
+      const plan = sensitive ? { intent: "handoff" } : directSlot ? { intent: "slot", value: `${directSlot.staff_id} ${directSlot.start_at}` } : await this.provider.interpret({ message, state: {
         stage: session.stage, services: session.services.map((item) => item.name), staff: session.staffList.map((item) => item.name)
       } });
       if (!plan || typeof plan.intent !== "string" || Object.keys(plan).some((key) => !["intent", "value"].includes(key))) throw new Error("Invalid provider response");
@@ -81,11 +87,18 @@ class Receptionist {
         if (date === "พรุ่งนี้") date = new Date(Date.now() + (24 + 7) * 3600000).toISOString().slice(0, 10);
         session.date = date; await slots();
       } else if (plan.intent === "slot" && session.stage === "slot") {
-        const selected = session.slots.find((s) => `${s.staff_id} ${s.start_at}` === plan.value);
-        if (!selected) { text = "กรุณาเลือกเวลาจากรายการที่ระบบตรวจสอบแล้วค่ะ"; await slots(); }
-        else {
+        const selected = session.slots?.find((s) =>
+          `${s.staff_id} ${s.start_at}` === plan.value ||
+          s.start_at === plan.value ||
+          formatTime(s.start_at) === plan.value ||
+          (plan.value && `${formatTime(s.start_at)} · ${session.staffList?.find((st) => st.id === s.staff_id)?.name ?? "ช่าง"}` === plan.value)
+        );
+        if (!selected) {
+          await slots();
+          text = "กรุณาเลือกเวลาจากรายการที่ระบบตรวจสอบแล้วค่ะ";
+        } else {
           session.slot = selected;
-          session.staff = session.staffList.find((s) => s.id === selected.staff_id);
+          session.staff = session.staffList?.find((s) => s.id === selected.staff_id) ?? session.staff;
           if (session.customer) review();
           else { session.stage = "contact"; text = "ขอชื่อและเบอร์โทรที่ใช้จองค่ะ เช่น มาลี 0812345678"; }
         }

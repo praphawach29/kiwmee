@@ -10,10 +10,10 @@ export default function AssistantClient() {
   const end = useRef(null);
   const latest = messages.filter((m) => m.role === "assistant").at(-1);
   useEffect(() => { end.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [messages, loading]);
-  async function send(message) {
+  async function send(message, label = null) {
     if (loading || !message.trim() || message.length > 2000) return;
     setLoading(true); setInput(""); setError("");
-    setMessages((rows) => [...rows, { role: "user", message: message.match(/^[0-9a-f-]{36} /) ? "เลือกเวลานี้" : message }]);
+    setMessages((rows) => [...rows, { role: "user", message: label ?? (message.match(/^[0-9a-f-]{36} /) ? "เลือกเวลานี้" : message) }]);
     try {
       const response = await fetch("/api/ai/receptionist", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ session_id: sessionId, message }) });
       const body = await response.json();
@@ -47,7 +47,7 @@ export default function AssistantClient() {
           <p>สถานะ: {row.state.booking.status}</p><p>รหัสนัด: <span className="receptionist-reference">{row.state.booking.id}</span></p>
           <a href={`/manage/${row.state.booking.id}`}>จัดการนัดหมาย</a>
         </section>}
-        {row === latest && !loading && <div className="receptionist-choices">{row.choices?.map((choice) => <button key={choice.value} onClick={() => send(choice.value)}>{choice.label}</button>)}</div>}
+        {row === latest && !loading && <div className="receptionist-choices">{row.choices?.map((choice) => <button key={choice.value} onClick={() => send(choice.value, choice.label)}>{choice.label}</button>)}</div>}
         {row.handoff && <p className="receptionist-handoff" role="status">ต้องติดต่อพนักงานของร้านเพื่อดำเนินการต่อ</p>}
       </article>)}
       {loading && <p role="status">กำลังตรวจสอบข้อมูล…</p>}

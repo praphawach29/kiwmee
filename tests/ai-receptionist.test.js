@@ -101,3 +101,71 @@ test("rate limits and byte limits reject abuse", async () => {
   sameOrigin(new Request("http://localhost/internal", { headers: { host: "127.0.0.1:3000", origin: "http://127.0.0.1:3000" } }));
   assert.throws(() => sameOrigin(new Request("http://localhost/internal", { headers: { host: "127.0.0.1:3000", origin: "https://evil.example" } })), /Origin/);
 });
+
+test("selecting a rendered slot transitions from slot stage to contact stage and updates session state", async () => {
+  const f = fixture();
+  await f.receptionist.respond(f.session, "บริการ");
+  await f.receptionist.respond(f.session, "ตัดผม");
+  await f.receptionist.respond(f.session, "แอน");
+  const slotStep = await f.receptionist.respond(f.session, "2026-09-10");
+  assert.equal(slotStep.state.stage, "slot");
+  assert.equal(slotStep.choices.length, 1);
+  const slotChoice = slotStep.choices[0];
+  assert.equal(slotChoice.value, `${staffId} ${f.slot.start_at}`);
+
+  // Test selecting slot via rendered button value
+  const contactStep = await f.receptionist.respond(f.session, slotChoice.value);
+  assert.equal(contactStep.state.stage, "contact");
+  assert.equal(f.session.stage, "contact");
+  assert.deepEqual(f.session.slot, f.slot);
+  assert.equal(f.session.staff.name, "แอน");
+  assert.match(contactStep.message, /ขอชื่อและเบอร์โทร/);
+});
+
+test("slot selection with real/custom AI provider resolves rendered slot or time string without infinite loop", async () => {
+  const f = fixture();
+  const mock = new MockAIProvider();
+  let slotValueToReturn = "13:00";
+  const customProvider = {
+    interpret: async (params) => {
+      if (params.state.stage === "slot") return { intent: "slot", value: slotValueToReturn };
+      return mock.interpret(params);
+    }
+  };
+  const receptionist = new Receptionist(f.gateway, customProvider);
+  await receptionist.respond(f.session, "บริการ");
+  await receptionist.respond(f.session, "ตัดผม");
+  await receptionist.respond(f.session, "แอน");
+  const slotStep = await receptionist.respond(f.session, "2026-09-10");
+  assert.equal(slotStep.state.stage, "slot");
+
+  // User clicking rendered button: direct slot bypass works without calling provider
+  const contactStep = await receptionist.respond(f.session, slotStep.choices[0].value);
+  assert.equal(contactStep.state.stage, "contact");
+  assert.deepEqual(f.session.slot, f.slot);
+  assert.match(contactStep.message, /ขอชื่อและเบอร์โทร/);
+
+  // User typing time in natural language (where provider returns formatted time e.g. "13:00"):
+  const naturalSession = new MemorySessionStore().create();
+  await receptionist.respond(naturalSession, "บริการ");
+  await receptionist.respond(naturalSession, "ตัดผม");
+  await receptionist.respond(naturalSession, "แอน");
+  await receptionist.respond(naturalSession, "2026-09-10");
+  slotValueToReturn = "13:00";
+  const naturalContactStep = await receptionist.respond(naturalSession, "ขอเวลา 13:00 ครับ");
+  assert.equal(naturalContactStep.state.stage, "contact");
+  assert.deepEqual(naturalSession.slot, f.slot);
+  assert.match(naturalContactStep.message, /ขอชื่อและเบอร์โทร/);
+
+  // Invalid slot should inform customer without resetting text to generic prompt
+  const invalidSession = new MemorySessionStore().create();
+  await receptionist.respond(invalidSession, "บริการ");
+  await receptionist.respond(invalidSession, "ตัดผม");
+  await receptionist.respond(invalidSession, "แอน");
+  await receptionist.respond(invalidSession, "2026-09-10");
+  slotValueToReturn = "09:00";
+  const invalidStep = await receptionist.respond(invalidSession, "ขอเก้าโมงเช้า");
+  assert.equal(invalidStep.state.stage, "slot");
+  assert.match(invalidStep.message, /กรุณาเลือกเวลาจากรายการที่ระบบตรวจสอบแล้วค่ะ/);
+});
+

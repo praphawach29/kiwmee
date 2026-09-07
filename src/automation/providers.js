@@ -35,6 +35,9 @@ class MockNotificationProvider {
 }
 
 class ConsoleNotificationProvider {
+  constructor() {
+    this.deliveryMode = "console";
+  }
   async sendConfirmation(payload) {
     return this.log("booking_confirmation", payload);
   }
@@ -58,7 +61,14 @@ class ConsoleNotificationProvider {
   }
 }
 
+class ShadowNotificationProvider {
+  constructor() {
+    this.deliveryMode = "shadow";
+  }
+}
+
 module.exports = {
   ConsoleNotificationProvider,
-  MockNotificationProvider
+  MockNotificationProvider,
+  ShadowNotificationProvider
 };

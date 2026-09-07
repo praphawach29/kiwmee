@@ -38,6 +38,7 @@ ADMIN_SESSION_SECRET=...
 AI_ENABLED=true
 AI_PROVIDER=mock
 LINE_ENABLED=false
+AUTOMATION_DELIVERY_MODE=shadow
 ```
 
 Generate `ADMIN_PASSWORD_HASH` locally:
@@ -88,6 +89,19 @@ The webhook verifies the LINE signature before processing. The LINE adapter reus
 
 ## 5. Worker And Scheduler
 
+Keep the production worker in non-consuming shadow mode before LINE is enabled:
+
+```env
+AUTOMATION_DELIVERY_MODE=shadow
+LINE_ENABLED=false
+```
+
+Shadow mode performs reconciliation and no-show lifecycle updates, but it does not
+claim or complete notification jobs. This prevents console-only output from being
+recorded as a successful customer delivery. Use `console` only for isolated canary
+bookings. Set `live` only together with `LINE_ENABLED=true`; production validation
+rejects live delivery without LINE credentials.
+
 Run automation jobs from a scheduler, cron, platform job, or separate worker process:
 
 ```bash
@@ -102,6 +116,16 @@ curl -X POST https://your-domain.example/api/internal/automation/run \
 ```
 
 or run `npm run automation:run` every 1-5 minutes in a worker. The runner processes due automation jobs and no-show detection one pass at a time. Jobs are idempotent and persisted in PostgreSQL.
+
+For a long-running Railway worker, use `npm run automation:schedule` and configure:
+
+```env
+AUTOMATION_SCHEDULE_INTERVAL_MS=60000
+AUTOMATION_MAX_CONSECUTIVE_FAILURES=5
+```
+
+The process exits non-zero after the configured number of consecutive failed cycles,
+allowing Railway to restart it. Do not expose a public domain for the worker service.
 
 ## 6. Runtime Checks
 

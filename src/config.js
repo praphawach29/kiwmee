@@ -45,6 +45,7 @@ function getPilotConfig(env = process.env) {
     lineEnabled: readBoolean(env.LINE_ENABLED, false),
     lineChannelSecret: env.LINE_CHANNEL_SECRET ?? null,
     lineAccessToken: env.LINE_CHANNEL_ACCESS_TOKEN ?? null,
+    automationDeliveryMode: env.AUTOMATION_DELIVERY_MODE ?? "shadow",
     adminSessionHours: readPositiveNumber(env.ADMIN_SESSION_HOURS, 8)
   };
 }
@@ -59,6 +60,12 @@ function validateRuntimeConfig(env = process.env) {
   if (config.aiEnabled && config.aiProvider === "openai") { required("OPENAI_API_KEY", 20); required("AI_MODEL"); }
   if (!['mock', 'openai'].includes(config.aiProvider)) errors.push("AI_PROVIDER must be mock or openai");
   if (config.lineEnabled) { required("LINE_CHANNEL_SECRET", 16); required("LINE_CHANNEL_ACCESS_TOKEN", 20); }
+  if (!["shadow", "console", "live"].includes(config.automationDeliveryMode)) {
+    errors.push("AUTOMATION_DELIVERY_MODE must be shadow, console or live");
+  }
+  if (config.automationDeliveryMode === "live" && !config.lineEnabled) {
+    errors.push("AUTOMATION_DELIVERY_MODE=live requires LINE_ENABLED=true");
+  }
   if (errors.length) { const error = new Error(`Invalid production configuration: ${errors.join("; ")}`); error.code = "CONFIG_INVALID"; throw error; }
   return config;
 }

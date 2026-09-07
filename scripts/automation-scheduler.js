@@ -13,11 +13,15 @@
 const { getRepository, closeRepository } = require("../src/repositories");
 const { runAutomationCycle } = require("../src/automation/automation-service");
 const { createNotificationProvider } = require("../src/automation/provider-factory");
-const { getPilotConfig } = require("../src/config");
+const { getPilotConfig, validateRuntimeConfig } = require("../src/config");
 
-const INTERVAL_MS = Number(process.env.AUTOMATION_SCHEDULE_INTERVAL_MS || 60000); // 1 minute default
+const INTERVAL_MS = readPositiveInteger("AUTOMATION_SCHEDULE_INTERVAL_MS", 60000, 5000);
+const MAX_CONSECUTIVE_FAILURES = readPositiveInteger("AUTOMATION_MAX_CONSECUTIVE_FAILURES", 5, 1);
 let running = false;
 let isTerminating = false;
+let consecutiveFailures = 0;
+
+validateRuntimeConfig();
 
 async function executeCycle() {
   if (running || isTerminating) return;
@@ -31,21 +35,34 @@ async function executeCycle() {
 
     const result = await runAutomationCycle(repository, { provider });
     const elapsed = Date.now() - start;
+    consecutiveFailures = 0;
 
     console.log(JSON.stringify({
       event: "automation_scheduler_cycle",
       timestamp: new Date().toISOString(),
       duration_ms: elapsed,
-      detected_no_shows: result.detectedNoShows?.length || 0,
-      processed_jobs: result.jobs?.length || 0,
+      detected_no_shows: result.no_show_detected,
+      shadow_mode: result.shadow_mode,
+      processed_jobs: result.jobs_processed,
       failed_jobs: result.jobs?.filter((j) => j.status === "failed").length || 0
     }));
   } catch (error) {
+    consecutiveFailures += 1;
     console.error(JSON.stringify({
       event: "automation_scheduler_error",
       timestamp: new Date().toISOString(),
-      error: error.message
+      error: error.message,
+      consecutive_failures: consecutiveFailures
     }));
+    if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+      console.error(JSON.stringify({
+        event: "automation_scheduler_fatal",
+        timestamp: new Date().toISOString(),
+        reason: "maximum consecutive failures reached"
+      }));
+      process.exitCode = 1;
+      await shutdown("FAILURE_THRESHOLD");
+    }
   } finally {
     running = false;
   }
@@ -76,8 +93,18 @@ async function shutdown(signal) {
     await closeRepository();
     await require("../src/repositories/pilot").closePilotRepository();
   } catch {}
-  process.exit(0);
+  process.exit(process.exitCode ?? 0);
 }
 
 process.on("SIGINT", () => shutdown("SIGINT"));
 process.on("SIGTERM", () => shutdown("SIGTERM"));
+
+function readPositiveInteger(name, fallback, minimum) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === "") return fallback;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < minimum) {
+    throw new Error(`${name} must be an integer greater than or equal to ${minimum}`);
+  }
+  return value;
+}

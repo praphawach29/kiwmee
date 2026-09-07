@@ -4,6 +4,8 @@ const { createHmac, randomBytes, scryptSync } = require("node:crypto");
 const { OpenAIProvider, MockAIProvider, createAIProvider } = require("../src/ai/provider");
 const { LineMessagingProvider, MockMessagingProvider } = require("../src/messaging/providers");
 const { LineAutomationNotificationProvider } = require("../src/messaging/line-automation-provider");
+const { createNotificationProvider } = require("../src/automation/provider-factory");
+const { ConsoleNotificationProvider, ShadowNotificationProvider } = require("../src/automation/providers");
 const { PhoneMatchVerificationProvider, VerificationProvider } = require("../src/security/verification");
 const { validateRuntimeConfig } = require("../src/config");
 const { logEvent } = require("../src/observability/logger");
@@ -63,6 +65,21 @@ test("production config validates required secrets and conditional providers", (
   assert.equal(validateRuntimeConfig(base).businessName, "Beauty");
   assert.throws(() => validateRuntimeConfig({ ...base, AI_ENABLED: "true", AI_PROVIDER: "openai" }), /OPENAI_API_KEY/);
   assert.throws(() => validateRuntimeConfig({ ...base, LINE_ENABLED: "true" }), /LINE_CHANNEL_SECRET/);
+  assert.throws(() => validateRuntimeConfig({ ...base, AUTOMATION_DELIVERY_MODE: "invalid" }), /AUTOMATION_DELIVERY_MODE/);
+  assert.throws(() => validateRuntimeConfig({ ...base, AUTOMATION_DELIVERY_MODE: "live" }), /requires LINE_ENABLED=true/);
+});
+
+test("automation provider defaults to non-consuming shadow mode", () => {
+  const repository = {};
+  assert.ok(createNotificationProvider(repository, { lineEnabled: false }) instanceof ShadowNotificationProvider);
+  assert.ok(createNotificationProvider(repository, {
+    lineEnabled: false,
+    automationDeliveryMode: "console"
+  }) instanceof ConsoleNotificationProvider);
+  assert.throws(() => createNotificationProvider(repository, {
+    lineEnabled: false,
+    automationDeliveryMode: "live"
+  }), /requires LINE_ENABLED=true/);
 });
 
 test("structured logger only emits allowlisted metadata", () => {

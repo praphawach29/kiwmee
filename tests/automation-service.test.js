@@ -12,7 +12,7 @@ const {
   reconcileAutomationJobs,
   runAutomationCycle
 } = require("../src/automation/automation-service");
-const { MockNotificationProvider } = require("../src/automation/providers");
+const { MockNotificationProvider, ShadowNotificationProvider } = require("../src/automation/providers");
 const { createBooking } = require("../src/booking-service");
 const { FakeRepository, buildSeed } = require("./fake-repository");
 
@@ -46,6 +46,24 @@ test("worker rerun does not send completed jobs again", async () => {
 
   assert.equal(provider.sent.filter((item) => item.type === JOB_TYPES.confirmation).length, 1);
   assert.equal(provider.sent.filter((item) => item.type === JOB_TYPES.reminder).length, 1);
+});
+
+test("shadow worker reconciles lifecycle state without consuming notification jobs", async () => {
+  const repository = new FakeRepository(buildSeed());
+  const booking = await makeBooking(repository, "2026-09-10T13:00:00+07:00");
+  await handleBookingCreated(repository, booking, config);
+
+  const result = await runAutomationCycle(repository, {
+    provider: new ShadowNotificationProvider(),
+    config,
+    now: "2026-09-09T13:00:00+07:00"
+  });
+
+  const jobs = await repository.listAutomationJobsForBooking(booking.id);
+  assert.equal(result.shadow_mode, true);
+  assert.equal(result.jobs_processed, 0);
+  assert.ok(jobs.every((job) => job.status === "pending"));
+  assert.equal(repository.automationLogs.length, 0);
 });
 
 test("reminder is scheduled from configurable hours before start", async () => {

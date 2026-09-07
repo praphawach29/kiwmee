@@ -69,7 +69,8 @@ async function runAutomationCycle(repository, options = {}) {
   const noShowResult = await detectNoShows(repository, now, config);
   const reconciliation = await reconcileAutomationJobs(repository, config);
   await repository.refreshPendingReminderSchedule?.(config.reminderHoursBefore);
-  const processed = await processDueAutomationJobs(repository, provider, {
+  const shadowMode = provider.deliveryMode === "shadow";
+  const processed = shadowMode ? [] : await processDueAutomationJobs(repository, provider, {
     now,
     limit: options.limit
   });
@@ -77,6 +78,7 @@ async function runAutomationCycle(repository, options = {}) {
   return {
     reconciled: reconciliation,
     no_show_detected: noShowResult.length,
+    shadow_mode: shadowMode,
     jobs_processed: processed.length,
     jobs: processed
   };

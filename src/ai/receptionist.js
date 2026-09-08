@@ -38,9 +38,23 @@ class Receptionist {
         formatTime(s.start_at) === message.trim() ||
         `${formatTime(s.start_at)} · ${session.staffList?.find((st) => st.id === s.staff_id)?.name ?? "ช่าง"}` === message.trim()
       );
-      const plan = sensitive ? { intent: "handoff" } : directSlot ? { intent: "slot", value: `${directSlot.staff_id} ${directSlot.start_at}` } : await this.provider.interpret({ message, state: {
-        stage: session.stage, services: session.services.map((item) => item.name), staff: session.staffList.map((item) => item.name)
-      } });
+      const hasDate = /พรุ่งนี้|วันนี้|\d{4}-\d{2}-\d{2}/.test(message.trim());
+      const directService = !hasDate && session.stage === "service" && Array.isArray(session.services) && session.services.length
+        ? matchOption(session.services, message.trim())
+        : null;
+      const directStaff = !hasDate && session.stage === "staff" && Array.isArray(session.staffList) && session.staffList.length
+        ? matchStaff(session.staffList, message.trim())
+        : null;
+      const plan = sensitive ? { intent: "handoff" }
+        : directSlot ? { intent: "slot", value: `${directSlot.staff_id} ${directSlot.start_at}` }
+        : (directService && directService.match) ? { intent: "service", value: directService.match.name }
+        : (directStaff && directStaff.match) ? { intent: "staff", value: directStaff.match.name }
+        : (directStaff && directStaff.isAny) ? { intent: "staff", value: "ใครก็ได้" }
+        : await this.provider.interpret({ message, state: {
+            stage: session.stage,
+            services: session.services?.map((item) => item.name) ?? [],
+            staff: session.staffList?.map((item) => item.name) ?? []
+          } });
       if (!plan || typeof plan.intent !== "string" || Object.keys(plan).some((key) => !["intent", "value"].includes(key))) throw new Error("Invalid provider response");
       if (plan.intent === "handoff") {
         session.handoff = true; session.pending = null;
@@ -51,7 +65,7 @@ class Receptionist {
         text = "กรุณาติดต่อพนักงานของร้าน หรือเริ่มบทสนทนาใหม่ค่ะ";
       } else if (plan.intent === "search") {
         session.services = await call("list_services", {});
-        const selected = session.services.find((s) => plan.value.includes(s.name));
+        const selected = session.services.find((s) => plan.value.includes(s.name) || plan.value.includes(stripParentheses(s.name)));
         if (!selected) { session.stage = "service"; choices = session.services.map((s) => ({ label: s.name, value: s.name })); text = "ต้องการบริการไหนคะ"; }
         else {
           Object.assign(session, { service: selected, staff: null, action: "create", booking: null, customer: null });
@@ -70,18 +84,40 @@ class Receptionist {
         session.services = await call("list_services", {}); session.stage = "service";
         text = session.services.length ? "เลือกบริการที่ต้องการค่ะ" : "ขณะนี้ยังไม่มีบริการเปิดจอง";
         choices = session.services.map((s) => ({ label: `${s.name} · ${s.price ?? "สอบถามร้าน"} บาท · ${s.duration_minutes} นาที`, value: s.name }));
-      } else if (plan.intent === "service" && session.stage === "service") {
-        const selected = session.services.find((s) => s.name === plan.value || s.id === plan.value);
-        if (!selected) throw new Error("Unknown selection");
-        session.service = await call("get_service_details", { service_id: selected.id });
-        session.staffList = await call("list_staff", { service_id: selected.id }); session.stage = "staff";
-        choices = [...session.staffList.map((s) => ({ label: s.name, value: s.name })), { label: "ใครก็ได้", value: "ใครก็ได้" }];
-        text = "เลือกช่างที่ต้องการค่ะ";
-      } else if (plan.intent === "staff" && session.stage === "staff") {
-        const selected = session.staffList.find((s) => s.name === plan.value || s.id === plan.value);
-        if (!selected && plan.value !== "ใครก็ได้") throw new Error("Unknown selection");
-        session.staff = selected ?? null; session.stage = "date";
-        text = "ต้องการวันไหนคะ ระบุวันที่ ปี-เดือน-วัน หรือพิมพ์ พรุ่งนี้";
+      } else if ((plan.intent === "service" || plan.intent === "unknown") && session.stage === "service") {
+        const resolved = matchOption(session.services, plan.value);
+        const candidate = resolved.match ? resolved : matchOption(session.services, message.trim());
+        if (candidate.match) {
+          session.service = await call("get_service_details", { service_id: candidate.match.id });
+          session.staffList = await call("list_staff", { service_id: candidate.match.id });
+          session.stage = "staff";
+          choices = [...session.staffList.map((s) => ({ label: s.name, value: s.name })), { label: "ใครก็ได้", value: "ใครก็ได้" }];
+          text = "เลือกช่างที่ต้องการค่ะ";
+        } else if (candidate.ambiguous.length > 1) {
+          choices = candidate.ambiguous.map((s) => ({ label: `${s.name} · ${s.price ?? "สอบถามร้าน"} บาท · ${s.duration_minutes} นาที`, value: s.name }));
+          text = "พบหลายบริการที่ตรงกับข้อความของคุณ กรุณาเลือกบริการที่ต้องการจากรายการด้านล่างค่ะ";
+        } else {
+          choices = session.services.map((s) => ({ label: `${s.name} · ${s.price ?? "สอบถามร้าน"} บาท · ${s.duration_minutes} นาที`, value: s.name }));
+          text = "ไม่พบบริการที่ระบุค่ะ กรุณาเลือกจากหมายเลขหรือชื่อรายการที่แสดง";
+        }
+      } else if ((plan.intent === "staff" || plan.intent === "unknown") && session.stage === "staff") {
+        const resolved = matchStaff(session.staffList, plan.value);
+        const candidate = (resolved.match || resolved.isAny) ? resolved : matchStaff(session.staffList, message.trim());
+        if (candidate.match) {
+          session.staff = candidate.match;
+          session.stage = "date";
+          text = "ต้องการวันไหนคะ ระบุวันที่ ปี-เดือน-วัน หรือพิมพ์ พรุ่งนี้";
+        } else if (candidate.isAny) {
+          session.staff = null;
+          session.stage = "date";
+          text = "ต้องการวันไหนคะ ระบุวันที่ ปี-เดือน-วัน หรือพิมพ์ พรุ่งนี้";
+        } else if (candidate.ambiguous.length > 1) {
+          choices = [...candidate.ambiguous.map((s) => ({ label: s.name, value: s.name })), { label: "ใครก็ได้", value: "ใครก็ได้" }];
+          text = "พบช่างหลายท่านที่ตรงกับข้อความของคุณ กรุณาระบุชื่อหรือหมายเลขช่างที่ต้องการค่ะ";
+        } else {
+          choices = [...session.staffList.map((s) => ({ label: s.name, value: s.name })), { label: "ใครก็ได้", value: "ใครก็ได้" }];
+          text = "ไม่พบช่างที่ระบุค่ะ กรุณาเลือกจากหมายเลขหรือชื่อรายการที่แสดง หรือพิมพ์ ใครก็ได้";
+        }
       } else if (plan.intent === "date" && session.stage === "date") {
         let date = plan.value;
         if (date === "พรุ่งนี้") date = new Date(Date.now() + (24 + 7) * 3600000).toISOString().slice(0, 10);
@@ -158,4 +194,96 @@ function handoffReason(message) {
   if (/ยกเว้น|exception/i.test(message)) return "policy_exception";
   return "human_requested";
 }
-module.exports = { Receptionist };
+
+function stripParentheses(text) {
+  return (text ?? "")
+    .toString()
+    .replace(/\s*\([^)]*\)/g, "")
+    .replace(/\s*（[^）]*）/g, "")
+    .trim();
+}
+
+function matchOption(list, input) {
+  if (!Array.isArray(list) || list.length === 0 || input == null) {
+    return { match: null, ambiguous: [] };
+  }
+  const raw = input.toString().trim();
+  if (!raw) {
+    return { match: null, ambiguous: [] };
+  }
+  const lowerInput = raw.toLowerCase();
+
+  // 1. Exact ID
+  const byId = list.find((item) => item.id && item.id.toString().trim() === raw);
+  if (byId) return { match: byId, ambiguous: [] };
+
+  // 2. Exact name (case-insensitive)
+  const byName = list.find((item) => item.name && item.name.toString().trim().toLowerCase() === lowerInput);
+  if (byName) return { match: byName, ambiguous: [] };
+
+  // 3. Numeric index ("1", "2", "ข้อ 1", "เลือก 2", "1.", etc.)
+  const numMatch = raw.match(/^(?:(?:ข้อ|เบอร์|เลือก(?:\s*ข้อ)?|ลำดับ(?:ที่)?)\s*)?(\d{1,3})\.?$/i);
+  if (numMatch) {
+    const idx = parseInt(numMatch[1], 10) - 1;
+    if (idx >= 0 && idx < list.length) {
+      return { match: list[idx], ambiguous: [] };
+    }
+  }
+
+  // 4. Strip English parentheses and match main name
+  const strippedInput = stripParentheses(raw).toLowerCase();
+  if (strippedInput) {
+    const strippedMatches = list.filter(
+      (item) => item.name && stripParentheses(item.name).toLowerCase() === strippedInput
+    );
+    if (strippedMatches.length === 1) {
+      return { match: strippedMatches[0], ambiguous: [] };
+    } else if (strippedMatches.length > 1) {
+      return { match: null, ambiguous: strippedMatches };
+    }
+  }
+
+  // 5. Substring / contains with ambiguity handling
+  const cleanInput = strippedInput.replace(/^(?:เลือก|ขอ(?:จอง)?|เอา)\s*/i, "").trim();
+  if (cleanInput.length >= 2) {
+    const substringMatches = list.filter((item) => {
+      if (!item.name) return false;
+      const itemName = item.name.toString().trim().toLowerCase();
+      const strippedItem = stripParentheses(item.name).toLowerCase();
+      return strippedItem.includes(cleanInput) || itemName.includes(cleanInput) || itemName.includes(lowerInput);
+    });
+    if (substringMatches.length === 1) {
+      return { match: substringMatches[0], ambiguous: [] };
+    } else if (substringMatches.length > 1) {
+      return { match: null, ambiguous: substringMatches };
+    }
+  }
+
+  return { match: null, ambiguous: [] };
+}
+
+function matchStaff(staffList, input) {
+  if (!Array.isArray(staffList) || staffList.length === 0 || input == null) {
+    return { match: null, isAny: false, ambiguous: [] };
+  }
+  const raw = input.toString().trim();
+  if (!raw) {
+    return { match: null, isAny: false, ambiguous: [] };
+  }
+  // Check "ใครก็ได้" / "any"
+  if (/^(?:ใครก็ได้|ใครก้ได้|ใครก็ได้ครับ|ใครก็ได้ค่ะ|any|anyone)$/i.test(raw)) {
+    return { match: null, isAny: true, ambiguous: [] };
+  }
+  // Check if numeric index is staffList.length + 1 ("ใครก็ได้" is option after the last staff)
+  const numMatch = raw.match(/^(?:(?:ข้อ|เบอร์|เลือก(?:\s*ข้อ)?|ลำดับ(?:ที่)?)\s*)?(\d{1,3})\.?$/i);
+  if (numMatch) {
+    const idx = parseInt(numMatch[1], 10) - 1;
+    if (idx === staffList.length) {
+      return { match: null, isAny: true, ambiguous: [] };
+    }
+  }
+  const res = matchOption(staffList, raw);
+  return { match: res.match, isAny: false, ambiguous: res.ambiguous };
+}
+
+module.exports = { Receptionist, matchOption, matchStaff, stripParentheses };

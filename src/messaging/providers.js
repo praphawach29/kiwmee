@@ -32,7 +32,7 @@ class MockMessagingProvider extends MessagingProvider {
   constructor(secret = "test-line-secret") { super(); this.channelSecret = secret; this.replies = []; this.pushes = []; }
   verifySignature(raw, signature) { return new LineMessagingProvider({ channelSecret: this.channelSecret }).verifySignature(raw, signature); }
   async replyMessages(replyToken, messages) {
-    const text = messages.map((m) => m.text).filter(Boolean).join("\n");
+    const text = messages.map((m) => m.text || m.altText).filter(Boolean).join("\n");
     this.replies.push({ replyToken, messages, text });
     return { delivered: true };
   }
@@ -41,7 +41,7 @@ class MockMessagingProvider extends MessagingProvider {
     return { delivered: true };
   }
   async pushMessages(to, messages) {
-    const text = messages.map((m) => m.text).filter(Boolean).join("\n");
+    const text = messages.map((m) => m.text || m.altText).filter(Boolean).join("\n");
     this.pushes.push({ to, messages, text });
     return { delivered: true };
   }

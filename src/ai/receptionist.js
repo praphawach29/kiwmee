@@ -67,6 +67,25 @@ class Receptionist {
           const offset = postback.offset || 0;
           choices = paginateChoices(allChoices, offset);
           text = `เลือกตัวเลือกที่ต้องการค่ะ (แสดง ${offset + 1}-${Math.min(offset + 12, allChoices.length)} จากทั้งหมด ${allChoices.length}):`;
+        } else if (postback.action === "category") {
+          if (!session.services) session.services = await call("list_services", {});
+          session.stage = "service";
+          const cat = postback.cat;
+          session.selectedCategory = cat;
+          let filtered = session.services;
+          if (cat && cat !== "บริการทั้งหมด" && cat !== "all") {
+            filtered = session.services.filter((s) => {
+              const text = `${s.name} ${s.description || ""}`.toLowerCase();
+              if (cat.includes("ตัด") || cat.includes("จัดทรง")) return /ตัดผม|haircut|สระไดร์|wash|blow|ทรง/i.test(text);
+              if (cat.includes("สี") || cat.includes("เคมี")) return /สี|color|gloss|ไฮไลต์|ฟอก/i.test(text);
+              if (cat.includes("สปา") || cat.includes("ทรีตเมนต์")) return /สปา|spa|ดีท็อกซ์|detox|ฟื้นฟู|treatment|บำรุง/i.test(text);
+              return true;
+            });
+          }
+          session.filteredServices = filtered;
+          session.totalChoices = filtered.length;
+          choices = paginateChoices(buildServiceChoices(filtered), 0);
+          text = `เลือกบริการในหมวด "${cat}" ค่ะ:`;
         } else if (postback.action === "service") {
           if (session.stage && session.stage !== "service" && session.stage !== "start") {
             // Stale service postback
@@ -188,8 +207,13 @@ class Receptionist {
           state: {
             stage: session.stage,
             service: session.service,
+            services: session.filteredServices || session.services || null,
+            selectedCategory: session.selectedCategory || null,
             staff: session.staff,
+            staffList: session.staffList || null,
             date: session.date,
+            slot: session.slot,
+            slots: session.slots || null,
             review: session.pending ? {
               id: session.pending.id,
               action: session.pending.action,
@@ -448,8 +472,13 @@ class Receptionist {
       state: {
         stage: session.stage,
         service: session.service,
+        services: session.filteredServices || session.services || null,
+        selectedCategory: session.selectedCategory || null,
         staff: session.staff,
+        staffList: session.staffList || null,
         date: session.date,
+        slot: session.slot,
+        slots: session.slots || null,
         review: session.pending ? {
           id: session.pending.id,
           action: session.pending.action,
@@ -479,7 +508,9 @@ function parsePostback(data) {
       date: params.get("date"),
       start_at: params.get("start_at"),
       review_id: params.get("review_id"),
-      offset: params.get("offset") ? parseInt(params.get("offset"), 10) : 0
+      offset: params.get("offset") ? parseInt(params.get("offset"), 10) : 0,
+      cat: params.get("cat"),
+      stage: params.get("stage")
     };
   } catch {
     return null;

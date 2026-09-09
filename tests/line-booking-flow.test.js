@@ -437,3 +437,118 @@ test("LINE booking flow end-to-end via LineWebhookService with signature", async
   assert.match(messaging.replies[7].messages[0].text, /ได้รับการยืนยันเรียบร้อยแล้ว/);
   assert.equal(f.getCreateCount(), 1); // No double booking
 });
+
+test("formatLineReply generates valid LINE Flex Message Carousel for service selection with image and button", async () => {
+  const f = createFixture();
+  const res = await f.receptionist.respond(f.session, "action=start");
+  const reply = formatLineReply(res);
+
+  assert.equal(reply.type, "flex");
+  assert.equal(reply.contents.type, "carousel");
+  assert.ok(reply.contents.contents.length > 0);
+
+  const firstBubble = reply.contents.contents[0];
+  assert.equal(firstBubble.type, "bubble");
+  assert.equal(firstBubble.hero.type, "image");
+  assert.match(firstBubble.hero.url, /^https:\/\//); // Valid HTTPS image
+  assert.match(firstBubble.footer.contents[0].action.data, /^action=service&service_id=/);
+
+  // Serializes cleanly to JSON without non-enumerable properties leaking
+  const jsonStr = JSON.stringify(reply);
+  const parsed = JSON.parse(jsonStr);
+  assert.equal(parsed.type, "flex");
+  assert.ok(!Object.prototype.hasOwnProperty.call(parsed, "text"));
+  assert.ok(reply.altText.length > 0);
+  assert.equal(reply.text, reply.altText);
+});
+
+test("category postback filters services and returns filtered choices", async () => {
+  const f = createFixture();
+  // Provide services in different categories
+  const services = [
+    { id: "11111111-1111-4111-8111-111111111111", name: "ตัดผมและจัดทรง (Haircut & Style)", price: "600", duration_minutes: 60 },
+    { id: "22222222-2222-4222-8222-222222222222", name: "ทำสีผมแฟชั่น (Hair Color & Gloss)", price: "2500", duration_minutes: 120 },
+    { id: "33333333-3333-4333-8333-333333333333", name: "ดีท็อกซ์หนังศีรษะ (Scalp Detox & Massage)", price: "950", duration_minutes: 60 }
+  ];
+  f.api.services = async () => services;
+
+  // Initialize services in session
+  await f.receptionist.respond(f.session, "action=start");
+
+  // Select "ทำสีและเคมี" category
+  const res = await f.receptionist.respond(f.session, "action=category&cat=" + encodeURIComponent("ทำสีและเคมี"));
+  assert.equal(res.state.stage, "service");
+  assert.equal(res.state.services.length, 1);
+  assert.match(res.state.services[0].name, /ทำสีผมแฟชั่น/);
+
+  const reply = formatLineReply(res);
+  assert.equal(reply.type, "flex");
+  assert.equal(reply.contents.contents.length, 1);
+  assert.match(reply.contents.contents[0].hero.url, /^https:\/\//);
+});
+
+test("formatLineReply generates Staff Carousel with ANY_STAFF card and stylist profiles", async () => {
+  const f = createFixture();
+  await f.receptionist.respond(f.session, "action=start");
+  const res = await f.receptionist.respond(f.session, `action=service&service_id=${f.service.id}`);
+  const reply = formatLineReply(res);
+
+  assert.equal(reply.type, "flex");
+  assert.equal(reply.contents.type, "carousel");
+  // First bubble is "ใครก็ได้"
+  const anyStaffBubble = reply.contents.contents[0];
+  assert.match(anyStaffBubble.body.contents[1].text, /ใครก็ได้/);
+  assert.equal(anyStaffBubble.footer.contents[0].action.data, "action=staff&staff_id=ANY_STAFF");
+
+  // Subsequent bubbles are stylists
+  const staffBubble = reply.contents.contents[1];
+  assert.match(staffBubble.body.contents[1].text, /ช่าง/);
+  assert.match(staffBubble.footer.contents[0].action.data, /^action=staff&staff_id=/);
+  assert.match(staffBubble.hero.url, /^https:\/\//);
+});
+
+test("formatLineReply generates Date, Slot, Review Ticket and Booking Pass Flex Cards", async () => {
+  const f = createFixture();
+  await f.receptionist.respond(f.session, "action=start");
+  await f.receptionist.respond(f.session, `action=service&service_id=${f.service.id}`);
+  const dateRes = await f.receptionist.respond(f.session, `action=staff&staff_id=${f.staff1.id}`);
+
+  // 1. Date Flex Card
+  const dateReply = formatLineReply(dateRes);
+  assert.equal(dateReply.type, "flex");
+  assert.equal(dateReply.contents.type, "bubble");
+  assert.match(dateReply.contents.header.contents[0].text, /เลือกวันที่/);
+
+  // 2. Slot Flex Card
+  const slotRes = await f.receptionist.respond(f.session, "action=date&date=2026-09-10");
+  const slotReply = formatLineReply(slotRes);
+  assert.equal(slotReply.type, "flex");
+  assert.equal(slotReply.contents.type, "bubble");
+  assert.match(slotReply.contents.header.contents[0].text, /เลือกรอบเวลา/);
+
+  // 3. Contact Info Prompt Card
+  const contactRes = await f.receptionist.respond(f.session, `action=slot&staff_id=${f.staff1.id}&start_at=${encodeURIComponent("2026-09-10T13:00:00+07:00")}`);
+  const contactReply = formatLineReply(contactRes);
+  assert.equal(contactReply.type, "flex");
+  assert.equal(contactReply.contents.type, "bubble");
+  assert.match(contactReply.contents.header.contents[0].text, /ข้อมูลติดต่อ/);
+
+  // 4. Review Ticket Card
+  const reviewRes = await f.receptionist.respond(f.session, "สมชาย 0812345678");
+  const reviewReply = formatLineReply(reviewRes);
+  assert.equal(reviewReply.type, "flex");
+  assert.equal(reviewReply.contents.type, "bubble");
+  assert.match(reviewReply.contents.header.contents[1].text, /สรุปรายละเอียดนัดหมาย/);
+  const confirmBtn = reviewReply.contents.footer.contents.find((c) => c.action.label === "ยืนยันการจอง");
+  assert.ok(confirmBtn);
+  assert.equal(confirmBtn.action.data, "action=confirm");
+
+  // 5. Booking Confirmed Pass Card
+  const bookedRes = await f.receptionist.respond(f.session, "action=confirm");
+  const bookedReply = formatLineReply(bookedRes);
+  assert.equal(bookedReply.type, "flex");
+  assert.equal(bookedReply.contents.type, "bubble");
+  assert.match(bookedReply.contents.header.contents[1].text, /จองสำเร็จเรียบร้อย/);
+  assert.match(bookedReply.altText, /จองสำเร็จ/);
+});
+

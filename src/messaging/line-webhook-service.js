@@ -82,6 +82,17 @@ class LineWebhookService {
   }
 }
 
+const {
+  buildServiceCarousel,
+  buildCategorySelectionBubble,
+  buildStaffCarousel,
+  buildDateSelectionBubble,
+  buildSlotSelectionBubble,
+  buildContactPromptBubble,
+  buildReviewTicketBubble,
+  buildBookingSuccessPassBubble
+} = require("./line-flex-builder");
+
 function formatLineReply(result) {
   const lines = [result.message];
 
@@ -119,11 +130,7 @@ function formatLineReply(result) {
 
   const text = lines.filter((line) => line !== undefined).join("\n");
 
-  const message = {
-    type: "text",
-    text
-  };
-
+  let quickReply = null;
   if (Array.isArray(result.choices) && result.choices.length > 0) {
     const rawItems = result.choices.slice(0, 13);
     const quickReplyItems = rawItems.map((c) => {
@@ -154,9 +161,68 @@ function formatLineReply(result) {
       };
     });
 
-    message.quickReply = { items: quickReplyItems };
+    quickReply = { items: quickReplyItems };
   }
 
+  // Generate rich Flex Message based on current stage
+  let flexMessage = null;
+  const stage = result.state?.stage;
+
+  if (result.state?.booking) {
+    flexMessage = buildBookingSuccessPassBubble(result.state.booking, {
+      service: result.state.service,
+      staff: result.state.staff,
+      slot: result.state.slot
+    });
+  } else if (result.state?.review) {
+    flexMessage = buildReviewTicketBubble(result.state.review);
+  } else if (stage === "service" && result.state?.services?.length > 0) {
+    flexMessage = buildServiceCarousel(result.state.services, {
+      selectedCategory: result.state.selectedCategory,
+      total: result.totalChoices ?? result.state.services.length
+    });
+  } else if (stage === "staff" && result.state?.staffList?.length > 0) {
+    flexMessage = buildStaffCarousel(result.state.staffList, result.state.service);
+  } else if (stage === "date") {
+    flexMessage = buildDateSelectionBubble({
+      service: result.state.service,
+      staff: result.state.staff,
+      today: getBangkokDate(0),
+      tomorrow: getBangkokDate(1),
+      maxDate: getBangkokDate(30)
+    });
+  } else if (stage === "slot" && result.state?.slots?.length > 0) {
+    flexMessage = buildSlotSelectionBubble({
+      service: result.state.service,
+      staff: result.state.staff,
+      date: result.state.date,
+      slots: result.state.slots
+    });
+  } else if (stage === "contact") {
+    flexMessage = buildContactPromptBubble({
+      service: result.state.service,
+      staff: result.state.staff,
+      date: result.state.date,
+      slot: result.state.slot
+    });
+  }
+
+  if (flexMessage) {
+    flexMessage.altText = text;
+    if (quickReply) flexMessage.quickReply = quickReply;
+    Object.defineProperty(flexMessage, "text", {
+      get() { return this.altText; },
+      enumerable: false,
+      configurable: true
+    });
+    return flexMessage;
+  }
+
+  const message = {
+    type: "text",
+    text
+  };
+  if (quickReply) message.quickReply = quickReply;
   return message;
 }
 

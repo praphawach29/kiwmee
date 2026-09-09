@@ -7,6 +7,7 @@ const { apiClient } = require("./tools/api-client");
 const { Receptionist } = require("./receptionist");
 const { createAIProvider } = require("./provider");
 const { HandoffService } = require("./handoff-service");
+const { DEFAULT_SINGLE_BUSINESS_ID } = require("../licensing");
 let runtime;
 function getAIRuntime() {
   if (!runtime) {
@@ -14,7 +15,7 @@ function getAIRuntime() {
     runtime = { config, repository, sessions: new PersistentSessionStore(repository),
       limiter: new PersistentRateLimiter(repository) };
     runtime.receptionist = new Receptionist(new ToolGateway(apiClient), createAIProvider(config),
-      new HandoffService(repository, config));
+      new HandoffService(repository, config), { businessId: config.businessId || DEFAULT_SINGLE_BUSINESS_ID });
   }
   return runtime;
 }

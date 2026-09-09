@@ -3,10 +3,16 @@ const { MockAIProvider } = require("./provider");
 const { getBookingConfig } = require("../config");
 const { normalizePhone } = require("../security/access");
 const { logEvent } = require("../observability/logger");
+const { hasFeature, FEATURES, DEFAULT_SINGLE_BUSINESS_ID } = require("../licensing");
 
 class Receptionist {
-  constructor(gateway, provider = new MockAIProvider(), handoffService = null) {
-    this.gateway = gateway; this.provider = provider; this.handoffService = handoffService;
+  constructor(gateway, provider = new MockAIProvider(), handoffService = null, options = {}) {
+    this.gateway = gateway;
+    this.provider = provider;
+    this.handoffService = handoffService;
+    this.businessId = options?.businessId || DEFAULT_SINGLE_BUSINESS_ID;
+    this.entitlementService = options?.entitlementService || null;
+    this.hasFeatureFn = options?.hasFeatureFn || null;
   }
 
   async respond(session, message) {
@@ -301,6 +307,10 @@ class Receptionist {
           }
         }
 
+        if ((!session.services || !session.services.length) && (session.stage === "start" || session.stage === "service" || !session.stage)) {
+          session.services = await call("list_services", {});
+        }
+
         const hasDate = /พรุ่งนี้|วันนี้|\d{4}-\d{2}-\d{2}/.test(trimmed);
         const directService = !hasDate && session.stage === "service" && Array.isArray(session.services) && session.services.length
           ? matchOption(session.services, trimmed)
@@ -309,15 +319,87 @@ class Receptionist {
           ? matchStaff(session.staffList, trimmed)
           : null;
 
-        const plan = directSlot ? { intent: "slot", value: `${directSlot.staff_id} ${directSlot.start_at}` }
+        let plan = directSlot ? { intent: "slot", value: `${directSlot.staff_id} ${directSlot.start_at}` }
           : (directService && directService.match) ? { intent: "service", value: directService.match.name }
           : (directStaff && directStaff.match) ? { intent: "staff", value: directStaff.match.name }
           : (directStaff && directStaff.isAny) ? { intent: "staff", value: "ใครก็ได้" }
-          : await this.provider.interpret({ message: trimmed, state: {
-              stage: session.stage,
-              services: session.services?.map((item) => item.name) ?? [],
-              staff: session.staffList?.map((item) => item.name) ?? []
-            } });
+          : null;
+
+        if (!plan) {
+          const businessId = session.businessId || this.businessId || DEFAULT_SINGLE_BUSINESS_ID;
+          let aiAllowed = false;
+          try {
+            if (typeof this.hasFeatureFn === "function") {
+              aiAllowed = await this.hasFeatureFn(businessId, FEATURES.aiReceptionist);
+            } else if (this.entitlementService) {
+              aiAllowed = await this.entitlementService.hasFeature(businessId, FEATURES.aiReceptionist);
+            } else {
+              aiAllowed = await hasFeature(businessId, FEATURES.aiReceptionist);
+            }
+          } catch (err) {
+            logEvent("ai_receptionist_entitlement_error", {
+              feature: FEATURES.aiReceptionist,
+              businessId,
+              code: err?.code || "ENTITLEMENT_CHECK_FAILED"
+            });
+            aiAllowed = false;
+          }
+
+          if (aiAllowed) {
+            plan = await this.provider.interpret({
+              message: trimmed,
+              state: {
+                stage: session.stage,
+                services: session.services?.map((item) => item.name) ?? [],
+                staff: session.staffList?.map((item) => item.name) ?? []
+              }
+            });
+          } else {
+            // AI is NOT entitled (e.g. BASIC or PRO plan)
+            // Prevent LLM inference at server layer completely
+            const currentStage = session.stage || "service";
+            if (currentStage === "start" || currentStage === "service" || !session.stage) {
+              if (!session.services || !session.services.length) session.services = await call("list_services", {});
+              session.stage = "service";
+              session.totalChoices = session.services.length;
+              choices = paginateChoices(buildServiceChoices(session.services), 0);
+              text = "ขออภัยค่ะ ขณะนี้ระบบเปิดให้บริการเลือกจองผ่านเมนูด้านล่าง หากต้องการสอบถามข้อมูลเพิ่มเติมสามารถติดต่อร้านได้โดยตรงค่ะ";
+            } else {
+              choices = paginateChoices(getAllChoicesForStage(session), 0);
+              text = `${getStagePrompt(currentStage)} (หรือหากต้องการสอบถามข้อมูลอื่น สามารถติดต่อร้านได้โดยตรงค่ะ)`;
+            }
+
+            return {
+              message: text,
+              session_id: session.id,
+              handoff: session.handoff,
+              choices,
+              totalChoices: session.totalChoices ?? (choices ? choices.length : 0),
+              state: {
+                stage: session.stage,
+                service: session.service,
+                services: session.filteredServices || session.services || null,
+                selectedCategory: session.selectedCategory || null,
+                staff: session.staff,
+                staffList: session.staffList || null,
+                date: session.date,
+                slot: session.slot,
+                slots: session.slots || null,
+                review: session.pending ? {
+                  id: session.pending.id,
+                  action: session.pending.action,
+                  service: session.service,
+                  staff: session.staff,
+                  slot: session.slot,
+                  customer_name: session.customer?.name,
+                  phone_last4: session.customer?.phone?.slice(-4),
+                  cancellation_window_hours: getBookingConfig().cancellationWindowHours
+                } : null,
+                booking: session.booking
+              }
+            };
+          }
+        }
 
         if (!plan || typeof plan.intent !== "string" || Object.keys(plan).some((key) => !["intent", "value"].includes(key))) throw new Error("Invalid provider response");
 

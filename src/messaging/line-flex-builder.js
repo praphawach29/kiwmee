@@ -1,5 +1,19 @@
 // Salon Booking OS v1 - LINE Flex Message Builder
 // Generates rich, interactive Flex Message Carousels and Bubble Cards for booking flow
+// Unified with Brand Palette & Production Visual Identity
+
+const BRAND = {
+  PRIMARY_GREEN: "#12B981",
+  DARK: "#101827",
+  SURFACE: "#F4F5F7",
+  TEXT_PRIMARY: "#111827",
+  TEXT_SECONDARY: "#6B7280",
+  BORDER: "#E5E7EB",
+  MUTED: "#9CA3AF",
+  WHITE: "#FFFFFF",
+  LIGHT_GREEN_BG: "#ECFDF5",
+  LIGHT_GREEN_TEXT: "#065F46"
+};
 
 const SERVICE_IMAGES = {
   detox: "https://images.unsplash.com/photo-1519699047748-de8e457a634e?auto=format&fit=crop&w=800&q=80",
@@ -11,11 +25,13 @@ const SERVICE_IMAGES = {
 };
 
 const STAFF_IMAGES = {
-  ann: "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=500&q=80",
-  meen: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=500&q=80",
-  karn: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=500&q=80",
-  any: "https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=500&q=80",
-  default: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=500&q=80"
+  // Luxury salon styling chairs and mirrors for "Anyone / First Available"
+  any: "https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=800&q=80",
+  // Stylists in salon theme
+  ann: "https://images.unsplash.com/photo-1595476108010-b4d1f102b1b1?auto=format&fit=crop&w=500&q=80",
+  meen: "https://images.unsplash.com/photo-1580618672591-eb180b1a973f?auto=format&fit=crop&w=500&q=80",
+  karn: "https://images.unsplash.com/photo-1622286342621-4bd786c2447c?auto=format&fit=crop&w=500&q=80",
+  default: "https://images.unsplash.com/photo-1562322140-8baeececf3df?auto=format&fit=crop&w=500&q=80"
 };
 
 function getServiceImage(service) {
@@ -96,7 +112,7 @@ function buildServiceCarousel(services, { selectedCategory = null, total = null 
             type: "text",
             text: category,
             weight: "bold",
-            color: "#6366F1",
+            color: BRAND.PRIMARY_GREEN,
             size: "xxs"
           },
           {
@@ -104,6 +120,7 @@ function buildServiceCarousel(services, { selectedCategory = null, total = null 
             text: s.name,
             weight: "bold",
             size: "md",
+            color: BRAND.TEXT_PRIMARY,
             wrap: true,
             margin: "xs",
             maxLines: 2
@@ -112,7 +129,7 @@ function buildServiceCarousel(services, { selectedCategory = null, total = null 
             type: "text",
             text: s.description || "บริการมาตรฐานคุณภาพระดับพรีเมียม",
             size: "xs",
-            color: "#6B7280",
+            color: BRAND.TEXT_SECONDARY,
             wrap: true,
             margin: "sm",
             maxLines: 2
@@ -127,14 +144,14 @@ function buildServiceCarousel(services, { selectedCategory = null, total = null 
                 text: priceText,
                 weight: "bold",
                 size: "lg",
-                color: "#111827",
+                color: BRAND.TEXT_PRIMARY,
                 flex: 0
               },
               {
                 type: "text",
                 text: ` · ${durationText}`,
                 size: "xs",
-                color: "#9CA3AF",
+                color: BRAND.MUTED,
                 margin: "sm"
               }
             ]
@@ -149,7 +166,7 @@ function buildServiceCarousel(services, { selectedCategory = null, total = null 
           {
             type: "button",
             style: "primary",
-            color: "#111827",
+            color: BRAND.PRIMARY_GREEN,
             height: "sm",
             action: {
               type: "postback",
@@ -180,13 +197,13 @@ function buildServiceCarousel(services, { selectedCategory = null, total = null 
             text: "ยังมีบริการอื่นอีก",
             weight: "bold",
             size: "md",
-            color: "#111827"
+            color: BRAND.TEXT_PRIMARY
           },
           {
             type: "text",
             text: `แสดง 10 จากทั้งหมด ${total} รายการ`,
             size: "xs",
-            color: "#6B7280",
+            color: BRAND.TEXT_SECONDARY,
             margin: "sm"
           }
         ]
@@ -194,10 +211,12 @@ function buildServiceCarousel(services, { selectedCategory = null, total = null 
       footer: {
         type: "box",
         layout: "vertical",
+        paddingAll: "md",
         contents: [
           {
             type: "button",
             style: "secondary",
+            height: "sm",
             action: {
               type: "postback",
               label: "ดูบริการเพิ่มเติม",
@@ -246,20 +265,20 @@ function buildCategorySelectionBubble(categories = ["ตัดและจัด
       header: {
         type: "box",
         layout: "vertical",
-        backgroundColor: "#111827",
+        backgroundColor: BRAND.DARK,
         paddingAll: "lg",
         contents: [
           {
             type: "text",
             text: "หมวดหมู่บริการ",
             weight: "bold",
-            color: "#FFFFFF",
+            color: BRAND.WHITE,
             size: "lg"
           },
           {
             type: "text",
             text: "เลือกหมวดที่สนใจเพื่อดูรายการบริการและภาพตัวอย่างค่ะ",
-            color: "#9CA3AF",
+            color: BRAND.MUTED,
             size: "xs",
             margin: "xs"
           }
@@ -281,7 +300,7 @@ function buildCategorySelectionBubble(categories = ["ตัดและจัด
 function buildStaffCarousel(staffList, service = null) {
   const bubbles = [];
 
-  // 1. "ใครก็ได้" Card (Any Stylist)
+  // 1. "ใครก็ได้" Card (Any Stylist / First Available Workstation)
   bubbles.push({
     type: "bubble",
     size: "kilo",
@@ -301,7 +320,7 @@ function buildStaffCarousel(staffList, service = null) {
           type: "text",
           text: "คิวเร็วที่สุด",
           weight: "bold",
-          color: "#10B981",
+          color: BRAND.PRIMARY_GREEN,
           size: "xxs"
         },
         {
@@ -309,13 +328,14 @@ function buildStaffCarousel(staffList, service = null) {
           text: "ใครก็ได้ (ช่างที่ว่าง)",
           weight: "bold",
           size: "md",
+          color: BRAND.TEXT_PRIMARY,
           margin: "xs"
         },
         {
           type: "text",
           text: "ระบบจะจัดสรรช่างที่มีคิวว่างตรงกับเวลาที่ท่านสะดวกที่สุด",
           size: "xs",
-          color: "#6B7280",
+          color: BRAND.TEXT_SECONDARY,
           wrap: true,
           margin: "sm"
         }
@@ -329,7 +349,7 @@ function buildStaffCarousel(staffList, service = null) {
         {
           type: "button",
           style: "primary",
-          color: "#10B981",
+          color: BRAND.PRIMARY_GREEN,
           height: "sm",
           action: {
             type: "postback",
@@ -369,7 +389,7 @@ function buildStaffCarousel(staffList, service = null) {
             type: "text",
             text: role,
             weight: "bold",
-            color: "#6366F1",
+            color: BRAND.PRIMARY_GREEN,
             size: "xxs"
           },
           {
@@ -377,13 +397,14 @@ function buildStaffCarousel(staffList, service = null) {
             text: mainName,
             weight: "bold",
             size: "md",
+            color: BRAND.TEXT_PRIMARY,
             margin: "xs"
           },
           {
             type: "text",
             text: `ผู้เชี่ยวชาญประจำร้าน ดูแลบริการ ${service?.name ? truncate(service.name, 15) : "อย่างมืออาชีพ"}`,
             size: "xs",
-            color: "#6B7280",
+            color: BRAND.TEXT_SECONDARY,
             wrap: true,
             margin: "sm"
           }
@@ -397,7 +418,7 @@ function buildStaffCarousel(staffList, service = null) {
           {
             type: "button",
             style: "primary",
-            color: "#111827",
+            color: BRAND.PRIMARY_GREEN,
             height: "sm",
             action: {
               type: "postback",
@@ -434,20 +455,20 @@ function buildDateSelectionBubble({ service, staff, today, tomorrow, maxDate }) 
       header: {
         type: "box",
         layout: "vertical",
-        backgroundColor: "#111827",
+        backgroundColor: BRAND.DARK,
         paddingAll: "lg",
         contents: [
           {
             type: "text",
             text: "เลือกวันที่รับบริการ",
             weight: "bold",
-            color: "#FFFFFF",
+            color: BRAND.WHITE,
             size: "md"
           },
           {
             type: "text",
             text: `${service?.name ?? "บริการ"} · ช่าง: ${staff?.name ?? "ใครก็ได้"}`,
-            color: "#9CA3AF",
+            color: BRAND.MUTED,
             size: "xs",
             margin: "xs",
             wrap: true
@@ -462,7 +483,7 @@ function buildDateSelectionBubble({ service, staff, today, tomorrow, maxDate }) 
           {
             type: "button",
             style: "primary",
-            color: "#4F46E5",
+            color: BRAND.PRIMARY_GREEN,
             margin: "sm",
             height: "sm",
             action: {
@@ -475,7 +496,7 @@ function buildDateSelectionBubble({ service, staff, today, tomorrow, maxDate }) 
           {
             type: "button",
             style: "primary",
-            color: "#4F46E5",
+            color: BRAND.PRIMARY_GREEN,
             margin: "sm",
             height: "sm",
             action: {
@@ -538,20 +559,20 @@ function buildSlotSelectionBubble({ service, staff, date, slots = [] }) {
       header: {
         type: "box",
         layout: "vertical",
-        backgroundColor: "#111827",
+        backgroundColor: BRAND.DARK,
         paddingAll: "lg",
         contents: [
           {
             type: "text",
             text: "เลือกรอบเวลาที่ต้องการ",
             weight: "bold",
-            color: "#FFFFFF",
+            color: BRAND.WHITE,
             size: "md"
           },
           {
             type: "text",
             text: `วันที่ ${formattedDate} · ${service?.name ?? ""}`,
-            color: "#9CA3AF",
+            color: BRAND.MUTED,
             size: "xs",
             margin: "xs",
             wrap: true
@@ -592,20 +613,20 @@ function buildContactPromptBubble({ service, staff, date, slot }) {
       header: {
         type: "box",
         layout: "vertical",
-        backgroundColor: "#111827",
+        backgroundColor: BRAND.DARK,
         paddingAll: "lg",
         contents: [
           {
             type: "text",
             text: "ข้อมูลติดต่อสำหรับนัดหมาย",
             weight: "bold",
-            color: "#FFFFFF",
+            color: BRAND.WHITE,
             size: "md"
           },
           {
             type: "text",
             text: `${service?.name ?? "บริการ"} (${formattedDate} ${time} น.)`,
-            color: "#9CA3AF",
+            color: BRAND.MUTED,
             size: "xs",
             margin: "xs"
           }
@@ -621,19 +642,19 @@ function buildContactPromptBubble({ service, staff, date, slot }) {
             text: "กรุณาพิมพ์ ชื่อ และ เบอร์โทรศัพท์",
             weight: "bold",
             size: "sm",
-            color: "#111827"
+            color: BRAND.TEXT_PRIMARY
           },
           {
             type: "text",
             text: "เพื่อใช้ยืนยันการนัดหมายและรับข้อความแจ้งเตือนค่ะ",
             size: "xs",
-            color: "#6B7280",
+            color: BRAND.TEXT_SECONDARY,
             margin: "xs"
           },
           {
             type: "box",
             layout: "vertical",
-            backgroundColor: "#F3F4F6",
+            backgroundColor: BRAND.SURFACE,
             cornerRadius: "md",
             paddingAll: "md",
             margin: "md",
@@ -642,7 +663,7 @@ function buildContactPromptBubble({ service, staff, date, slot }) {
                 type: "text",
                 text: "ตัวอย่าง: มาลี 0812345678",
                 size: "sm",
-                color: "#4B5563"
+                color: BRAND.TEXT_PRIMARY
               }
             ]
           }
@@ -670,21 +691,21 @@ function buildReviewTicketBubble(review) {
       header: {
         type: "box",
         layout: "vertical",
-        backgroundColor: "#111827",
+        backgroundColor: BRAND.DARK,
         paddingAll: "lg",
         contents: [
           {
             type: "text",
             text: "SALON BOOKING",
             size: "xxs",
-            color: "#9CA3AF",
+            color: BRAND.MUTED,
             weight: "bold"
           },
           {
             type: "text",
             text: "สรุปรายละเอียดนัดหมาย",
             weight: "bold",
-            color: "#FFFFFF",
+            color: BRAND.WHITE,
             size: "lg",
             margin: "xs"
           }
@@ -700,8 +721,8 @@ function buildReviewTicketBubble(review) {
             type: "box",
             layout: "horizontal",
             contents: [
-              { type: "text", text: "บริการ", size: "sm", color: "#6B7280", flex: 2 },
-              { type: "text", text: review?.service?.name ?? "-", size: "sm", weight: "bold", color: "#111827", flex: 5, wrap: true }
+              { type: "text", text: "บริการ", size: "sm", color: BRAND.TEXT_SECONDARY, flex: 2 },
+              { type: "text", text: review?.service?.name ?? "-", size: "sm", weight: "bold", color: BRAND.TEXT_PRIMARY, flex: 5, wrap: true }
             ]
           },
           // Stylist
@@ -710,8 +731,8 @@ function buildReviewTicketBubble(review) {
             layout: "horizontal",
             margin: "md",
             contents: [
-              { type: "text", text: "ช่าง", size: "sm", color: "#6B7280", flex: 2 },
-              { type: "text", text: review?.staff?.name ?? "ใครก็ได้", size: "sm", weight: "bold", color: "#111827", flex: 5 }
+              { type: "text", text: "ช่าง", size: "sm", color: BRAND.TEXT_SECONDARY, flex: 2 },
+              { type: "text", text: review?.staff?.name ?? "ใครก็ได้", size: "sm", weight: "bold", color: BRAND.TEXT_PRIMARY, flex: 5 }
             ]
           },
           // Date & Time
@@ -720,8 +741,8 @@ function buildReviewTicketBubble(review) {
             layout: "horizontal",
             margin: "md",
             contents: [
-              { type: "text", text: "วันและเวลา", size: "sm", color: "#6B7280", flex: 2 },
-              { type: "text", text: `${dateText} (${timeText})`, size: "sm", weight: "bold", color: "#111827", flex: 5 }
+              { type: "text", text: "วันและเวลา", size: "sm", color: BRAND.TEXT_SECONDARY, flex: 2 },
+              { type: "text", text: `${dateText} (${timeText})`, size: "sm", weight: "bold", color: BRAND.TEXT_PRIMARY, flex: 5 }
             ]
           },
           // Duration
@@ -730,8 +751,8 @@ function buildReviewTicketBubble(review) {
             layout: "horizontal",
             margin: "md",
             contents: [
-              { type: "text", text: "ระยะเวลา", size: "sm", color: "#6B7280", flex: 2 },
-              { type: "text", text: duration, size: "sm", color: "#111827", flex: 5 }
+              { type: "text", text: "ระยะเวลา", size: "sm", color: BRAND.TEXT_SECONDARY, flex: 2 },
+              { type: "text", text: duration, size: "sm", color: BRAND.TEXT_PRIMARY, flex: 5 }
             ]
           },
           // Price
@@ -740,8 +761,8 @@ function buildReviewTicketBubble(review) {
             layout: "horizontal",
             margin: "md",
             contents: [
-              { type: "text", text: "ยอดรวม", size: "sm", color: "#6B7280", flex: 2 },
-              { type: "text", text: price, size: "md", weight: "bold", color: "#10B981", flex: 5 }
+              { type: "text", text: "ยอดรวม", size: "sm", color: BRAND.TEXT_SECONDARY, flex: 2 },
+              { type: "text", text: price, size: "md", weight: "bold", color: BRAND.PRIMARY_GREEN, flex: 5 }
             ]
           },
           {
@@ -754,8 +775,8 @@ function buildReviewTicketBubble(review) {
             layout: "horizontal",
             margin: "md",
             contents: [
-              { type: "text", text: "ผู้จอง", size: "xs", color: "#6B7280", flex: 2 },
-              { type: "text", text: `${review?.customer_name ?? ""} (ลงท้าย ${review?.phone_last4 ?? ""})`, size: "xs", color: "#4B5563", flex: 5 }
+              { type: "text", text: "ผู้จอง", size: "xs", color: BRAND.TEXT_SECONDARY, flex: 2 },
+              { type: "text", text: `${review?.customer_name ?? ""} (ลงท้าย ${review?.phone_last4 ?? ""})`, size: "xs", color: BRAND.TEXT_SECONDARY, flex: 5 }
             ]
           }
         ]
@@ -769,7 +790,7 @@ function buildReviewTicketBubble(review) {
           {
             type: "button",
             style: "primary",
-            color: "#10B981",
+            color: BRAND.PRIMARY_GREEN,
             height: "sm",
             action: {
               type: "postback",
@@ -814,21 +835,21 @@ function buildBookingSuccessPassBubble(booking, details = {}) {
       header: {
         type: "box",
         layout: "vertical",
-        backgroundColor: "#10B981",
+        backgroundColor: BRAND.PRIMARY_GREEN,
         paddingAll: "lg",
         contents: [
           {
             type: "text",
             text: "BOOKING CONFIRMED",
             size: "xxs",
-            color: "#E6FFFA",
+            color: BRAND.WHITE,
             weight: "bold"
           },
           {
             type: "text",
             text: "จองสำเร็จเรียบร้อยค่ะ 🎉",
             weight: "bold",
-            color: "#FFFFFF",
+            color: BRAND.WHITE,
             size: "lg",
             margin: "xs"
           }
@@ -842,7 +863,7 @@ function buildBookingSuccessPassBubble(booking, details = {}) {
           {
             type: "box",
             layout: "vertical",
-            backgroundColor: "#F3F4F6",
+            backgroundColor: BRAND.SURFACE,
             cornerRadius: "md",
             paddingAll: "md",
             alignItems: "center",
@@ -851,14 +872,14 @@ function buildBookingSuccessPassBubble(booking, details = {}) {
                 type: "text",
                 text: "รหัสนัดหมาย (Booking Reference)",
                 size: "xxs",
-                color: "#6B7280"
+                color: BRAND.TEXT_SECONDARY
               },
               {
                 type: "text",
                 text: bookingRef,
                 size: "xl",
                 weight: "bold",
-                color: "#111827",
+                color: BRAND.TEXT_PRIMARY,
                 margin: "xs"
               }
             ]
@@ -868,8 +889,8 @@ function buildBookingSuccessPassBubble(booking, details = {}) {
             layout: "horizontal",
             margin: "lg",
             contents: [
-              { type: "text", text: "บริการ", size: "sm", color: "#6B7280", flex: 2 },
-              { type: "text", text: serviceName, size: "sm", weight: "bold", color: "#111827", flex: 5, wrap: true }
+              { type: "text", text: "บริการ", size: "sm", color: BRAND.TEXT_SECONDARY, flex: 2 },
+              { type: "text", text: serviceName, size: "sm", weight: "bold", color: BRAND.TEXT_PRIMARY, flex: 5, wrap: true }
             ]
           },
           {
@@ -877,8 +898,8 @@ function buildBookingSuccessPassBubble(booking, details = {}) {
             layout: "horizontal",
             margin: "md",
             contents: [
-              { type: "text", text: "ช่าง", size: "sm", color: "#6B7280", flex: 2 },
-              { type: "text", text: staffName, size: "sm", weight: "bold", color: "#111827", flex: 5 }
+              { type: "text", text: "ช่าง", size: "sm", color: BRAND.TEXT_SECONDARY, flex: 2 },
+              { type: "text", text: staffName, size: "sm", weight: "bold", color: BRAND.TEXT_PRIMARY, flex: 5 }
             ]
           },
           {
@@ -886,8 +907,8 @@ function buildBookingSuccessPassBubble(booking, details = {}) {
             layout: "horizontal",
             margin: "md",
             contents: [
-              { type: "text", text: "วันและเวลา", size: "sm", color: "#6B7280", flex: 2 },
-              { type: "text", text: `${dateText} (${timeText})`, size: "sm", weight: "bold", color: "#111827", flex: 5 }
+              { type: "text", text: "วันและเวลา", size: "sm", color: BRAND.TEXT_SECONDARY, flex: 2 },
+              { type: "text", text: `${dateText} (${timeText})`, size: "sm", weight: "bold", color: BRAND.TEXT_PRIMARY, flex: 5 }
             ]
           },
           {
@@ -898,7 +919,7 @@ function buildBookingSuccessPassBubble(booking, details = {}) {
             type: "text",
             text: "* กรุณามาถึงก่อนเวลานัดหมาย 10 นาที หากต้องการเลื่อนหรือยกเลิก กรุณาแจ้งล่วงหน้าอย่างน้อย 24 ชม. ค่ะ",
             size: "xxs",
-            color: "#9CA3AF",
+            color: BRAND.MUTED,
             wrap: true,
             margin: "md"
           }
@@ -927,6 +948,7 @@ function buildBookingSuccessPassBubble(booking, details = {}) {
 }
 
 module.exports = {
+  BRAND,
   buildServiceCarousel,
   buildCategorySelectionBubble,
   buildStaffCarousel,

@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { ToolGateway } = require("../src/ai/tools/gateway");
-const { Receptionist, matchOption, matchStaff, stripParentheses } = require("../src/ai/receptionist");
+const { Receptionist, matchOption, matchStaff, stripParentheses, stripLeadingIndex, stripRenderedSuffix, normalizeText } = require("../src/ai/receptionist");
 const { MemorySessionStore } = require("../src/ai/sessions");
 const { MockAIProvider } = require("../src/ai/provider");
 const { MemoryRateLimiter, boundedJson, sameOrigin } = require("../src/security/limits");
@@ -440,5 +440,125 @@ test("direct deterministic selection resolves service and staff before calling L
   assert.equal(staffStep.state.stage, "date");
   assert.equal(f.session.staff.id, stid3);
 });
+
+test("normalization helpers strip leading index, price/duration suffix, and normalize Unicode and whitespace", () => {
+  assert.equal(
+    stripRenderedSuffix("ดีท็อกซ์หนังศีรษะ (Scalp Detox & Massage) · 950.00 บาท · 60 นาที"),
+    "ดีท็อกซ์หนังศีรษะ (Scalp Detox & Massage)"
+  );
+  assert.equal(
+    stripRenderedSuffix("ดีท็อกซ์หนังศีรษะ (Scalp Detox & Massage) · 950 บาท · 60 นาที"),
+    "ดีท็อกซ์หนังศีรษะ (Scalp Detox & Massage)"
+  );
+  assert.equal(
+    stripRenderedSuffix("ดีท็อกซ์หนังศีรษะ (Scalp Detox & Massage) · สอบถามร้าน บาท · 60 นาที"),
+    "ดีท็อกซ์หนังศีรษะ (Scalp Detox & Massage)"
+  );
+  assert.equal(
+    stripLeadingIndex("1. ดีท็อกซ์หนังศีรษะ (Scalp Detox & Massage) · 950.00 บาท · 60 นาที"),
+    "ดีท็อกซ์หนังศีรษะ (Scalp Detox & Massage) · 950.00 บาท · 60 นาที"
+  );
+  assert.equal(stripLeadingIndex("1"), "1");
+  assert.equal(stripLeadingIndex("ข้อ 1"), "ข้อ 1");
+
+  // Unicode and extra spaces
+  assert.equal(
+    normalizeText("   ดีท็อกซ์\u00A0หนังศีรษะ    (Scalp\u2000Detox)   "),
+    "ดีท็อกซ์ หนังศีรษะ (Scalp Detox)"
+  );
+});
+
+test("matchOption supports full rendered LINE labels, price 950/950.00, extra spaces, and Unicode normalization", () => {
+  const services = [
+    { id: sid1, name: "ตัดผมและจัดทรง (Haircut & Style)", price: "500", duration_minutes: 60 },
+    { id: sid2, name: "สระไดร์พรีเมียม (Signature Wash & Blow)", price: "400", duration_minutes: 45 },
+    { id: sid3, name: "ทำสีผมแฟชั่น (Hair Color & Gloss)", price: "2500", duration_minutes: 180 },
+    { id: sid4, name: "สปาทรีตเมนต์ฟื้นฟูผม (Deep Repair Hair Spa)", price: "1800", duration_minutes: 90 },
+    { id: sid5, name: "ดีท็อกซ์หนังศีรษะ (Scalp Detox & Massage)", price: "950.00", duration_minutes: 60 }
+  ];
+
+  // 1. Full LINE rendered label
+  assert.equal(
+    matchOption(services, "ดีท็อกซ์หนังศีรษะ (Scalp Detox & Massage) · 950.00 บาท · 60 นาที").match?.id,
+    sid5
+  );
+
+  // 2. Full LINE rendered label with leading number prefix "1. "
+  assert.equal(
+    matchOption(services, "5. ดีท็อกซ์หนังศีรษะ (Scalp Detox & Massage) · 950.00 บาท · 60 นาที").match?.id,
+    sid5
+  );
+
+  // 3. Price with 950 (integer) and 950.00 (decimal)
+  assert.equal(
+    matchOption(services, "ดีท็อกซ์หนังศีรษะ (Scalp Detox & Massage) · 950 บาท · 60 นาที").match?.id,
+    sid5
+  );
+  assert.equal(
+    matchOption(services, "ดีท็อกซ์หนังศีรษะ (Scalp Detox & Massage) · 950.00 บาท · 60 นาที").match?.id,
+    sid5
+  );
+
+  // 4. Extra spaces around text and separators
+  assert.equal(
+    matchOption(services, "   ดีท็อกซ์หนังศีรษะ (Scalp Detox & Massage)   ·   950.00 บาท   ·   60 นาที   ").match?.id,
+    sid5
+  );
+  assert.equal(
+    matchOption(services, "   ตัดผมและจัดทรง (Haircut & Style)   ·   500 บาท   ·   60 นาที   ").match?.id,
+    sid1
+  );
+
+  // 5. Unicode normalization (non-breaking spaces \u00A0 and fullwidth characters)
+  assert.equal(
+    matchOption(services, "ดีท็อกซ์หนังศีรษะ\u00A0(Scalp\u00A0Detox\u00A0&\u00A0Massage)\u00A0·\u00A0950.00\u00A0บาท\u00A0·\u00A060\u00A0นาที").match?.id,
+    sid5
+  );
+
+  // 6. Existing numeric tests must still pass
+  assert.equal(matchOption(services, "1").match?.id, sid1);
+  assert.equal(matchOption(services, "5").match?.id, sid5);
+  assert.equal(matchOption(services, "ข้อ 1").match?.id, sid1);
+  assert.equal(matchOption(services, "เลือก 2").match?.id, sid2);
+
+  // 7. Short Thai name and exact name must still pass
+  assert.equal(matchOption(services, "ดีท็อกซ์หนังศีรษะ").match?.id, sid5);
+  assert.equal(matchOption(services, "ดีท็อกซ์หนังศีรษะ (Scalp Detox & Massage)").match?.id, sid5);
+});
+
+test("receptionist handles full displayed LINE label in conversation turns without calling provider", async () => {
+  const f = pilotFixture();
+  let providerCalls = 0;
+  const trackingProvider = {
+    interpret: async (params) => {
+      providerCalls++;
+      return new MockAIProvider().interpret(params);
+    }
+  };
+  const receptionist = new Receptionist(f.gateway, trackingProvider);
+
+  // Start turn
+  await receptionist.respond(f.session, "บริการ");
+  assert.equal(providerCalls, 1);
+  assert.equal(f.session.stage, "service");
+
+  // User replies with the full rendered LINE label:
+  // "ดีท็อกซ์หนังศีรษะ (Scalp Detox & Massage) · 1200 บาท · 60 นาที"
+  const serviceStep = await receptionist.respond(
+    f.session,
+    "ดีท็อกซ์หนังศีรษะ (Scalp Detox & Massage) · 1200 บาท · 60 นาที"
+  );
+  assert.equal(providerCalls, 1); // Deterministic! Provider NOT called!
+  assert.equal(serviceStep.state.stage, "staff");
+  assert.equal(f.session.service.id, sid5);
+
+  // Staff turn: User replies with full LINE label for staff:
+  // "1. ช่างแอน (Senior Stylist)"
+  const staffStep = await receptionist.respond(f.session, "1. ช่างแอน (Senior Stylist)");
+  assert.equal(providerCalls, 1); // Deterministic! Provider NOT called!
+  assert.equal(staffStep.state.stage, "date");
+  assert.equal(f.session.staff.id, stid1);
+});
+
 
 

@@ -195,11 +195,33 @@ function handoffReason(message) {
   return "human_requested";
 }
 
-function stripParentheses(text) {
-  return (text ?? "")
+function normalizeText(text) {
+  if (text == null) return "";
+  return text
     .toString()
+    .normalize("NFKC")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function stripParentheses(text) {
+  return normalizeText(text)
     .replace(/\s*\([^)]*\)/g, "")
     .replace(/\s*（[^）]*）/g, "")
+    .trim();
+}
+
+function stripLeadingIndex(text) {
+  return normalizeText(text)
+    .replace(/^(?:(?:ข้อ|เบอร์|เลือก(?:\s*ข้อ)?|ลำดับ(?:ที่)?)\s*)?\d{1,3}[\.\s\-:]+\s*(?=\S)/i, "")
+    .trim();
+}
+
+function stripRenderedSuffix(text) {
+  return normalizeText(text)
+    .replace(/\s*[·•\-\|]\s*(?:[\d\.,]+|สอบถามร้าน)?\s*(?:บาท)?\s*[·•\-\|]\s*\d+\s*(?:นาที|ชม\.?|ชั่วโมง)?\s*$/i, "")
+    .replace(/\s*[·•\-\|]\s*(?:[\d\.,]+|สอบถามร้าน)\s*บาท\s*$/i, "")
+    .replace(/\s*[·•\-\|]\s*\d+\s*(?:นาที|ชม\.?|ชั่วโมง)\s*$/i, "")
     .trim();
 }
 
@@ -207,21 +229,16 @@ function matchOption(list, input) {
   if (!Array.isArray(list) || list.length === 0 || input == null) {
     return { match: null, ambiguous: [] };
   }
-  const raw = input.toString().trim();
+  const raw = normalizeText(input);
   if (!raw) {
     return { match: null, ambiguous: [] };
   }
-  const lowerInput = raw.toLowerCase();
 
-  // 1. Exact ID
-  const byId = list.find((item) => item.id && item.id.toString().trim() === raw);
+  // 1. Exact ID on raw
+  const byId = list.find((item) => item.id && normalizeText(item.id) === raw);
   if (byId) return { match: byId, ambiguous: [] };
 
-  // 2. Exact name (case-insensitive)
-  const byName = list.find((item) => item.name && item.name.toString().trim().toLowerCase() === lowerInput);
-  if (byName) return { match: byName, ambiguous: [] };
-
-  // 3. Numeric index ("1", "2", "ข้อ 1", "เลือก 2", "1.", etc.)
+  // 2. Pure numeric index ("1", "2", "ข้อ 1", "เลือก 2", "1.", etc.)
   const numMatch = raw.match(/^(?:(?:ข้อ|เบอร์|เลือก(?:\s*ข้อ)?|ลำดับ(?:ที่)?)\s*)?(\d{1,3})\.?$/i);
   if (numMatch) {
     const idx = parseInt(numMatch[1], 10) - 1;
@@ -230,27 +247,48 @@ function matchOption(list, input) {
     }
   }
 
-  // 4. Strip English parentheses and match main name
-  const strippedInput = stripParentheses(raw).toLowerCase();
-  if (strippedInput) {
-    const strippedMatches = list.filter(
-      (item) => item.name && stripParentheses(item.name).toLowerCase() === strippedInput
-    );
-    if (strippedMatches.length === 1) {
-      return { match: strippedMatches[0], ambiguous: [] };
-    } else if (strippedMatches.length > 1) {
-      return { match: null, ambiguous: strippedMatches };
-    }
+  // Pre-process text candidates
+  const withoutIndex = stripLeadingIndex(raw);
+  const cleaned = stripRenderedSuffix(withoutIndex);
+  const cleanedFromRaw = stripRenderedSuffix(raw);
+  const candidates = Array.from(new Set([raw, withoutIndex, cleaned, cleanedFromRaw].filter(Boolean)));
+  const lowerCandidates = candidates.map((c) => c.toLowerCase());
+
+  // 3. Exact ID on candidates (in case input was "1. <uuid>")
+  const byIdCand = list.find((item) => item.id && candidates.includes(normalizeText(item.id)));
+  if (byIdCand) return { match: byIdCand, ambiguous: [] };
+
+  // 4. Exact name (case-insensitive) or full rendered label match
+  const byName = list.find((item) => {
+    if (!item.name) return false;
+    const itemName = normalizeText(item.name).toLowerCase();
+    const itemPrice = item.price != null ? item.price.toString() : "สอบถามร้าน";
+    const itemLabel = normalizeText(`${item.name} · ${itemPrice} บาท · ${item.duration_minutes} นาที`).toLowerCase();
+    return lowerCandidates.includes(itemName) || lowerCandidates.includes(itemLabel);
+  });
+  if (byName) return { match: byName, ambiguous: [] };
+
+  // 5. Strip English parentheses and match main name
+  const strippedCandidates = Array.from(new Set(candidates.map((c) => stripParentheses(c).toLowerCase()).filter(Boolean)));
+  const strippedMatches = list.filter((item) => {
+    if (!item.name) return false;
+    const strippedItem = stripParentheses(item.name).toLowerCase();
+    return strippedCandidates.includes(strippedItem);
+  });
+  if (strippedMatches.length === 1) {
+    return { match: strippedMatches[0], ambiguous: [] };
+  } else if (strippedMatches.length > 1) {
+    return { match: null, ambiguous: strippedMatches };
   }
 
-  // 5. Substring / contains with ambiguity handling
-  const cleanInput = strippedInput.replace(/^(?:เลือก|ขอ(?:จอง)?|เอา)\s*/i, "").trim();
-  if (cleanInput.length >= 2) {
+  // 6. Substring / contains with ambiguity handling
+  const primaryClean = stripParentheses(cleaned).replace(/^(?:เลือก|ขอ(?:จอง)?|เอา)\s*/i, "").trim().toLowerCase();
+  if (primaryClean.length >= 2) {
     const substringMatches = list.filter((item) => {
       if (!item.name) return false;
-      const itemName = item.name.toString().trim().toLowerCase();
+      const itemName = normalizeText(item.name).toLowerCase();
       const strippedItem = stripParentheses(item.name).toLowerCase();
-      return strippedItem.includes(cleanInput) || itemName.includes(cleanInput) || itemName.includes(lowerInput);
+      return strippedItem.includes(primaryClean) || itemName.includes(primaryClean);
     });
     if (substringMatches.length === 1) {
       return { match: substringMatches[0], ambiguous: [] };
@@ -266,24 +304,28 @@ function matchStaff(staffList, input) {
   if (!Array.isArray(staffList) || staffList.length === 0 || input == null) {
     return { match: null, isAny: false, ambiguous: [] };
   }
-  const raw = input.toString().trim();
-  if (!raw) {
+  const norm = normalizeText(input);
+  if (!norm) {
     return { match: null, isAny: false, ambiguous: [] };
   }
-  // Check "ใครก็ได้" / "any"
-  if (/^(?:ใครก็ได้|ใครก้ได้|ใครก็ได้ครับ|ใครก็ได้ค่ะ|any|anyone)$/i.test(raw)) {
-    return { match: null, isAny: true, ambiguous: [] };
-  }
-  // Check if numeric index is staffList.length + 1 ("ใครก็ได้" is option after the last staff)
-  const numMatch = raw.match(/^(?:(?:ข้อ|เบอร์|เลือก(?:\s*ข้อ)?|ลำดับ(?:ที่)?)\s*)?(\d{1,3})\.?$/i);
+  // Check pure numeric index
+  const numMatch = norm.match(/^(?:(?:ข้อ|เบอร์|เลือก(?:\s*ข้อ)?|ลำดับ(?:ที่)?)\s*)?(\d{1,3})\.?$/i);
   if (numMatch) {
     const idx = parseInt(numMatch[1], 10) - 1;
     if (idx === staffList.length) {
       return { match: null, isAny: true, ambiguous: [] };
     }
   }
-  const res = matchOption(staffList, raw);
+  // Check "ใครก็ได้" / "any" (with or without leading index e.g. "4. ใครก็ได้")
+  const withoutIndex = stripLeadingIndex(norm);
+  if (
+    /^(?:ใครก็ได้|ใครก้ได้|ใครก็ได้ครับ|ใครก็ได้ค่ะ|any|anyone)$/i.test(norm) ||
+    /^(?:ใครก็ได้|ใครก้ได้|ใครก็ได้ครับ|ใครก็ได้ค่ะ|any|anyone)$/i.test(withoutIndex)
+  ) {
+    return { match: null, isAny: true, ambiguous: [] };
+  }
+  const res = matchOption(staffList, norm);
   return { match: res.match, isAny: false, ambiguous: res.ambiguous };
 }
 
-module.exports = { Receptionist, matchOption, matchStaff, stripParentheses };
+module.exports = { Receptionist, matchOption, matchStaff, stripParentheses, stripLeadingIndex, stripRenderedSuffix, normalizeText };

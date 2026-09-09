@@ -441,7 +441,7 @@ test("LINE booking flow end-to-end via LineWebhookService with signature", async
 test("formatLineReply generates valid LINE Flex Message Carousel for service selection with image and button", async () => {
   const f = createFixture();
   const res = await f.receptionist.respond(f.session, "action=start");
-  const reply = formatLineReply(res);
+  const reply = formatLineReply(res, { hasFlex: true });
 
   assert.equal(reply.type, "flex");
   assert.equal(reply.contents.type, "carousel");
@@ -481,7 +481,7 @@ test("category postback filters services and returns filtered choices", async ()
   assert.equal(res.state.services.length, 1);
   assert.match(res.state.services[0].name, /ทำสีผมแฟชั่น/);
 
-  const reply = formatLineReply(res);
+  const reply = formatLineReply(res, { hasFlex: true });
   assert.equal(reply.type, "flex");
   assert.equal(reply.contents.contents.length, 1);
   assert.match(reply.contents.contents[0].hero.url, /^https:\/\//);
@@ -491,7 +491,7 @@ test("formatLineReply generates Staff Carousel with ANY_STAFF card and stylist p
   const f = createFixture();
   await f.receptionist.respond(f.session, "action=start");
   const res = await f.receptionist.respond(f.session, `action=service&service_id=${f.service.id}`);
-  const reply = formatLineReply(res);
+  const reply = formatLineReply(res, { hasFlex: true });
 
   assert.equal(reply.type, "flex");
   assert.equal(reply.contents.type, "carousel");
@@ -514,28 +514,28 @@ test("formatLineReply generates Date, Slot, Review Ticket and Booking Pass Flex 
   const dateRes = await f.receptionist.respond(f.session, `action=staff&staff_id=${f.staff1.id}`);
 
   // 1. Date Flex Card
-  const dateReply = formatLineReply(dateRes);
+  const dateReply = formatLineReply(dateRes, { hasFlex: true });
   assert.equal(dateReply.type, "flex");
   assert.equal(dateReply.contents.type, "bubble");
   assert.match(dateReply.contents.header.contents[0].text, /เลือกวันที่/);
 
   // 2. Slot Flex Card
   const slotRes = await f.receptionist.respond(f.session, "action=date&date=2026-09-10");
-  const slotReply = formatLineReply(slotRes);
+  const slotReply = formatLineReply(slotRes, { hasFlex: true });
   assert.equal(slotReply.type, "flex");
   assert.equal(slotReply.contents.type, "bubble");
   assert.match(slotReply.contents.header.contents[0].text, /เลือกรอบเวลา/);
 
   // 3. Contact Info Prompt Card
   const contactRes = await f.receptionist.respond(f.session, `action=slot&staff_id=${f.staff1.id}&start_at=${encodeURIComponent("2026-09-10T13:00:00+07:00")}`);
-  const contactReply = formatLineReply(contactRes);
+  const contactReply = formatLineReply(contactRes, { hasFlex: true });
   assert.equal(contactReply.type, "flex");
   assert.equal(contactReply.contents.type, "bubble");
   assert.match(contactReply.contents.header.contents[0].text, /ข้อมูลติดต่อ/);
 
   // 4. Review Ticket Card
   const reviewRes = await f.receptionist.respond(f.session, "สมชาย 0812345678");
-  const reviewReply = formatLineReply(reviewRes);
+  const reviewReply = formatLineReply(reviewRes, { hasFlex: true });
   assert.equal(reviewReply.type, "flex");
   assert.equal(reviewReply.contents.type, "bubble");
   assert.match(reviewReply.contents.header.contents[1].text, /สรุปรายละเอียดนัดหมาย/);
@@ -545,7 +545,7 @@ test("formatLineReply generates Date, Slot, Review Ticket and Booking Pass Flex 
 
   // 5. Booking Confirmed Pass Card
   const bookedRes = await f.receptionist.respond(f.session, "action=confirm");
-  const bookedReply = formatLineReply(bookedRes);
+  const bookedReply = formatLineReply(bookedRes, { hasFlex: true });
   assert.equal(bookedReply.type, "flex");
   assert.equal(bookedReply.contents.type, "bubble");
   assert.match(bookedReply.contents.header.contents[1].text, /จองสำเร็จเรียบร้อย/);

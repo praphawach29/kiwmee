@@ -32,8 +32,11 @@ function getBookingConfig(env = process.env) {
   };
 }
 
+const { DEFAULT_SINGLE_BUSINESS_ID } = require("./licensing/providers/static-provider");
+
 function getPilotConfig(env = process.env) {
   return {
+    businessId: env.BUSINESS_ID ?? DEFAULT_SINGLE_BUSINESS_ID,
     businessName: env.BUSINESS_NAME ?? "Salon Booking OS",
     timezone: env.BUSINESS_TIMEZONE ?? "Asia/Bangkok",
     businessContact: env.BUSINESS_CONTACT ?? "",

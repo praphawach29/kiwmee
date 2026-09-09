@@ -14,6 +14,7 @@ class EntitlementProvider {
 class StaticProvider extends EntitlementProvider {
   constructor(options = {}) {
     super();
+    this.defaultPackage = options.defaultPackage || null;
     this.env = options.env || process.env;
     this.currentBusinessId = options.currentBusinessId || DEFAULT_SINGLE_BUSINESS_ID;
     this.businessMap = options.businessMap || new Map();
@@ -31,7 +32,7 @@ class StaticProvider extends EntitlementProvider {
 
     // 2. If it is the current single-business deployment
     if (targetId === this.currentBusinessId) {
-      const configuredPackage = this.env.APP_PACKAGE || PLANS.AI_PRO;
+      const configuredPackage = this.defaultPackage || this.env.APP_PACKAGE || PLANS.AI_PRO;
       return buildEntitlementsFromPreset(configuredPackage, this.overrides);
     }
 

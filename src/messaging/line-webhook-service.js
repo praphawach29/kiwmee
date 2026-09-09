@@ -1,9 +1,13 @@
 const { createHash } = require("node:crypto");
 const { logEvent } = require("../observability/logger");
+const { hasFeature, FEATURES, DEFAULT_SINGLE_BUSINESS_ID } = require("../licensing");
 
 class LineWebhookService {
-  constructor({ messaging, sessions, receptionist, repository, limiter, channelSecret }) {
+  constructor({ messaging, sessions, receptionist, repository, limiter, channelSecret, businessId, entitlementService, hasFeatureFn }) {
     Object.assign(this, { messaging, sessions, receptionist, repository, limiter, channelSecret });
+    this.businessId = businessId || DEFAULT_SINGLE_BUSINESS_ID;
+    this.entitlementService = entitlementService || null;
+    this.hasFeatureFn = hasFeatureFn || null;
   }
 
   async handle(raw, signature) {
@@ -55,7 +59,26 @@ class LineWebhookService {
       const result = await this.sessions.withSession(session.id, owner,
         (state) => this.receptionist.respond(state, textInput));
 
-      const reply = formatLineReply(result);
+      const businessId = this.businessId || DEFAULT_SINGLE_BUSINESS_ID;
+      let flexAllowed = false;
+      try {
+        if (typeof this.hasFeatureFn === "function") {
+          flexAllowed = await this.hasFeatureFn(businessId, FEATURES.lineFlex);
+        } else if (this.entitlementService) {
+          flexAllowed = await this.entitlementService.hasFeature(businessId, FEATURES.lineFlex);
+        } else {
+          flexAllowed = await hasFeature(businessId, FEATURES.lineFlex);
+        }
+      } catch (err) {
+        logEvent("line_webhook_entitlement_error", {
+          feature: FEATURES.lineFlex,
+          businessId,
+          code: err?.code || "ENTITLEMENT_CHECK_FAILED"
+        });
+        flexAllowed = false;
+      }
+
+      const reply = formatLineReply(result, { hasFlex: flexAllowed, businessId });
       if (typeof this.messaging.replyMessages === "function") {
         await this.messaging.replyMessages(event.replyToken, [reply]);
       } else {
@@ -93,7 +116,9 @@ const {
   buildBookingSuccessPassBubble
 } = require("./line-flex-builder");
 
-function formatLineReply(result) {
+function formatLineReply(result, options = {}) {
+  // Premium Flex must fail closed: strictly require hasFlex === true
+  const hasFlex = (options?.hasFlex === true || options?.lineFlex === true);
   const lines = [result.message];
 
   if (result.state?.review) {
@@ -164,47 +189,49 @@ function formatLineReply(result) {
     quickReply = { items: quickReplyItems };
   }
 
-  // Generate rich Flex Message based on current stage
+  // Generate rich Flex Message based on current stage if entitled
   let flexMessage = null;
   const stage = result.state?.stage;
 
-  if (result.state?.booking) {
-    flexMessage = buildBookingSuccessPassBubble(result.state.booking, {
-      service: result.state.service,
-      staff: result.state.staff,
-      slot: result.state.slot
-    });
-  } else if (result.state?.review) {
-    flexMessage = buildReviewTicketBubble(result.state.review);
-  } else if (stage === "service" && result.state?.services?.length > 0) {
-    flexMessage = buildServiceCarousel(result.state.services, {
-      selectedCategory: result.state.selectedCategory,
-      total: result.totalChoices ?? result.state.services.length
-    });
-  } else if (stage === "staff" && result.state?.staffList?.length > 0) {
-    flexMessage = buildStaffCarousel(result.state.staffList, result.state.service);
-  } else if (stage === "date") {
-    flexMessage = buildDateSelectionBubble({
-      service: result.state.service,
-      staff: result.state.staff,
-      today: getBangkokDate(0),
-      tomorrow: getBangkokDate(1),
-      maxDate: getBangkokDate(30)
-    });
-  } else if (stage === "slot" && result.state?.slots?.length > 0) {
-    flexMessage = buildSlotSelectionBubble({
-      service: result.state.service,
-      staff: result.state.staff,
-      date: result.state.date,
-      slots: result.state.slots
-    });
-  } else if (stage === "contact") {
-    flexMessage = buildContactPromptBubble({
-      service: result.state.service,
-      staff: result.state.staff,
-      date: result.state.date,
-      slot: result.state.slot
-    });
+  if (hasFlex) {
+    if (result.state?.booking) {
+      flexMessage = buildBookingSuccessPassBubble(result.state.booking, {
+        service: result.state.service,
+        staff: result.state.staff,
+        slot: result.state.slot
+      });
+    } else if (result.state?.review) {
+      flexMessage = buildReviewTicketBubble(result.state.review);
+    } else if (stage === "service" && result.state?.services?.length > 0) {
+      flexMessage = buildServiceCarousel(result.state.services, {
+        selectedCategory: result.state.selectedCategory,
+        total: result.totalChoices ?? result.state.services.length
+      });
+    } else if (stage === "staff" && result.state?.staffList?.length > 0) {
+      flexMessage = buildStaffCarousel(result.state.staffList, result.state.service);
+    } else if (stage === "date") {
+      flexMessage = buildDateSelectionBubble({
+        service: result.state.service,
+        staff: result.state.staff,
+        today: getBangkokDate(0),
+        tomorrow: getBangkokDate(1),
+        maxDate: getBangkokDate(30)
+      });
+    } else if (stage === "slot" && result.state?.slots?.length > 0) {
+      flexMessage = buildSlotSelectionBubble({
+        service: result.state.service,
+        staff: result.state.staff,
+        date: result.state.date,
+        slots: result.state.slots
+      });
+    } else if (stage === "contact") {
+      flexMessage = buildContactPromptBubble({
+        service: result.state.service,
+        staff: result.state.staff,
+        date: result.state.date,
+        slot: result.state.slot
+      });
+    }
   }
 
   if (flexMessage) {
@@ -226,6 +253,22 @@ function formatLineReply(result) {
   return message;
 }
 
+async function formatLineReplyWithEntitlement(result, { businessId = DEFAULT_SINGLE_BUSINESS_ID, entitlementService = null, hasFeatureFn = null } = {}) {
+  let hasFlex = false;
+  try {
+    if (typeof hasFeatureFn === "function") {
+      hasFlex = await hasFeatureFn(businessId, FEATURES.lineFlex);
+    } else if (entitlementService) {
+      hasFlex = await entitlementService.hasFeature(businessId, FEATURES.lineFlex);
+    } else {
+      hasFlex = await hasFeature(businessId, FEATURES.lineFlex);
+    }
+  } catch {
+    hasFlex = false;
+  }
+  return formatLineReply(result, { hasFlex, businessId });
+}
+
 function getBangkokDate(offsetDays = 0) {
   const date = new Date(Date.now() + offsetDays * 86400000);
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
@@ -245,4 +288,12 @@ function truncate(text, max = 20) {
   return str.length <= max ? str : str.slice(0, max - 1) + "…";
 }
 
-module.exports = { LineWebhookService, formatLineReply, getBangkokDate, formatDateOnly, formatTime, truncate };
+module.exports = {
+  LineWebhookService,
+  formatLineReply,
+  formatLineReplyWithEntitlement,
+  getBangkokDate,
+  formatDateOnly,
+  formatTime,
+  truncate
+};

@@ -11,19 +11,24 @@ async function perform(repository, operation, args, handler) {
   });
 }
 
-const createBooking = (repository, input) => perform(repository, core.createBooking,
-  [input], automation.handleBookingCreated);
-const rescheduleBooking = (repository, id, input) => perform(repository, core.rescheduleBooking,
-  [id, input], automation.handleBookingRescheduled);
-const cancelBooking = (repository, id, input, config) => perform(repository, core.cancelBooking,
-  [id, input, config], automation.handleBookingCancelled);
-const updateBookingStatus = (repository, id, input) => perform(repository, core.updateBookingStatus,
+const createBooking = (repository, input, options = {}) => perform(repository, core.createBooking,
+  [input], (tx, booking) => automation.handleBookingCreated(tx, booking, undefined, options));
+const rescheduleBooking = (repository, id, input, options = {}) => perform(repository, core.rescheduleBooking,
+  [id, input], (tx, booking) => automation.handleBookingRescheduled(tx, booking, undefined, options));
+const cancelBooking = (repository, id, input, config, options = {}) => {
+  const isOptions = config && (config.businessId || config.entitlementService || config.hasFeatureFn);
+  const cfg = isOptions ? undefined : config;
+  const opts = isOptions ? config : (options || {});
+  return perform(repository, core.cancelBooking,
+    [id, input, cfg], (tx, booking) => automation.handleBookingCancelled(tx, booking, opts));
+};
+const updateBookingStatus = (repository, id, input, options = {}) => perform(repository, core.updateBookingStatus,
   [id, input], async (tx, booking) => {
     const handlers = {
-      confirmed: automation.handleBookingCreated,
-      completed: automation.handleBookingCompleted,
-      cancelled: automation.handleBookingCancelled,
-      no_show: automation.handleBookingNoShow
+      confirmed: (t, b) => automation.handleBookingCreated(t, b, undefined, options),
+      completed: (t, b) => automation.handleBookingCompleted(t, b, undefined, options),
+      cancelled: (t, b) => automation.handleBookingCancelled(t, b, options),
+      no_show: (t, b) => automation.handleBookingNoShow(t, b, undefined, options)
     };
     await handlers[booking.status]?.(tx, booking);
   });

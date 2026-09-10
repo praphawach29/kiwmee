@@ -41,7 +41,7 @@ test("worker rerun does not send completed jobs again", async () => {
   const booking = await makeBooking(repository, "2026-09-10T13:00:00+07:00");
   await handleBookingCreated(repository, booking, config);
 
-  const testNow = new Date(Math.max(Date.now() + 1000, new Date("2026-09-09T13:00:00+07:00").getTime()));
+  const testNow = new Date("2026-09-09T13:00:00+07:00");
   await processDueAutomationJobs(repository, provider, { now: testNow });
   await processDueAutomationJobs(repository, provider, { now: testNow });
 
@@ -120,7 +120,7 @@ test("provider failure leaves job failed so it can be retried", async () => {
   await handleBookingCreated(repository, booking, config);
   const failingProvider = new MockNotificationProvider({ failTypes: [JOB_TYPES.confirmation] });
 
-  const testNow = new Date(Math.max(Date.now() + 1000, new Date("2026-09-09T13:00:00+07:00").getTime()));
+  const testNow = new Date("2026-09-09T13:00:00+07:00");
   const firstRun = await processDueAutomationJobs(repository, failingProvider, {
     now: testNow
   });
@@ -239,8 +239,7 @@ test("retry after delivery but before completion uses the same provider idempote
   const complete = repository.completeAutomationJob;
   repository.completeAutomationJob = async () => { throw new Error("lost database connection"); };
   const provider = new MockNotificationProvider();
-  const testNow = new Date(Math.max(Date.now() + 1000, new Date("2026-09-09T13:00:00+07:00").getTime()));
-  const options = { now: testNow };
+  const options = { now: "2026-09-09T13:00:00+07:00" };
   await processDueAutomationJobs(repository, provider, options);
   repository.completeAutomationJob = complete;
   await processDueAutomationJobs(repository, provider, options);

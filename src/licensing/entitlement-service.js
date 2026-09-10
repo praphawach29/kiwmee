@@ -36,7 +36,11 @@ class EntitlementService {
         humanHandoff: false,
         analytics: false,
         customBranding: false,
-        customFlow: false
+        customFlow: false,
+        slipVerification: false,
+        autoPaymentConfirmation: false,
+        paymentGateway: false,
+        refundManagement: false
       }),
       limits: Object.freeze({
         maxStaff: 2,

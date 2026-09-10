@@ -26,7 +26,11 @@ const PLAN_PRESETS = Object.freeze({
       [FEATURES.humanHandoff]: false,
       [FEATURES.analytics]: false,
       [FEATURES.customBranding]: false,
-      [FEATURES.customFlow]: false
+      [FEATURES.customFlow]: false,
+      [FEATURES.slipVerification]: false,
+      [FEATURES.autoPaymentConfirmation]: false,
+      [FEATURES.paymentGateway]: false,
+      [FEATURES.refundManagement]: false
     }),
     limits: Object.freeze({
       [LIMITS.maxStaff]: 2,
@@ -44,15 +48,19 @@ const PLAN_PRESETS = Object.freeze({
       [FEATURES.lineBasic]: true,
       [FEATURES.lineFlex]: true,
       [FEATURES.automation]: true,
-      [FEATURES.payment]: false,
-      [FEATURES.deposit]: false,
+      [FEATURES.payment]: true,
+      [FEATURES.deposit]: true,
       [FEATURES.aiReceptionist]: false,
       [FEATURES.aiFaq]: false,
       [FEATURES.aiRecommendation]: false,
       [FEATURES.humanHandoff]: true,
       [FEATURES.analytics]: true,
       [FEATURES.customBranding]: true,
-      [FEATURES.customFlow]: false
+      [FEATURES.customFlow]: false,
+      [FEATURES.slipVerification]: false,
+      [FEATURES.autoPaymentConfirmation]: false,
+      [FEATURES.paymentGateway]: false,
+      [FEATURES.refundManagement]: false
     }),
     limits: Object.freeze({
       [LIMITS.maxStaff]: 10,
@@ -78,7 +86,11 @@ const PLAN_PRESETS = Object.freeze({
       [FEATURES.humanHandoff]: true,
       [FEATURES.analytics]: true,
       [FEATURES.customBranding]: true,
-      [FEATURES.customFlow]: true
+      [FEATURES.customFlow]: true,
+      [FEATURES.slipVerification]: true,
+      [FEATURES.autoPaymentConfirmation]: true,
+      [FEATURES.paymentGateway]: false,
+      [FEATURES.refundManagement]: true
     }),
     limits: Object.freeze({
       [LIMITS.maxStaff]: 50,
@@ -104,7 +116,11 @@ const PLAN_PRESETS = Object.freeze({
       [FEATURES.humanHandoff]: true,
       [FEATURES.analytics]: true,
       [FEATURES.customBranding]: true,
-      [FEATURES.customFlow]: true
+      [FEATURES.customFlow]: true,
+      [FEATURES.slipVerification]: false,
+      [FEATURES.autoPaymentConfirmation]: false,
+      [FEATURES.paymentGateway]: false,
+      [FEATURES.refundManagement]: false
     }),
     limits: Object.freeze({
       [LIMITS.maxStaff]: 100,

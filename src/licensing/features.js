@@ -15,7 +15,11 @@ const FEATURES = Object.freeze({
   humanHandoff: "humanHandoff",
   analytics: "analytics",
   customBranding: "customBranding",
-  customFlow: "customFlow"
+  customFlow: "customFlow",
+  slipVerification: "slipVerification",
+  autoPaymentConfirmation: "autoPaymentConfirmation",
+  paymentGateway: "paymentGateway",
+  refundManagement: "refundManagement"
 });
 
 const LIMITS = Object.freeze({

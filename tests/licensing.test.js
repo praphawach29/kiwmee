@@ -28,6 +28,10 @@ test("BASIC preset enables core booking and denies premium features", () => {
   assert.equal(preset.features[FEATURES.automation], false);
   assert.equal(preset.features[FEATURES.payment], false);
   assert.equal(preset.features[FEATURES.deposit], false);
+  assert.equal(preset.features[FEATURES.slipVerification], false);
+  assert.equal(preset.features[FEATURES.autoPaymentConfirmation], false);
+  assert.equal(preset.features[FEATURES.paymentGateway], false);
+  assert.equal(preset.features[FEATURES.refundManagement], false);
   assert.equal(preset.features[FEATURES.aiReceptionist], false);
   assert.equal(preset.features[FEATURES.aiFaq], false);
   assert.equal(preset.features[FEATURES.aiRecommendation], false);
@@ -37,12 +41,14 @@ test("BASIC preset enables core booking and denies premium features", () => {
   assert.equal(preset.features[FEATURES.customFlow], false);
 });
 
-test("PRO preset enables lineFlex, automation, analytics, customBranding, humanHandoff but denies AI & payment", () => {
+test("PRO preset enables lineFlex, automation, payment, deposit, analytics, customBranding but denies AI & advanced payment", () => {
   const preset = PLAN_PRESETS[PLANS.PRO];
   assert.equal(preset.features[FEATURES.booking], true);
   assert.equal(preset.features[FEATURES.lineBasic], true);
   assert.equal(preset.features[FEATURES.lineFlex], true);
   assert.equal(preset.features[FEATURES.automation], true);
+  assert.equal(preset.features[FEATURES.payment], true);
+  assert.equal(preset.features[FEATURES.deposit], true);
   assert.equal(preset.features[FEATURES.humanHandoff], true);
   assert.equal(preset.features[FEATURES.analytics], true);
   assert.equal(preset.features[FEATURES.customBranding], true);
@@ -50,15 +56,24 @@ test("PRO preset enables lineFlex, automation, analytics, customBranding, humanH
   // Denied in PRO
   assert.equal(preset.features[FEATURES.aiReceptionist], false);
   assert.equal(preset.features[FEATURES.aiFaq], false);
-  assert.equal(preset.features[FEATURES.payment], false);
-  assert.equal(preset.features[FEATURES.deposit], false);
+  assert.equal(preset.features[FEATURES.slipVerification], false);
+  assert.equal(preset.features[FEATURES.autoPaymentConfirmation], false);
+  assert.equal(preset.features[FEATURES.paymentGateway], false);
+  assert.equal(preset.features[FEATURES.refundManagement], false);
 });
 
-test("AI_PRO preset enables all 14 features and sets higher quota limits", () => {
+test("AI_PRO preset enables payment, slipVerification, autoPaymentConfirmation, refundManagement and AI suite", () => {
   const preset = PLAN_PRESETS[PLANS.AI_PRO];
-  for (const featureKey of Object.values(FEATURES)) {
-    assert.equal(preset.features[featureKey], true, `Expected ${featureKey} to be true in AI_PRO`);
-  }
+  assert.equal(preset.features[FEATURES.payment], true);
+  assert.equal(preset.features[FEATURES.deposit], true);
+  assert.equal(preset.features[FEATURES.slipVerification], true);
+  assert.equal(preset.features[FEATURES.autoPaymentConfirmation], true);
+  assert.equal(preset.features[FEATURES.refundManagement], true);
+  assert.equal(preset.features[FEATURES.paymentGateway], false); // Add-on in enterprise
+  assert.equal(preset.features[FEATURES.aiReceptionist], true);
+  assert.equal(preset.features[FEATURES.lineFlex], true);
+  assert.equal(preset.features[FEATURES.automation], true);
+
   assert.ok(preset.limits[LIMITS.maxStaff] >= 50);
   assert.ok(preset.limits[LIMITS.maxServices] >= 100);
 });

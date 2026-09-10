@@ -12,6 +12,11 @@ class FakeRepository {
     this.bookingStatusHistory = seed.bookingStatusHistory ?? [];
     this.automationJobs = seed.automationJobs ?? [];
     this.automationLogs = seed.automationLogs ?? [];
+    this.payments = seed.payments ?? [];
+    this.paymentAllocations = seed.paymentAllocations ?? [];
+    this.paymentAttempts = seed.paymentAttempts ?? [];
+    this.paymentEvents = seed.paymentEvents ?? [];
+    this.refunds = seed.refunds ?? [];
     this.transactionCount = 0;
   }
 
@@ -32,7 +37,12 @@ class FakeRepository {
       customers: structuredClone(this.customers),
       bookingStatusHistory: structuredClone(this.bookingStatusHistory),
       automationJobs: structuredClone(this.automationJobs),
-      automationLogs: structuredClone(this.automationLogs)
+      automationLogs: structuredClone(this.automationLogs),
+      payments: structuredClone(this.payments),
+      paymentAllocations: structuredClone(this.paymentAllocations),
+      paymentAttempts: structuredClone(this.paymentAttempts),
+      paymentEvents: structuredClone(this.paymentEvents),
+      refunds: structuredClone(this.refunds)
     };
   }
 
@@ -42,6 +52,11 @@ class FakeRepository {
     this.bookingStatusHistory = snapshot.bookingStatusHistory;
     this.automationJobs = snapshot.automationJobs;
     this.automationLogs = snapshot.automationLogs;
+    this.payments = snapshot.payments;
+    this.paymentAllocations = snapshot.paymentAllocations;
+    this.paymentAttempts = snapshot.paymentAttempts;
+    this.paymentEvents = snapshot.paymentEvents;
+    this.refunds = snapshot.refunds;
   }
 
   async lockStaffSchedule(staffId) {
@@ -276,6 +291,86 @@ class FakeRepository {
       }
       return false;
     });
+  }
+
+  // --- Payment Domain Support ---
+  async insertPayment(payment) {
+    const row = { id: randomUUID(), ...payment };
+    this.payments.push(row);
+    return row;
+  }
+
+  async getPaymentForUpdate(paymentId) {
+    return this.payments.find((p) => p.id === paymentId) ?? null;
+  }
+
+  async updatePayment(paymentId, patch) {
+    const payment = await this.getPaymentForUpdate(paymentId);
+    if (!payment) return null;
+    Object.assign(payment, patch);
+    return payment;
+  }
+
+  async findPaymentByIdempotencyKey(key) {
+    return this.payments.find((p) => p.idempotency_key === key) ?? null;
+  }
+
+  async findPaymentByTransaction(namespace, reference) {
+    return this.payments.find((p) => p.transaction_namespace === namespace && p.transaction_reference === reference) ?? null;
+  }
+
+  async insertPaymentAllocation(allocation) {
+    const row = { id: randomUUID(), ...allocation };
+    this.paymentAllocations.push(row);
+    return row;
+  }
+
+  async getPaymentAllocations(paymentId) {
+    return this.paymentAllocations.filter((a) => a.payment_id === paymentId);
+  }
+
+  async updatePaymentAllocation(id, patch) {
+    const alloc = this.paymentAllocations.find((a) => a.id === id);
+    if (!alloc) return null;
+    Object.assign(alloc, patch);
+    return alloc;
+  }
+
+  async insertPaymentAttempt(attempt) {
+    const row = { id: randomUUID(), ...attempt };
+    this.paymentAttempts.push(row);
+    return row;
+  }
+
+  async insertPaymentEvent(event) {
+    const row = { id: randomUUID(), ...event };
+    this.paymentEvents.push(row);
+    return row;
+  }
+
+  async insertRefund(refund) {
+    const row = { id: randomUUID(), ...refund };
+    this.refunds.push(row);
+    return row;
+  }
+
+  async getRefundForUpdate(refundId) {
+    return this.refunds.find((r) => r.id === refundId) ?? null;
+  }
+
+  async updateRefund(refundId, patch) {
+    const refund = await this.getRefundForUpdate(refundId);
+    if (!refund) return null;
+    Object.assign(refund, patch);
+    return refund;
+  }
+
+  async getRefundsForPayment(paymentId) {
+    return this.refunds.filter((r) => r.payment_id === paymentId);
+  }
+
+  async findRefundByIdempotencyKey(key) {
+    return this.refunds.find((r) => r.idempotency_key === key) ?? null;
   }
 }
 

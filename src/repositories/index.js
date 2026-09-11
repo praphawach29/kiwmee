@@ -1,4 +1,5 @@
 const { PgBookingRepository } = require("./pg-booking-repository");
+const { PgPaymentRepository } = require("./pg-payment-repository");
 
 let repository;
 
@@ -19,5 +20,7 @@ async function closeRepository() {
 module.exports = {
   closeRepository,
   getRepository,
-  PgBookingRepository
+  PgBookingRepository,
+  PgPaymentRepository
 };
+

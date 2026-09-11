@@ -1,18 +1,12 @@
+const { PgPaymentRepository, normalizePgError } = require("./pg-payment-repository");
+
 let Pool;
 
 const ACTIVE_STATUSES = ["pending", "confirmed", "checked_in", "completed"];
 
-class PgBookingRepository {
+class PgBookingRepository extends PgPaymentRepository {
   constructor(options = {}) {
-    if (!Pool) {
-      ({ Pool } = require("pg"));
-    }
-
-    this.pool = options.pool ?? new Pool({
-      connectionString: options.connectionString ?? getDatabaseUrl(),
-      ssl: readSslConfig(options)
-    });
-    this.client = options.client ?? null;
+    super(options);
   }
 
   async close() {
@@ -22,6 +16,10 @@ class PgBookingRepository {
   }
 
   async transaction(callback) {
+    if (this.client) {
+      // Re-use existing transaction scope without spawning extra clients or BEGIN/COMMIT
+      return callback(this);
+    }
     const client = await this.pool.connect();
     const tx = new PgBookingRepository({ pool: this.pool, client });
 
@@ -40,8 +38,12 @@ class PgBookingRepository {
 
   async query(text, params = []) {
     const runner = this.client ?? this.pool;
-    const result = await runner.query(text, params);
-    return result.rows;
+    try {
+      const result = await runner.query(text, params);
+      return result.rows;
+    } catch (error) {
+      throw normalizePgError(error);
+    }
   }
 
   async lockStaffSchedule(staffId) {
@@ -531,13 +533,10 @@ function readSslConfig(options) {
   return false;
 }
 
-function normalizePgError(error) {
-  if (error && error.code === "23P01") {
-    error.message = "booking overlaps an existing active booking";
-  }
-  return error;
-}
 
 module.exports = {
-  PgBookingRepository
+  PgBookingRepository,
+  PgPaymentRepository: PgBookingRepository,
+  normalizePgError
 };
+

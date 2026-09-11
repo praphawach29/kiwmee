@@ -18,9 +18,21 @@ class FakeRepository {
     this.paymentEvents = seed.paymentEvents ?? [];
     this.refunds = seed.refunds ?? [];
     this.transactionCount = 0;
+    this.inTransaction = false;
+    this.txLock = Promise.resolve();
   }
 
   async transaction(callback) {
+    if (this.inTransaction) {
+      return callback(this);
+    }
+
+    const prev = this.txLock;
+    let release;
+    this.txLock = new Promise((resolve) => { release = resolve; });
+    await prev;
+
+    this.inTransaction = true;
     this.transactionCount += 1;
     const snapshot = this.snapshot();
     try {
@@ -28,6 +40,9 @@ class FakeRepository {
     } catch (error) {
       this.restore(snapshot);
       throw error;
+    } finally {
+      this.inTransaction = false;
+      release();
     }
   }
 
@@ -294,14 +309,26 @@ class FakeRepository {
   }
 
   // --- Payment Domain Support ---
-  async insertPayment(payment) {
+  async createPayment(payment) {
     const row = { id: randomUUID(), ...payment };
     this.payments.push(row);
     return row;
   }
 
-  async getPaymentForUpdate(paymentId) {
+  async insertPayment(payment) {
+    return this.createPayment(payment);
+  }
+
+  async getPaymentById(paymentId) {
     return this.payments.find((p) => p.id === paymentId) ?? null;
+  }
+
+  async getPaymentByIdForUpdate(paymentId) {
+    return this.payments.find((p) => p.id === paymentId) ?? null;
+  }
+
+  async getPaymentForUpdate(paymentId) {
+    return this.getPaymentByIdForUpdate(paymentId);
   }
 
   async updatePayment(paymentId, patch) {
@@ -315,14 +342,30 @@ class FakeRepository {
     return this.payments.find((p) => p.idempotency_key === key) ?? null;
   }
 
-  async findPaymentByTransaction(namespace, reference) {
+  async findPaymentByTransactionReference(namespace, reference) {
     return this.payments.find((p) => p.transaction_namespace === namespace && p.transaction_reference === reference) ?? null;
   }
 
-  async insertPaymentAllocation(allocation) {
+  async findPaymentByTransaction(namespace, reference) {
+    return this.findPaymentByTransactionReference(namespace, reference);
+  }
+
+  async createPaymentAllocation(allocation) {
     const row = { id: randomUUID(), ...allocation };
     this.paymentAllocations.push(row);
     return row;
+  }
+
+  async insertPaymentAllocation(allocation) {
+    return this.createPaymentAllocation(allocation);
+  }
+
+  async getActivePaymentAllocation(bookingId, paymentId = null) {
+    return this.paymentAllocations.find((a) => (
+      a.booking_id === bookingId &&
+      a.status === "active" &&
+      (!paymentId || a.payment_id === paymentId)
+    )) ?? null;
   }
 
   async getPaymentAllocations(paymentId) {
@@ -336,22 +379,34 @@ class FakeRepository {
     return alloc;
   }
 
-  async insertPaymentAttempt(attempt) {
+  async createPaymentAttempt(attempt) {
     const row = { id: randomUUID(), ...attempt };
     this.paymentAttempts.push(row);
     return row;
   }
 
-  async insertPaymentEvent(event) {
+  async insertPaymentAttempt(attempt) {
+    return this.createPaymentAttempt(attempt);
+  }
+
+  async createPaymentEvent(event) {
     const row = { id: randomUUID(), ...event };
     this.paymentEvents.push(row);
     return row;
   }
 
-  async insertRefund(refund) {
+  async insertPaymentEvent(event) {
+    return this.createPaymentEvent(event);
+  }
+
+  async createRefund(refund) {
     const row = { id: randomUUID(), ...refund };
     this.refunds.push(row);
     return row;
+  }
+
+  async insertRefund(refund) {
+    return this.createRefund(refund);
   }
 
   async getRefundForUpdate(refundId) {
@@ -365,8 +420,12 @@ class FakeRepository {
     return refund;
   }
 
-  async getRefundsForPayment(paymentId) {
+  async getRefundsByPayment(paymentId) {
     return this.refunds.filter((r) => r.payment_id === paymentId);
+  }
+
+  async getRefundsForPayment(paymentId) {
+    return this.getRefundsByPayment(paymentId);
   }
 
   async findRefundByIdempotencyKey(key) {
@@ -383,8 +442,8 @@ class HistoryFailingRepository extends FakeRepository {
 function buildSeed() {
   return {
     services: [
-      { id: "svc-cut", name: "Cut", duration_minutes: 60, active: true },
-      { id: "svc-color", name: "Color", duration_minutes: 120, active: true }
+      { id: "svc-cut", name: "Cut", duration_minutes: 60, price: 500, active: true },
+      { id: "svc-color", name: "Color", duration_minutes: 120, price: 1500, active: true }
     ],
     staff: [
       { id: "staff-ann", name: "Ann", active: true },

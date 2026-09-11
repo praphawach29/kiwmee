@@ -12,24 +12,7 @@ const SYSTEM_BASELINE_POLICY = Object.freeze({
   payment_type: PAYMENT_TYPES.noPayment
 });
 
-/**
- * Converts a Baht value (numeric or string) into integer Satang.
- * Guards against floating point inaccuracies.
- */
-function toSatang(amountInBaht) {
-  const num = Number(amountInBaht);
-  if (!Number.isFinite(num) || num < 0) {
-    throw new Error(`Invalid monetary amount: ${amountInBaht}`);
-  }
-  return Math.round(num * 100);
-}
-
-/**
- * Converts integer Satang back to standard Baht float with 2 decimal precision.
- */
-function fromSatang(satang) {
-  return Number((satang / 100).toFixed(2));
-}
+const { toSatang, fromSatang } = require("./money");
 
 /**
  * Resolves the active payment policy following precedence:

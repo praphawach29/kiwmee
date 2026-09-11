@@ -4,11 +4,16 @@
 const {
   PAYMENT_TYPES,
   SYSTEM_BASELINE_POLICY,
-  toSatang,
-  fromSatang,
   resolvePolicy,
   calculatePricing
 } = require("./pricing-calculator");
+
+const {
+  toSatang,
+  fromSatang,
+  encodeMoneyForDb,
+  decodeMoneyFromDb
+} = require("./money");
 
 const {
   PAYMENT_STATUSES,
@@ -20,9 +25,20 @@ const {
 } = require("./payment-state-machine");
 
 const {
+  FINANCIAL_LOCK_ORDER,
+  validateLockAcquisitionOrder
+} = require("./lock-order");
+
+const {
+  sanitizePayload,
+  sanitizePaymentAttempt
+} = require("./data-safety");
+
+const {
   DEFAULT_PAYMENT_EXPIRY_MINUTES,
   DEFAULT_VERIFICATION_GRACE_MINUTES,
   createPayment,
+  createPendingBookingWithPayment,
   evaluateSlipVerification,
   evaluateVerificationGrace,
   transferAllocationForReschedule
@@ -47,13 +63,23 @@ const { MockPaymentProvider } = require("./providers/mock-payment-provider");
 const { MockSlipProvider, MOCK_SLIP_SCENARIOS } = require("./providers/mock-slip-provider");
 
 module.exports = {
-  // Pricing
+  // Pricing & Money
   PAYMENT_TYPES,
   SYSTEM_BASELINE_POLICY,
   toSatang,
   fromSatang,
+  encodeMoneyForDb,
+  decodeMoneyFromDb,
   resolvePolicy,
   calculatePricing,
+
+  // Lock Ordering
+  FINANCIAL_LOCK_ORDER,
+  validateLockAcquisitionOrder,
+
+  // Data Safety
+  sanitizePayload,
+  sanitizePaymentAttempt,
 
   // State Machine
   PAYMENT_STATUSES,
@@ -67,6 +93,7 @@ module.exports = {
   DEFAULT_PAYMENT_EXPIRY_MINUTES,
   DEFAULT_VERIFICATION_GRACE_MINUTES,
   createPayment,
+  createPendingBookingWithPayment,
   evaluateSlipVerification,
   evaluateVerificationGrace,
   transferAllocationForReschedule,
@@ -89,3 +116,4 @@ module.exports = {
   MockSlipProvider,
   MOCK_SLIP_SCENARIOS
 };
+

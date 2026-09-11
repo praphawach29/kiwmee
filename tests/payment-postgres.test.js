@@ -25,7 +25,10 @@ const {
   calculateRefundBalances,
   decideRefund,
   PAYMENT_STATUSES,
-  REFUND_STATUSES
+  REFUND_STATUSES,
+  BookingCheckoutService,
+  expirePendingPaymentHold,
+  resolvePaymentPolicy
 } = require("../src/payment");
 
 const {
@@ -1065,6 +1068,426 @@ test("PostgreSQL Payment Integration Suite (Phase C)", { skip: !shouldRunPostgre
     });
     assert.ok(standalonePayment.id);
     assert.equal(standalonePayment.amount_due, "50.00");
+  } finally {
+    await pool.end();
+  }
+});
+
+// =============================================================================
+// PART 12: PostgreSQL Payment Integration Suite (Phase D)
+// Real integration tests running against Docker PostgreSQL (TEST_DATABASE_URL):
+// - pending booking blocks slot via GiST exclusion constraint
+// - second booking gets GiST conflict and creates no payment
+// - payment+booking+allocation atomic transaction
+// - idempotent checkout returns same booking/payment
+// - expiry releases slot (GiST frees slot so subsequent booking succeeds)
+// - grace preserves slot against expiry
+// - rollback leaves no orphan financial rows
+// =============================================================================
+
+test("PostgreSQL Payment Integration Suite (Phase D: Slot Hold, GiST Conflict, Idempotency, Expiry, Grace)", async (t) => {
+  if (!shouldRunPostgres) {
+    t.skip("TEST_DATABASE_URL is not set; skipping live PostgreSQL Phase D integration tests");
+    return;
+  }
+
+  const { Pool } = require("pg");
+  const pool = new Pool({
+    connectionString: process.env.TEST_DATABASE_URL,
+    ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : false
+  });
+  const repository = new PgBookingRepository({ pool });
+
+  try {
+    // 1. Setup fixtures (staff, service, customer) with valid PostgreSQL records
+    const serviceRes = await pool.query(
+      "insert into services (name, duration_minutes, price) values ('Phase D Cut', 45, 500) returning *"
+    );
+    const staffRes = await pool.query(
+      "insert into staff (name, phone) values ('Phase D Stylist', '0891234567') returning *"
+    );
+    const service = serviceRes.rows[0];
+    const staff = staffRes.rows[0];
+
+    await pool.query(
+      "insert into staff_services (staff_id, service_id) values ($1, $2)",
+      [staff.id, service.id]
+    );
+    await pool.query(
+      "insert into availability (staff_id, start_at, end_at, type) values ($1, '2026-09-15T08:00:00+07:00'::timestamptz, '2026-09-15T20:00:00+07:00'::timestamptz, 'available')",
+      [staff.id]
+    );
+    const customer = await repository.insertCustomer({
+      name: "Phase D Postgres Test",
+      phone: `08${Math.floor(10000000 + Math.random() * 90000000)}`
+    });
+
+    // 2. Pending Booking Blocks Slot via GiST Exclusion Constraint
+    const startSlot1 = "2026-09-15T09:00:00+07:00";
+    const checkout1 = await BookingCheckoutService.checkout(repository, {
+      customer: { name: "Customer Alpha", phone: "0811111111" },
+      service_id: service.id,
+      staff_id: staff.id,
+      start_at: startSlot1,
+      source: "web"
+    }, {
+      businessSettings: { payment_type: "deposit_fixed", fixed_amount: 200 },
+      entitlements: { payment: true, deposit: true }
+    });
+
+    assert.equal(checkout1.status, "payment_pending");
+    assert.equal(checkout1.booking.status, "pending");
+    assert.ok(checkout1.paymentId);
+
+    // Verify in database: pending booking, payment, active allocation exist
+    const dbBooking1 = await repository.getBooking(checkout1.bookingId);
+    assert.equal(dbBooking1.status, "pending");
+    const dbPayment1 = await repository.getPaymentById(checkout1.paymentId);
+    assert.equal(dbPayment1.status, "pending");
+    assert.equal(dbPayment1.original_booking_id, checkout1.bookingId);
+    const dbAlloc1 = await repository.getActivePaymentAllocation(checkout1.bookingId);
+    assert.ok(dbAlloc1);
+    assert.equal(dbAlloc1.status, "active");
+
+    // 3. Second booking gets GiST conflict in PostgreSQL and loser creates NO payment
+    const paymentsCountBefore = (await pool.query("select count(*) from payments")).rows[0].count;
+    const bookingsCountBefore = (await pool.query("select count(*) from bookings")).rows[0].count;
+
+    await assert.rejects(
+      BookingCheckoutService.checkout(repository, {
+        customer: { name: "Customer Beta", phone: "0822222222" },
+        service_id: service.id,
+        staff_id: staff.id,
+        start_at: "2026-09-15T09:15:00+07:00", // Overlaps slot 1 (09:00 - 09:45)
+        source: "web"
+      }, {
+        businessSettings: { payment_type: "deposit_fixed", fixed_amount: 200 },
+        entitlements: { payment: true, deposit: true }
+      }),
+      (err) => {
+        return /conflict|overlap|23P01|exclusion|not available/i.test(err.message || err.code || "");
+      }
+    );
+
+    // Direct GiST constraint verification:
+    // Attempting direct raw insert into bookings table with overlapping pending status triggers GiST exclusion
+    await assert.rejects(
+      repository.insertBooking({
+        customer_id: customer.id,
+        service_id: service.id,
+        staff_id: staff.id,
+        start_at: "2026-09-15T09:15:00+07:00",
+        end_at: "2026-09-15T10:00:00+07:00",
+        status: "pending"
+      }),
+      (err) => /booking overlaps an existing active booking|BOOKING_CONFLICT|bookings_no_staff_overlap|23P01|exclusion/i.test(err.message || err.code || "")
+    );
+
+    const paymentsCountAfter = (await pool.query("select count(*) from payments")).rows[0].count;
+    const bookingsCountAfter = (await pool.query("select count(*) from bookings")).rows[0].count;
+    assert.equal(paymentsCountAfter, paymentsCountBefore, "Loser in slot conflict creates zero payment rows in PostgreSQL");
+    assert.equal(bookingsCountAfter, bookingsCountBefore, "Loser in slot conflict creates zero booking rows in PostgreSQL");
+
+    // 4. Idempotent Checkout in PostgreSQL
+    const idempKey = `pg_chk_idemp_${randomUUID()}`;
+    const startSlot2 = "2026-09-15T11:00:00+07:00";
+    const idempCheckout1 = await BookingCheckoutService.checkout(repository, {
+      customer: { name: "Customer Gamma", phone: "0833333333" },
+      service_id: service.id,
+      staff_id: staff.id,
+      start_at: startSlot2,
+      idempotency_key: idempKey
+    }, {
+      businessSettings: { payment_type: "full_payment" },
+      entitlements: { payment: true, deposit: false },
+      idempotencyKey: idempKey
+    });
+
+    assert.equal(idempCheckout1.isExisting, false);
+
+    // Repeat checkout with same idempotency key
+    const idempCheckout2 = await BookingCheckoutService.checkout(repository, {
+      customer: { name: "Customer Gamma", phone: "0833333333" },
+      service_id: service.id,
+      staff_id: staff.id,
+      start_at: startSlot2,
+      idempotency_key: idempKey
+    }, {
+      businessSettings: { payment_type: "full_payment" },
+      entitlements: { payment: true, deposit: false },
+      idempotencyKey: idempKey
+    });
+
+    assert.equal(idempCheckout2.isExisting, true);
+    assert.equal(idempCheckout2.bookingId, idempCheckout1.bookingId);
+    assert.equal(idempCheckout2.paymentId, idempCheckout1.paymentId);
+
+    // 5. Expiry Releases Slot in PostgreSQL
+    const startSlot3 = "2026-09-15T13:00:00+07:00";
+    const pastTime = new Date(Date.now() - 3600000); // 1 hour ago
+    const expiredCheckout = await BookingCheckoutService.checkout(repository, {
+      customer: { name: "Customer Delta", phone: "0844444444" },
+      service_id: service.id,
+      staff_id: staff.id,
+      start_at: startSlot3
+    }, {
+      businessSettings: { payment_type: "deposit_fixed", fixed_amount: 150 },
+      entitlements: { payment: true, deposit: true },
+      now: pastTime,
+      expiryMinutes: 15
+    });
+
+    // Run expiry hold service
+    const expiryEval = await expirePendingPaymentHold(repository, {
+      paymentId: expiredCheckout.paymentId,
+      now: new Date() // Current time is past expires_at
+    });
+
+    assert.equal(expiryEval.action, "EXPIRE");
+    const expiredBookingInDb = await repository.getBooking(expiredCheckout.bookingId);
+    assert.equal(expiredBookingInDb.status, "expired");
+    const expiredPaymentInDb = await repository.getPaymentById(expiredCheckout.paymentId);
+    assert.equal(expiredPaymentInDb.status, "expired");
+
+    // Crucial Invariant: Since booking is now 'expired', the PostgreSQL GiST exclusion constraint
+    // does not block slot 3 anymore! A subsequent customer booking the exact same slot succeeds!
+    const rebookedSlot3 = await BookingCheckoutService.checkout(repository, {
+      customer: { name: "Customer Epsilon", phone: "0855555555" },
+      service_id: service.id,
+      staff_id: staff.id,
+      start_at: startSlot3
+    }, {
+      businessSettings: { payment_type: "deposit_fixed", fixed_amount: 150 },
+      entitlements: { payment: true, deposit: true }
+    });
+    assert.ok(rebookedSlot3.bookingId);
+    assert.equal(rebookedSlot3.booking.status, "pending");
+
+    // 6. Grace Preserves Slot in PostgreSQL
+    const startSlot4 = "2026-09-15T15:00:00+07:00";
+    const graceCheckout = await BookingCheckoutService.checkout(repository, {
+      customer: { name: "Customer Zeta", phone: "0866666666" },
+      service_id: service.id,
+      staff_id: staff.id,
+      start_at: startSlot4
+    }, {
+      businessSettings: { payment_type: "deposit_fixed", fixed_amount: 150 },
+      entitlements: { payment: true, deposit: true },
+      now: pastTime,
+      expiryMinutes: 15
+    });
+
+    // Customer uploaded slip; verification deadline set to future
+    const futureDeadline = new Date(Date.now() + 600000).toISOString();
+    await repository.updatePayment(graceCheckout.paymentId, {
+      status: "slip_received",
+      verification_deadline: futureDeadline
+    });
+
+    const graceEval = await expirePendingPaymentHold(repository, {
+      paymentId: graceCheckout.paymentId,
+      now: new Date()
+    });
+    assert.equal(graceEval.action, "WAIT_GRACE");
+
+    // Slot is STILL held by GiST constraint!
+    await assert.rejects(
+      BookingCheckoutService.checkout(repository, {
+        customer: { name: "Customer Eta", phone: "0877777777" },
+        service_id: service.id,
+        staff_id: staff.id,
+        start_at: startSlot4
+      }, {
+        businessSettings: { payment_type: "deposit_fixed", fixed_amount: 150 },
+        entitlements: { payment: true, deposit: true }
+      }),
+      (err) => /conflict|overlap|23P01|exclusion|not available/i.test(err.message || err.code || "")
+    );
+
+    // 7. Atomic Rollback leaves no orphan financial rows in PostgreSQL
+    const startSlot5 = "2026-09-15T17:00:00+07:00";
+    const paymentsBeforeFail = (await pool.query("select count(*) from payments")).rows[0].count;
+    const allocsBeforeFail = (await pool.query("select count(*) from payment_allocations")).rows[0].count;
+    const bookingsBeforeFail = (await pool.query("select count(*) from bookings")).rows[0].count;
+
+    await assert.rejects(
+      repository.transaction(async (tx) => {
+        // Step A: insert booking
+        const bk = await tx.insertBooking({
+          customer_id: customer.id,
+          service_id: service.id,
+          staff_id: staff.id,
+          start_at: startSlot5,
+          end_at: "2026-09-15T17:45:00+07:00",
+          status: "pending"
+        });
+
+        // Step B: insert payment
+        await tx.createPayment({
+          original_booking_id: bk.id,
+          payment_type: "deposit_fixed",
+          provider: "promptpay_qr",
+          amount_due: "200.00",
+          idempotency_key: `fail_tx_${randomUUID()}`,
+          expires_at: new Date(Date.now() + 60000).toISOString()
+        });
+
+        // Step C: simulate mid-transaction failure
+        throw new Error("simulated mid-transaction failure");
+      }),
+      /simulated mid-transaction failure/
+    );
+
+    const paymentsAfterFail = (await pool.query("select count(*) from payments")).rows[0].count;
+    const allocsAfterFail = (await pool.query("select count(*) from payment_allocations")).rows[0].count;
+    const bookingsAfterFail = (await pool.query("select count(*) from bookings")).rows[0].count;
+
+    assert.equal(paymentsAfterFail, paymentsBeforeFail, "No orphan payment row left after rollback in PostgreSQL");
+    assert.equal(allocsAfterFail, allocsBeforeFail, "No orphan allocation row left after rollback in PostgreSQL");
+    assert.equal(bookingsAfterFail, bookingsBeforeFail, "No orphan booking row left after rollback in PostgreSQL");
+
+    // 8. No-Payment Idempotency in PostgreSQL
+    const noPayIdempKey = `pg_nopay_${randomUUID()}`;
+    const startSlot6 = "2026-09-15T18:00:00+07:00";
+    const noPayInput = {
+      customer: { name: "Customer NoPay", phone: "0888888888" },
+      service_id: service.id,
+      staff_id: staff.id,
+      start_at: startSlot6,
+      idempotency_key: noPayIdempKey
+    };
+
+    const noPayRes1 = await BookingCheckoutService.checkout(repository, noPayInput, {
+      entitlements: { payment: false, deposit: false }
+    });
+    assert.equal(noPayRes1.mode, "no_payment");
+    assert.equal(noPayRes1.status, "confirmed");
+    assert.equal(noPayRes1.isExisting, false);
+
+    // Verify DB stored checkout_idempotency_key on bookings table
+    const dbBkNoPay = (await pool.query("select * from bookings where id = $1", [noPayRes1.booking.id])).rows[0];
+    assert.equal(dbBkNoPay.checkout_idempotency_key, noPayIdempKey);
+
+    // Verify automation jobs count
+    const jobsBefore = (await pool.query("select count(*) from automation_jobs where booking_id = $1", [noPayRes1.booking.id])).rows[0].count;
+    assert.ok(Number(jobsBefore) > 0);
+
+    // Second checkout with same idempotency key
+    const noPayRes2 = await BookingCheckoutService.checkout(repository, noPayInput, {
+      entitlements: { payment: false, deposit: false }
+    });
+    assert.equal(noPayRes2.mode, "no_payment");
+    assert.equal(noPayRes2.status, "confirmed");
+    assert.equal(noPayRes2.isExisting, true);
+    assert.equal(noPayRes2.booking.id, noPayRes1.booking.id);
+
+    // Verify automation jobs not duplicated
+    const jobsAfter = (await pool.query("select count(*) from automation_jobs where booking_id = $1", [noPayRes1.booking.id])).rows[0].count;
+    assert.equal(jobsAfter, jobsBefore, "Automation jobs must not be duplicated on repeated no_payment checkout in PostgreSQL");
+
+    // 9. Concurrent duplicate no_payment checkouts in PostgreSQL
+    const raceIdempKey = `pg_race_${randomUUID()}`;
+    const startSlot7 = "2026-09-15T19:00:00+07:00";
+    const raceInput = {
+      customer: { name: "Customer Race", phone: "0899999999" },
+      service_id: service.id,
+      staff_id: staff.id,
+      start_at: startSlot7,
+      idempotency_key: raceIdempKey
+    };
+
+    const [raceRes1, raceRes2] = await Promise.all([
+      BookingCheckoutService.checkout(repository, raceInput, { entitlements: { payment: false, deposit: false } }),
+      BookingCheckoutService.checkout(repository, raceInput, { entitlements: { payment: false, deposit: false } })
+    ]);
+
+    assert.equal(raceRes1.booking.id, raceRes2.booking.id, "Concurrent no_payment checkouts must resolve to same booking ID in PostgreSQL");
+    const raceDbRows = (await pool.query("select * from bookings where checkout_idempotency_key = $1", [raceIdempKey])).rows;
+    assert.equal(raceDbRows.length, 1, "Exactly one booking row persisted in PostgreSQL for concurrent duplicate checkouts");
+
+    // 10. Payment entitlement error leaves zero orphan rows in PostgreSQL
+    const paymentsBeforeError = (await pool.query("select count(*) from payments")).rows[0].count;
+    const bookingsBeforeError = (await pool.query("select count(*) from bookings")).rows[0].count;
+
+    await assert.rejects(
+      BookingCheckoutService.checkout(
+        repository,
+        {
+          customer: { name: "Customer ErrorBlock", phone: "0812341234" },
+          service_id: service.id,
+          staff_id: staff.id,
+          start_at: "2026-09-15T20:00:00+07:00"
+        },
+        {
+          businessSettings: { payment_type: "deposit_fixed", fixed_amount: 150 },
+          hasFeatureFn: async () => { throw new Error("Entitlement provider outage"); }
+        }
+      ),
+      (err) => err.code === "PAYMENT_CAPABILITY_UNAVAILABLE"
+    );
+
+    const paymentsAfterError = (await pool.query("select count(*) from payments")).rows[0].count;
+    const bookingsAfterError = (await pool.query("select count(*) from bookings")).rows[0].count;
+    assert.equal(paymentsAfterError, paymentsBeforeError, "Zero payment rows created in PostgreSQL on entitlement error");
+    assert.equal(bookingsAfterError, bookingsBeforeError, "Zero booking rows created in PostgreSQL on entitlement error");
+
+    // 11. Manual Review Deadline persistence and behavior in PostgreSQL
+    const manualReviewCheckout = await BookingCheckoutService.checkout(repository, {
+      customer: { name: "Customer ManualReview", phone: "0855555555" },
+      service_id: service.id,
+      staff_id: staff.id,
+      start_at: "2026-09-15T10:00:00+07:00",
+      idempotency_key: `pg_man_${randomUUID()}`
+    }, {
+      businessSettings: { payment_type: "full_payment" },
+      entitlements: { payment: true, deposit: false },
+      now: new Date("2026-09-15T09:00:00Z"),
+      expiryMinutes: 15
+    });
+
+    // Simulate slip verification grace exceeded -> escalate to manual_review
+    const verifyGraceTime = new Date("2026-09-15T09:25:00Z");
+    await pool.query(
+      "update payments set status = 'verifying', verification_deadline = $2 where id = $1",
+      [manualReviewCheckout.paymentId, verifyGraceTime.toISOString()]
+    );
+
+    const afterGraceTime = new Date("2026-09-15T09:26:00Z");
+    const escalateRes = await expirePendingPaymentHold(repository, {
+      paymentId: manualReviewCheckout.paymentId,
+      now: afterGraceTime
+    });
+
+    assert.equal(escalateRes.action, "MANUAL_REVIEW");
+    assert.ok(escalateRes.manualReviewDeadline);
+
+    // Verify manual_review_deadline is persisted in PostgreSQL
+    const dbPaymentRow = (await pool.query("select * from payments where id = $1", [manualReviewCheckout.paymentId])).rows[0];
+    assert.equal(dbPaymentRow.status, "manual_review");
+    assert.ok(dbPaymentRow.manual_review_deadline, "manual_review_deadline column must be persisted in PostgreSQL");
+
+    // Check before deadline (T+5m) -> HOLD_FOR_REVIEW
+    const holdRes = await expirePendingPaymentHold(repository, {
+      paymentId: manualReviewCheckout.paymentId,
+      now: new Date(afterGraceTime.getTime() + 5 * 60 * 1000)
+    });
+    assert.equal(holdRes.action, "HOLD_FOR_REVIEW");
+
+    // Booking remains pending in PostgreSQL
+    const dbBookingHold = (await pool.query("select status from bookings where id = $1", [manualReviewCheckout.bookingId])).rows[0];
+    assert.equal(dbBookingHold.status, "pending");
+
+    // Check after deadline (T+16m) -> MANUAL_REVIEW_EXPIRED
+    const expiredRes = await expirePendingPaymentHold(repository, {
+      paymentId: manualReviewCheckout.paymentId,
+      now: new Date(afterGraceTime.getTime() + 16 * 60 * 1000)
+    });
+    assert.equal(expiredRes.action, "MANUAL_REVIEW_EXPIRED");
+
+    // Status remains manual_review (no automatic state mutation outside transaction)
+    const dbPaymentAfter = (await pool.query("select status from payments where id = $1", [manualReviewCheckout.paymentId])).rows[0];
+    assert.equal(dbPaymentAfter.status, "manual_review");
+
   } finally {
     await pool.end();
   }

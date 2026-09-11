@@ -130,6 +130,17 @@ class FakeRepository {
   }
 
   async insertBooking(booking) {
+    if (booking.checkout_idempotency_key) {
+      const existing = this.bookings.find(
+        (b) => b.checkout_idempotency_key === booking.checkout_idempotency_key
+      );
+      if (existing) {
+        const err = new Error("Booking with this checkout idempotency key already exists");
+        err.code = "BOOKING_IDEMPOTENCY_CONFLICT";
+        throw err;
+      }
+    }
+
     const start = new Date(booking.start_at);
     const end = new Date(booking.end_at);
     const conflicts = this.bookings.some((existing) => (
@@ -154,6 +165,18 @@ class FakeRepository {
 
   async getBookingForUpdate(bookingId) {
     return this.bookings.find((booking) => booking.id === bookingId) ?? null;
+  }
+
+  async getBooking(bookingId) {
+    return this.getBookingForUpdate(bookingId);
+  }
+
+  async getBookingById(bookingId) {
+    return this.getBookingForUpdate(bookingId);
+  }
+
+  async findBookingByIdempotencyKey(key) {
+    return this.bookings.find((booking) => booking.checkout_idempotency_key === key) ?? null;
   }
 
   async updateBookingTime(bookingId, patch) {
@@ -348,6 +371,14 @@ class FakeRepository {
 
   async findPaymentByTransaction(namespace, reference) {
     return this.findPaymentByTransactionReference(namespace, reference);
+  }
+
+  async getPaymentsByBookingId(bookingId) {
+    return this.payments.filter((p) => p.original_booking_id === bookingId);
+  }
+
+  async findPaymentByBookingId(bookingId) {
+    return this.payments.find((p) => p.original_booking_id === bookingId) ?? null;
   }
 
   async createPaymentAllocation(allocation) {

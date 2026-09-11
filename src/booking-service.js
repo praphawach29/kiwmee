@@ -22,7 +22,7 @@ async function createBooking(repository, input) {
     });
 
     const customer = await findOrCreateCustomer(tx, input.customer);
-    const booking = await tx.insertBooking({
+    const bookingData = {
       customer_id: customer.id,
       service_id: input.service_id,
       staff_id: input.staff_id,
@@ -31,7 +31,11 @@ async function createBooking(repository, input) {
       status: "confirmed",
       source: input.source ?? "web",
       notes: input.notes ?? null
-    });
+    };
+    if (input.checkout_idempotency_key || input.checkoutIdempotencyKey) {
+      bookingData.checkout_idempotency_key = input.checkout_idempotency_key ?? input.checkoutIdempotencyKey;
+    }
+    const booking = await tx.insertBooking(bookingData);
 
     await tx.insertBookingStatusHistory({
       booking_id: booking.id,

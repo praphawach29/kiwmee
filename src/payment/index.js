@@ -37,12 +37,26 @@ const {
 const {
   DEFAULT_PAYMENT_EXPIRY_MINUTES,
   DEFAULT_VERIFICATION_GRACE_MINUTES,
+  DEFAULT_MANUAL_REVIEW_DEADLINE_MINUTES,
   createPayment,
   createPendingBookingWithPayment,
+  expirePendingPaymentHold,
   evaluateSlipVerification,
   evaluateVerificationGrace,
   transferAllocationForReschedule
 } = require("./payment-service");
+
+const {
+  resolvePaymentPolicy,
+  resolveCapabilities
+} = require("./payment-policy-resolver");
+
+const {
+  BookingCheckoutService,
+  BookingPaymentOrchestrator,
+  checkoutBooking,
+  formatPaymentPendingResult
+} = require("./booking-checkout-service");
 
 const {
   PaymentConfirmationError,
@@ -73,6 +87,16 @@ module.exports = {
   resolvePolicy,
   calculatePricing,
 
+  // Policy Resolution (Phase D)
+  resolvePaymentPolicy,
+  resolveCapabilities,
+
+  // Checkout Orchestration (Phase D)
+  BookingCheckoutService,
+  BookingPaymentOrchestrator,
+  checkoutBooking,
+  formatPaymentPendingResult,
+
   // Lock Ordering
   FINANCIAL_LOCK_ORDER,
   validateLockAcquisitionOrder,
@@ -92,8 +116,10 @@ module.exports = {
   // Payment Operations
   DEFAULT_PAYMENT_EXPIRY_MINUTES,
   DEFAULT_VERIFICATION_GRACE_MINUTES,
+  DEFAULT_MANUAL_REVIEW_DEADLINE_MINUTES,
   createPayment,
   createPendingBookingWithPayment,
+  expirePendingPaymentHold,
   evaluateSlipVerification,
   evaluateVerificationGrace,
   transferAllocationForReschedule,

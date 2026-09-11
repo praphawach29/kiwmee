@@ -14,6 +14,13 @@ alter table bookings drop constraint if exists bookings_status_check;
 alter table bookings add constraint bookings_status_check
   check (status in ('pending','confirmed','checked_in','completed','cancelled','no_show','rescheduled','expired'));
 
+-- 1.1 Support checkout idempotency on bookings (Phase D Final Hardening)
+-- Prevents duplicate bookings for both no_payment and payment_required checkouts at database level
+alter table bookings add column if not exists checkout_idempotency_key text;
+create unique index if not exists idx_bookings_checkout_idempotency
+  on bookings(checkout_idempotency_key)
+  where checkout_idempotency_key is not null;
+
 -- 2. TABLE: payments
 -- Note on allocation design:
 -- `original_booking_id` represents the immutable origin booking and MUST NEVER be rewritten
@@ -43,6 +50,7 @@ create table if not exists payments (
   idempotency_key text not null unique,
   expires_at timestamptz not null,
   verification_deadline timestamptz,
+  manual_review_deadline timestamptz,
   paid_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

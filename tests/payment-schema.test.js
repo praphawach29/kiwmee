@@ -119,6 +119,7 @@ test("007_payment_schema.sql defines payments with verification grace support (e
 
   assert.match(paymentsBody, /expires_at\s+timestamptz\s+not\s+null/i, "expires_at required for payment expiry window");
   assert.match(paymentsBody, /verification_deadline\s+timestamptz/i, "verification_deadline for grace window during verification");
+  assert.match(paymentsBody, /manual_review_deadline\s+timestamptz/i, "manual_review_deadline for bounding manual review window");
   assert.match(paymentsBody, /original_booking_id\s+uuid\s+not\s+null\s+references\s+bookings/i, "original_booking_id immutable link");
 });
 
@@ -132,13 +133,15 @@ test("007_payment_schema.sql enforces financial validity constraints", () => {
   assert.match(refundsMatch[1], /amount\s+numeric\(10,\s*2\)\s+not\s+null\s+check\s*\(\s*amount\s*>\s*0\s*\)/i);
 });
 
-test("007_payment_schema.sql safely expands bookings_status_check to include 'expired'", () => {
+test("007_payment_schema.sql safely expands bookings_status_check to include 'expired' and adds checkout_idempotency_key", () => {
   const sql = fs.readFileSync(MIGRATION_PATH, "utf8");
   assert.match(sql, /alter table bookings drop constraint if exists bookings_status_check;/i);
   assert.match(
     sql,
     /alter table bookings add constraint bookings_status_check\s+check\s*\(\s*status in \('pending','confirmed','checked_in','completed','cancelled','no_show','rescheduled','expired'\)\);/i
   );
+  assert.match(sql, /alter table bookings add column if not exists checkout_idempotency_key text;/i);
+  assert.match(sql, /create unique index if not exists idx_bookings_checkout_idempotency\s+on bookings\(checkout_idempotency_key\)\s+where checkout_idempotency_key is not null;/i);
 });
 
 test("'expired' status is excluded from GiST double-booking constraint and active availability statuses", () => {

@@ -165,6 +165,28 @@ class PgBookingRepository extends PgPaymentRepository {
   }
 
   async insertBooking(booking) {
+    if (booking.checkout_idempotency_key !== undefined && booking.checkout_idempotency_key !== null) {
+      const rows = await this.query(
+        `
+          insert into bookings (customer_id, service_id, staff_id, start_at, end_at, status, source, notes, checkout_idempotency_key)
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          returning *
+        `,
+        [
+          booking.customer_id,
+          booking.service_id,
+          booking.staff_id,
+          booking.start_at,
+          booking.end_at,
+          booking.status,
+          booking.source,
+          booking.notes,
+          booking.checkout_idempotency_key
+        ]
+      );
+      return rows[0];
+    }
+
     const rows = await this.query(
       `
         insert into bookings (customer_id, service_id, staff_id, start_at, end_at, status, source, notes)
@@ -236,6 +258,29 @@ class PgBookingRepository extends PgPaymentRepository {
       "update bookings set status = $2 where id = $1 returning *",
       [bookingId, status]
     );
+    return rows[0] ?? null;
+  }
+
+  async getBooking(bookingId) {
+    const rows = await this.query("select * from bookings where id = $1", [bookingId]);
+    return rows[0] ?? null;
+  }
+
+  async getBookingById(bookingId) {
+    return this.getBooking(bookingId);
+  }
+
+  async findBookingByIdempotencyKey(key) {
+    const rows = await this.query("select * from bookings where checkout_idempotency_key = $1", [key]);
+    return rows[0] ?? null;
+  }
+
+  async getPaymentsByBookingId(bookingId) {
+    return this.query("select * from payments where original_booking_id = $1 order by created_at desc", [bookingId]);
+  }
+
+  async findPaymentByBookingId(bookingId) {
+    const rows = await this.getPaymentsByBookingId(bookingId);
     return rows[0] ?? null;
   }
 

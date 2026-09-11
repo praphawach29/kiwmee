@@ -7,6 +7,7 @@ const { calculatePricing } = require("./pricing-calculator");
 
 const DEFAULT_PAYMENT_EXPIRY_MINUTES = 15;
 const DEFAULT_VERIFICATION_GRACE_MINUTES = 10;
+const DEFAULT_MANUAL_REVIEW_DEADLINE_MINUTES = 15;
 
 /**
  * Creates a payment for a booking based on pricing policy.
@@ -155,16 +156,19 @@ function evaluateSlipVerification({ payment, verificationResult, expectedReceive
 }
 
 /**
- * Pure domain logic for checking verification grace periods.
+ * Pure domain logic for checking verification grace periods and manual review deadlines.
  * Rules:
- * - pending + expires_at passed => ELIGIBLE_FOR_EXPIRY
+ * - pending + expires_at passed => EXPIRE
  * - slip_received/verifying + expires_at passed, but verification_deadline NOT passed => WAIT_GRACE (not expired!)
  * - verifying + verification_deadline passed => ESCALATE_MANUAL_REVIEW
+ * - manual_review + before manual_review_deadline => HOLD_FOR_REVIEW
+ * - manual_review + manual_review_deadline passed => MANUAL_REVIEW_EXPIRED
  */
 function evaluateVerificationGrace(payment, now = new Date()) {
   const nowDate = now instanceof Date ? now : new Date(now);
   const expiresAt = new Date(payment.expires_at);
   const verificationDeadline = payment.verification_deadline ? new Date(payment.verification_deadline) : null;
+  const manualReviewDeadline = payment.manual_review_deadline ? new Date(payment.manual_review_deadline) : null;
 
   if (payment.status === PAYMENT_STATUSES.pending) {
     if (nowDate > expiresAt) {
@@ -189,6 +193,38 @@ function evaluateVerificationGrace(payment, now = new Date()) {
         reason: "Verification grace period exceeded without provider resolution; escalate to manual review"
       };
     }
+  }
+
+  if (payment.status === PAYMENT_STATUSES.manualReview) {
+    if (manualReviewDeadline) {
+      if (nowDate <= manualReviewDeadline) {
+        return {
+          action: "HOLD_FOR_REVIEW",
+          eligibleForRelease: false,
+          reason: "Manual review deadline active; holding slot for operator review"
+        };
+      }
+      return {
+        action: "MANUAL_REVIEW_EXPIRED",
+        eligibleForRelease: true,
+        reason: "Manual review deadline exceeded without operator resolution"
+      };
+    }
+    // If manual_review_deadline was not explicitly stored, compute default relative to updated_at
+    const baseline = new Date(payment.updated_at || payment.created_at || nowDate);
+    const implicitDeadline = new Date(baseline.getTime() + DEFAULT_MANUAL_REVIEW_DEADLINE_MINUTES * 60 * 1000);
+    if (nowDate <= implicitDeadline) {
+      return {
+        action: "HOLD_FOR_REVIEW",
+        eligibleForRelease: false,
+        reason: "Implicit manual review deadline active; holding slot for operator review"
+      };
+    }
+    return {
+      action: "MANUAL_REVIEW_EXPIRED",
+      eligibleForRelease: true,
+      reason: "Implicit manual review deadline exceeded without operator resolution"
+    };
   }
 
   return { action: "NOOP", eligibleForRelease: false, reason: `Status '${payment.status}' has no pending expiry action` };
@@ -270,8 +306,11 @@ async function transferAllocationForReschedule(repository, {
 async function createPendingBookingWithPayment(repository, {
   customer,
   serviceId,
+  service_id,
   staffId,
+  staff_id,
   startAt,
+  start_at,
   servicePrice,
   source = "web",
   notes = null,
@@ -281,25 +320,30 @@ async function createPendingBookingWithPayment(repository, {
   percentage,
   provider = "promptpay_qr",
   idempotencyKey,
+  expiryMinutes = DEFAULT_PAYMENT_EXPIRY_MINUTES,
   now = new Date()
 }) {
+  const effectiveServiceId = serviceId ?? service_id;
+  const effectiveStaffId = staffId ?? staff_id;
+  const effectiveStartAt = startAt ?? start_at;
+
   return repository.transaction(async (tx) => {
     // 1. Lock schedule and check availability
     if (tx.lockStaffSchedule) {
-      await tx.lockStaffSchedule(staffId);
+      await tx.lockStaffSchedule(effectiveStaffId);
     }
-    const service = await tx.getActiveService(serviceId);
+    const service = await tx.getActiveService(effectiveServiceId);
     if (!service) {
-      throw new Error(`Service ${serviceId} not found or inactive`);
+      throw new Error(`Service ${effectiveServiceId} not found or inactive`);
     }
 
-    const start = new Date(startAt);
+    const start = new Date(effectiveStartAt);
     const end = new Date(start.getTime() + service.duration_minutes * 60 * 1000);
     const endAt = end.toISOString();
 
     if (tx.listBookingsForStaff) {
       const activeBookings = await tx.listBookingsForStaff(
-        staffId,
+        effectiveStaffId,
         start,
         end,
         ["pending", "confirmed", "checked_in", "completed"]
@@ -315,16 +359,17 @@ async function createPendingBookingWithPayment(repository, {
       cust = await tx.insertCustomer(customer);
     }
 
-    // 3. Insert pending booking
+    // 3. Insert pending booking (subject to GiST exclusion constraint on active/pending bookings)
     const booking = await tx.insertBooking({
       customer_id: cust.id,
-      service_id: serviceId,
-      staff_id: staffId,
-      start_at: startAt,
+      service_id: effectiveServiceId,
+      staff_id: effectiveStaffId,
+      start_at: effectiveStartAt,
       end_at: endAt,
       status: "pending",
       source,
-      notes
+      notes,
+      checkout_idempotency_key: idempotencyKey ?? null
     });
 
     // 4. Insert initial booking status history
@@ -353,6 +398,7 @@ async function createPendingBookingWithPayment(repository, {
       servicePolicy: resolvedPolicy,
       provider,
       idempotencyKey: idempotencyKey || `pay_${booking.id}_init`,
+      expiryMinutes,
       now
     });
 
@@ -363,11 +409,246 @@ async function createPendingBookingWithPayment(repository, {
   });
 }
 
+/**
+ * Expiry Service: Evaluates and handles payment hold expiry within an atomic transaction.
+ * 
+ * Strict Financial Lock Ordering Hierarchy:
+ * 1. Lock payment row FOR UPDATE
+ * 2. Lock booking row FOR UPDATE
+ * 3. Lock/Release payment allocations
+ * 
+ * Rules:
+ * - pending + now <= expires_at => HOLD (slot held)
+ * - pending + now > expires_at => EXPIRE (payment -> expired, booking -> expired, allocations released, slot freed)
+ * - slip_received/verifying + now <= verification_deadline => WAIT_GRACE (hold slot through grace period)
+ * - verifying + now > verification_deadline => MANUAL_REVIEW (escalate to human review, do not auto-cancel)
+ */
+async function expirePendingPaymentHold(repository, { paymentId, bookingId, now = new Date() }) {
+  const nowDate = now instanceof Date ? now : new Date(now);
+
+  return repository.transaction(async (tx) => {
+    // 1. Lock payment first (financial lock ordering: payment -> booking -> allocation)
+    let payment = null;
+    if (paymentId) {
+      payment = await (
+        tx.getPaymentForUpdate?.(paymentId) ??
+        tx.getPaymentByIdForUpdate?.(paymentId) ??
+        tx.getPaymentById?.(paymentId)
+      );
+    } else if (bookingId) {
+      const payments = await (
+        tx.getPaymentsByBookingId?.(bookingId) ??
+        tx.findPaymentByBookingId?.(bookingId) ??
+        []
+      );
+      const matched = Array.isArray(payments) ? payments[0] : payments;
+      if (matched) {
+        payment = await (
+          tx.getPaymentForUpdate?.(matched.id) ??
+          tx.getPaymentByIdForUpdate?.(matched.id) ??
+          tx.getPaymentById?.(matched.id)
+        );
+      }
+    }
+
+    if (!payment) {
+      throw new Error(`Payment not found for expiry evaluation`);
+    }
+
+    // 2. Lock booking second
+    const targetBookingId = bookingId || payment.original_booking_id;
+    const booking = await (
+      tx.getBookingForUpdate?.(targetBookingId) ??
+      tx.getBookingByIdForUpdate?.(targetBookingId) ??
+      tx.getBooking?.(targetBookingId) ??
+      tx.getBookingById?.(targetBookingId)
+    );
+    if (!booking) {
+      throw new Error(`Booking ${targetBookingId} not found for payment ${payment.id}`);
+    }
+
+    // 3. Evaluate grace and expiry rules
+    const graceEvaluation = evaluateVerificationGrace(payment, nowDate);
+
+    // Rule: pending before expiry -> HOLD
+    if (graceEvaluation.action === "ACTIVE") {
+      return {
+        status: "HOLD",
+        action: "HOLD",
+        reason: "Payment window active; slot held",
+        paymentId: payment.id,
+        bookingId: booking.id,
+        expiresAt: payment.expires_at
+      };
+    }
+
+    // Rule: slip_received or verifying within verification_deadline -> WAIT_GRACE
+    if (graceEvaluation.action === "WAIT_GRACE") {
+      return {
+        status: "WAIT_GRACE",
+        action: "WAIT_GRACE",
+        reason: "Verification grace period active; hold slot through verification deadline",
+        paymentId: payment.id,
+        bookingId: booking.id,
+        verificationDeadline: payment.verification_deadline
+      };
+    }
+
+    // Rule: verifying past verification_deadline -> ESCALATE_MANUAL_REVIEW
+    if (graceEvaluation.action === "ESCALATE_MANUAL_REVIEW") {
+      const manualReviewDeadline = new Date(nowDate.getTime() + DEFAULT_MANUAL_REVIEW_DEADLINE_MINUTES * 60 * 1000).toISOString();
+
+      await (
+        tx.updatePaymentStatus?.(payment.id, PAYMENT_STATUSES.manualReview, {
+          reason: "VERIFICATION_GRACE_EXCEEDED",
+          manual_review_deadline: manualReviewDeadline
+        }) ??
+        tx.updatePayment?.(payment.id, {
+          status: PAYMENT_STATUSES.manualReview,
+          manual_review_deadline: manualReviewDeadline,
+          updated_at: nowDate.toISOString()
+        })
+      );
+
+      await tx.insertPaymentEvent?.({
+        id: randomUUID(),
+        payment_id: payment.id,
+        event_type: "manual_review_requested",
+        from_status: payment.status,
+        to_status: PAYMENT_STATUSES.manualReview,
+        actor: "system",
+        reason_code: "VERIFICATION_GRACE_EXCEEDED",
+        metadata: {
+          verification_deadline: payment.verification_deadline,
+          manual_review_deadline: manualReviewDeadline,
+          evaluated_at: nowDate.toISOString()
+        },
+        created_at: nowDate.toISOString()
+      });
+
+      return {
+        status: "MANUAL_REVIEW",
+        action: "MANUAL_REVIEW",
+        reason: "Verification grace period exceeded without provider resolution; escalated to manual review",
+        paymentId: payment.id,
+        bookingId: booking.id,
+        manualReviewDeadline
+      };
+    }
+
+    // Rule: manual_review before manual_review_deadline -> HOLD_FOR_REVIEW
+    if (graceEvaluation.action === "HOLD_FOR_REVIEW") {
+      return {
+        status: "HOLD_FOR_REVIEW",
+        action: "HOLD_FOR_REVIEW",
+        reason: "Manual review deadline active; holding slot for operator review",
+        paymentId: payment.id,
+        bookingId: booking.id,
+        manualReviewDeadline: payment.manual_review_deadline ?? null
+      };
+    }
+
+    // Rule: manual_review past manual_review_deadline -> MANUAL_REVIEW_EXPIRED
+    if (graceEvaluation.action === "MANUAL_REVIEW_EXPIRED") {
+      return {
+        status: "MANUAL_REVIEW_EXPIRED",
+        action: "MANUAL_REVIEW_EXPIRED",
+        reason: "Manual review deadline exceeded; deterministic action available for operator",
+        paymentId: payment.id,
+        bookingId: booking.id,
+        manualReviewDeadline: payment.manual_review_deadline ?? null
+      };
+    }
+
+    // Rule: pending past expires_at -> EXPIRE
+    if (graceEvaluation.action === "EXPIRE") {
+      // 1. Transition payment to expired
+      await (
+        tx.updatePaymentStatus?.(payment.id, PAYMENT_STATUSES.expired, {
+          reason: "PAYMENT_HOLD_EXPIRED"
+        }) ??
+        tx.updatePayment?.(payment.id, {
+          status: PAYMENT_STATUSES.expired,
+          updated_at: nowDate.toISOString()
+        })
+      );
+
+      // 2. Transition booking to expired (frees GiST constraint and availability engine)
+      await (
+        tx.updateBookingStatus?.(booking.id, "expired") ??
+        tx.updateBooking?.(booking.id, {
+          status: "expired",
+          updated_at: nowDate.toISOString()
+        })
+      );
+
+      // 3. Release active payment allocations
+      const allocations = await (tx.getPaymentAllocations?.(payment.id) ?? []);
+      for (const alloc of allocations) {
+        if (alloc.status === "active") {
+          await (
+            tx.updatePaymentAllocation?.(alloc.id, {
+              status: "released",
+              released_at: nowDate.toISOString(),
+              metadata: { release_reason: "payment_hold_expired" }
+            })
+          );
+        }
+      }
+
+      // 4. Record append-only payment audit event
+      await tx.insertPaymentEvent?.({
+        id: randomUUID(),
+        payment_id: payment.id,
+        event_type: "payment_expired",
+        from_status: payment.status,
+        to_status: PAYMENT_STATUSES.expired,
+        actor: "system",
+        reason_code: "PAYMENT_HOLD_EXPIRED",
+        metadata: {
+          expires_at: payment.expires_at,
+          expired_at: nowDate.toISOString()
+        },
+        created_at: nowDate.toISOString()
+      });
+
+      // 5. Record booking status history
+      await tx.insertBookingStatusHistory?.({
+        id: randomUUID(),
+        booking_id: booking.id,
+        from_status: booking.status,
+        to_status: "expired",
+        reason: "payment hold expired",
+        changed_by: "system",
+        created_at: nowDate.toISOString()
+      });
+
+      return {
+        status: "EXPIRE",
+        action: "EXPIRE",
+        reason: "Payment window expired without slip; slot released",
+        paymentId: payment.id,
+        bookingId: booking.id
+      };
+    }
+
+    return {
+      status: "NOOP",
+      action: "NOOP",
+      reason: `Status '${payment.status}' has no pending expiry action`,
+      paymentId: payment.id,
+      bookingId: booking.id
+    };
+  });
+}
+
 module.exports = {
   DEFAULT_PAYMENT_EXPIRY_MINUTES,
   DEFAULT_VERIFICATION_GRACE_MINUTES,
+  DEFAULT_MANUAL_REVIEW_DEADLINE_MINUTES,
   createPayment,
   createPendingBookingWithPayment,
+  expirePendingPaymentHold,
   evaluateSlipVerification,
   evaluateVerificationGrace,
   transferAllocationForReschedule

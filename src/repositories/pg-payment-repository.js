@@ -91,11 +91,12 @@ class PgPaymentRepository {
           idempotency_key,
           expires_at,
           verification_deadline,
+          manual_review_deadline,
           paid_at,
           created_at,
           updated_at
         )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
         returning *
       `,
       [
@@ -114,6 +115,7 @@ class PgPaymentRepository {
         payment.idempotency_key,
         payment.expires_at,
         payment.verification_deadline ?? null,
+        payment.manual_review_deadline ?? null,
         payment.paid_at ?? null,
         payment.created_at ?? nowIso,
         payment.updated_at ?? nowIso
@@ -160,6 +162,15 @@ class PgPaymentRepository {
     return this.findPaymentByTransactionReference(namespace, reference);
   }
 
+  async getPaymentsByBookingId(bookingId) {
+    return this.query("select * from payments where original_booking_id = $1 order by created_at desc", [bookingId]);
+  }
+
+  async findPaymentByBookingId(bookingId) {
+    const rows = await this.getPaymentsByBookingId(bookingId);
+    return rows[0] ?? null;
+  }
+
   async updatePayment(paymentId, patch) {
     const fields = [];
     const values = [];
@@ -168,7 +179,7 @@ class PgPaymentRepository {
     const allowed = [
       "status", "amount_paid", "paid_at", "transaction_namespace",
       "transaction_reference", "provider_reference", "verification_deadline",
-      "expires_at", "amount_due"
+      "manual_review_deadline", "expires_at", "amount_due"
     ];
 
     for (const key of allowed) {
@@ -485,6 +496,11 @@ function normalizePgError(error) {
       const err = new Error("Transaction reference has already been claimed for another payment");
       err.code = "TRANSACTION_ALREADY_REDEEMED";
       err.detail = "duplicate transaction reference";
+      return err;
+    }
+    if (constraint.includes("idx_bookings_checkout_idempotency") || constraint.includes("checkout_idempotency")) {
+      const err = new Error("Booking with this checkout idempotency key already exists");
+      err.code = "BOOKING_IDEMPOTENCY_CONFLICT";
       return err;
     }
     if (constraint.includes("refunds_idempotency_key")) {

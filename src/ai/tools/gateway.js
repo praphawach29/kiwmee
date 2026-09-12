@@ -8,7 +8,18 @@ const messages = {
   TOOL_ERROR: "ระบบขัดข้อง ยังไม่ได้ยืนยันการดำเนินการ กรุณาลองใหม่หรือติดต่อพนักงาน"
 };
 function failure(code) { return { ok: false, error: { code: messages[code] ? code : "TOOL_ERROR", message: messages[code] ?? messages.TOOL_ERROR } }; }
-const projectBooking = (b) => ({ id: b.id, service_id: b.service_id, staff_id: b.staff_id, start_at: b.start_at, end_at: b.end_at, status: b.status });
+const projectBooking = (b) => {
+  const bk = b.booking || b;
+  return {
+    id: bk.id,
+    service_id: bk.service_id || b.service_id,
+    staff_id: bk.staff_id || b.staff_id,
+    start_at: bk.start_at || b.start_at,
+    end_at: bk.end_at || b.end_at,
+    status: bk.status || b.status,
+    ...(b.payment ? { payment: b.payment } : {})
+  };
+};
 class ToolGateway {
   constructor(api) { this.api = api; }
   async execute(name, input, context = {}) {

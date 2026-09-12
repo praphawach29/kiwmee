@@ -76,6 +76,16 @@ const { SlipVerificationProvider } = require("./providers/slip-verification-prov
 const { MockPaymentProvider } = require("./providers/mock-payment-provider");
 const { MockSlipProvider, MOCK_SLIP_SCENARIOS } = require("./providers/mock-slip-provider");
 
+const {
+  PaymentPresentationProvider,
+  MockPaymentPresentationProvider
+} = require("./presentation/payment-presentation");
+
+const {
+  SlipIntakeService,
+  processSlip
+} = require("./slip-intake-service");
+
 module.exports = {
   // Pricing & Money
   PAYMENT_TYPES,
@@ -140,6 +150,12 @@ module.exports = {
   SlipVerificationProvider,
   MockPaymentProvider,
   MockSlipProvider,
-  MOCK_SLIP_SCENARIOS
+  MOCK_SLIP_SCENARIOS,
+
+  // Payment Presentation & Slip Intake (Phase E)
+  PaymentPresentationProvider,
+  MockPaymentPresentationProvider,
+  SlipIntakeService,
+  processSlip
 };
 

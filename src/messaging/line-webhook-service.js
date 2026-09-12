@@ -1,13 +1,68 @@
 const { createHash } = require("node:crypto");
 const { logEvent } = require("../observability/logger");
 const { hasFeature, FEATURES, DEFAULT_SINGLE_BUSINESS_ID } = require("../licensing");
+const {
+  buildServiceCarousel,
+  buildCategorySelectionBubble,
+  buildStaffCarousel,
+  buildDateSelectionBubble,
+  buildSlotSelectionBubble,
+  buildContactPromptBubble,
+  buildReviewTicketBubble,
+  buildBookingSuccessPassBubble,
+  buildPaymentRequiredBubble,
+  buildSlipReceivedBubble,
+  buildPaymentVerifiedBubble,
+  buildPaymentManualReviewBubble,
+  buildPaymentFailedBubble,
+  buildPaymentExpiredBubble
+} = require("./line-flex-builder");
+const { MockPaymentPresentationProvider } = require("../payment/presentation/payment-presentation");
+const { MockMessageContentProvider } = require("./content-provider");
+const { MockSlipProvider } = require("../payment/providers/mock-slip-provider");
+const { SlipIntakeService } = require("../payment/slip-intake-service");
 
 class LineWebhookService {
-  constructor({ messaging, sessions, receptionist, repository, limiter, channelSecret, businessId, entitlementService, hasFeatureFn }) {
+  constructor({
+    messaging,
+    sessions,
+    receptionist,
+    repository,
+    limiter,
+    channelSecret,
+    businessId,
+    entitlementService,
+    hasFeatureFn,
+    contentProvider,
+    slipProvider,
+    presentationProvider
+  }) {
     Object.assign(this, { messaging, sessions, receptionist, repository, limiter, channelSecret });
     this.businessId = businessId || DEFAULT_SINGLE_BUSINESS_ID;
     this.entitlementService = entitlementService || null;
     this.hasFeatureFn = hasFeatureFn || null;
+    this.contentProvider = contentProvider || new MockMessageContentProvider();
+    this.slipProvider = slipProvider || new MockSlipProvider();
+    this.presentationProvider = presentationProvider || new MockPaymentPresentationProvider();
+  }
+
+  async checkFeature(businessId, feature) {
+    try {
+      if (typeof this.hasFeatureFn === "function") {
+        return await this.hasFeatureFn(businessId, feature);
+      } else if (this.entitlementService) {
+        return await this.entitlementService.hasFeature(businessId, feature);
+      } else {
+        return await hasFeature(businessId, feature);
+      }
+    } catch (err) {
+      logEvent("line_webhook_entitlement_error", {
+        feature,
+        businessId,
+        code: err?.code || "ENTITLEMENT_CHECK_FAILED"
+      });
+      return false;
+    }
   }
 
   async handle(raw, signature) {
@@ -32,8 +87,9 @@ class LineWebhookService {
 
   async handleEvent(event) {
     const isMessage = event.type === "message" && event.message?.type === "text";
+    const isImage = event.type === "message" && event.message?.type === "image";
     const isPostback = event.type === "postback" && typeof event.postback?.data === "string";
-    if ((!isMessage && !isPostback) || !event.source?.userId || !event.replyToken) return;
+    if ((!isMessage && !isPostback && !isImage) || !event.source?.userId || !event.replyToken) return;
 
     const eventId = event.webhookEventId ?? createHash("sha256").update(JSON.stringify(event)).digest("hex");
     const claimed = await this.repository.claimLineEvent(eventId);
@@ -42,7 +98,105 @@ class LineWebhookService {
     try {
       await this.limiter.consume("line-user", event.source.userId, { max: 60, windowMs: 60000 });
       const { session, owner } = await this.sessions.external(event.source.userId, this.channelSecret);
+      const businessId = this.businessId || DEFAULT_SINGLE_BUSINESS_ID;
 
+      // ==========================================
+      // LINE Image Event Intake Flow (Phase E)
+      // ==========================================
+      if (isImage) {
+        let reply = null;
+        let resultCode = "SLIP_PROCESSED";
+        let bookingId = null;
+
+        await this.sessions.withSession(session.id, owner, async (state) => {
+          const customerId = state.customer?.id || state.customerId || state.customer_id || state.owner || owner;
+          let activePayment = state.payment;
+          let paymentId = activePayment?.id || state.paymentId;
+
+          // Rule B & C: When session.paymentId is absent, check customer's pending payments
+          if (!paymentId && this.repository.findPendingPaymentsByCustomer && customerId) {
+            const pendingList = await this.repository.findPendingPaymentsByCustomer(customerId);
+            if (pendingList && pendingList.length === 1) {
+              state.payment = pendingList[0];
+              state.paymentId = pendingList[0].id;
+              state.stage = "payment_pending";
+              paymentId = pendingList[0].id;
+            } else if (pendingList && pendingList.length > 1) {
+              reply = {
+                type: "text",
+                text: "พบรายการรอชำระเงินมากกว่า 1 รายการ กรุณาระบุรหัสการจองที่ต้องการชำระเงินค่ะ"
+              };
+              resultCode = "MULTIPLE_PENDING_PAYMENTS";
+              return;
+            }
+          }
+
+          const isPending = paymentId && [
+            "payment_pending",
+            "slip_received",
+            "verifying",
+            "payment_failed",
+            "payment_manual_review"
+          ].includes(state.stage);
+
+          // Check if LINE session has active payment pending
+          if (!isPending) {
+            reply = {
+              type: "text",
+              text: "ขณะนี้ไม่มีรายการที่รอชำระเงินค่ะ"
+            };
+            resultCode = "NO_PENDING_PAYMENT";
+            return;
+          }
+
+          const slipAllowed = await this.checkFeature(businessId, FEATURES.slipVerification);
+          const autoConfirmAllowed = await this.checkFeature(businessId, FEATURES.autoPaymentConfirmation);
+          const flexAllowed = await this.checkFeature(businessId, FEATURES.lineFlex);
+
+          const slipResult = await SlipIntakeService.processSlip({
+            session: state,
+            messageId: event.message.id,
+            contentProvider: this.contentProvider,
+            slipProvider: this.slipProvider,
+            repository: this.repository,
+            entitlements: {
+              slipVerification: slipAllowed,
+              autoPaymentConfirmation: autoConfirmAllowed
+            },
+            businessId,
+            now: new Date()
+          });
+
+          resultCode = slipResult.code || "SLIP_PROCESSED";
+          bookingId = slipResult.booking?.id || state.booking?.id || state.bookingId;
+
+          reply = formatSlipReply(slipResult, state, {
+            hasFlex: flexAllowed,
+            businessId,
+            presentationProvider: this.presentationProvider
+          });
+        });
+
+        if (typeof this.messaging.replyMessages === "function") {
+          await this.messaging.replyMessages(event.replyToken, [reply]);
+        } else {
+          await this.messaging.replyText(event.replyToken, reply);
+        }
+
+        await this.repository.completeLineEvent(eventId);
+
+        logEvent("line_webhook_success", {
+          stage: session.stage,
+          action: "image",
+          result_code: resultCode,
+          booking_id: bookingId
+        });
+        return;
+      }
+
+      // ==========================================
+      // Existing Text & Postback Flow
+      // ==========================================
       let textInput;
       if (isPostback) {
         let data = event.postback.data;
@@ -59,26 +213,14 @@ class LineWebhookService {
       const result = await this.sessions.withSession(session.id, owner,
         (state) => this.receptionist.respond(state, textInput));
 
-      const businessId = this.businessId || DEFAULT_SINGLE_BUSINESS_ID;
-      let flexAllowed = false;
-      try {
-        if (typeof this.hasFeatureFn === "function") {
-          flexAllowed = await this.hasFeatureFn(businessId, FEATURES.lineFlex);
-        } else if (this.entitlementService) {
-          flexAllowed = await this.entitlementService.hasFeature(businessId, FEATURES.lineFlex);
-        } else {
-          flexAllowed = await hasFeature(businessId, FEATURES.lineFlex);
-        }
-      } catch (err) {
-        logEvent("line_webhook_entitlement_error", {
-          feature: FEATURES.lineFlex,
-          businessId,
-          code: err?.code || "ENTITLEMENT_CHECK_FAILED"
-        });
-        flexAllowed = false;
-      }
+      const flexAllowed = await this.checkFeature(businessId, FEATURES.lineFlex);
 
-      const reply = formatLineReply(result, { hasFlex: flexAllowed, businessId });
+      const reply = formatLineReply(result, {
+        hasFlex: flexAllowed,
+        businessId,
+        presentationProvider: this.presentationProvider
+      });
+
       if (typeof this.messaging.replyMessages === "function") {
         await this.messaging.replyMessages(event.replyToken, [reply]);
       } else {
@@ -88,8 +230,6 @@ class LineWebhookService {
       await this.repository.completeLineEvent(eventId);
 
       // Requirement 8: Logging
-      // log only: stage, action, result code, booking reference when created
-      // DO NOT log full message, phone, token, secret
       const actionName = isPostback ? (new URLSearchParams(textInput).get("action") ?? "postback") : "text";
       logEvent("line_webhook_success", {
         stage: result.state?.stage,
@@ -105,19 +245,116 @@ class LineWebhookService {
   }
 }
 
-const {
-  buildServiceCarousel,
-  buildCategorySelectionBubble,
-  buildStaffCarousel,
-  buildDateSelectionBubble,
-  buildSlotSelectionBubble,
-  buildContactPromptBubble,
-  buildReviewTicketBubble,
-  buildBookingSuccessPassBubble
-} = require("./line-flex-builder");
+/**
+ * Formats a reply for slip image processing results.
+ */
+function formatSlipReply(slipResult, state, options = {}) {
+  const hasFlex = (options?.hasFlex === true || options?.lineFlex === true);
 
+  if (slipResult.code === "PAYMENT_CONFIRMED" || slipResult.code === "IDEMPOTENT_ALREADY_CONFIRMED") {
+    if (hasFlex) {
+      const flexBubble = buildBookingSuccessPassBubble(slipResult.booking || state.booking, {
+        service: state.service,
+        staff: state.staff,
+        slot: state.slot
+      });
+      return flexBubble;
+    }
+    const bId = slipResult.booking?.id || state.booking?.id;
+    return {
+      type: "text",
+      text: `ชำระเงินสำเร็จและยืนยันการจองเรียบร้อยค่ะ 🎉\n\nรหัสนัดหมาย: ${bId}\nบริการ: ${state.service?.name || "บริการ"}\nช่าง: ${state.staff?.name || "ช่างประจำร้าน"}\nสถานะ: confirmed`,
+      quickReply: {
+        items: [
+          {
+            type: "action",
+            action: {
+              type: "postback",
+              label: "จองบริการอื่น",
+              data: "action=restart",
+              displayText: "จองบริการอื่น"
+            }
+          }
+        ]
+      }
+    };
+  }
+
+  if (slipResult.stage === "payment_manual_review") {
+    if (hasFlex) {
+      return buildPaymentManualReviewBubble({
+        booking: state.booking,
+        payment: state.payment,
+        reason: slipResult.message
+      });
+    }
+    return {
+      type: "text",
+      text: `${slipResult.message}\n\nรายการนี้อยู่ระหว่างการตรวจสอบโดยเจ้าหน้าที่ค่ะ`,
+      quickReply: {
+        items: [
+          {
+            type: "action",
+            action: {
+              type: "postback",
+              label: "จองบริการอื่น",
+              data: "action=restart",
+              displayText: "จองบริการอื่น"
+            }
+          }
+        ]
+      }
+    };
+  }
+
+  if (
+    slipResult.stage === "payment_failed" ||
+    slipResult.code === "AMOUNT_MISMATCH" ||
+    slipResult.code === "INVALID_SLIP" ||
+    slipResult.code === "RECEIVER_MISMATCH" ||
+    slipResult.code === "DUPLICATE_TRANSACTION" ||
+    slipResult.code === "INVALID_IMAGE" ||
+    slipResult.code === "EMPTY_BODY" ||
+    slipResult.code === "OVERSIZED_IMAGE" ||
+    slipResult.code === "INVALID_MIME_TYPE"
+  ) {
+    if (hasFlex) {
+      return buildPaymentFailedBubble({
+        booking: state.booking,
+        payment: state.payment,
+        reason: slipResult.message
+      });
+    }
+    return {
+      type: "text",
+      text: `${slipResult.message}\n\nกรุณาส่งรูปสลิปใหม่อีกครั้ง หรือพิมพ์ 'ยกเลิก' เพื่อยกเลิกค่ะ`,
+      quickReply: {
+        items: [
+          {
+            type: "action",
+            action: {
+              type: "postback",
+              label: "ยกเลิกการจอง",
+              data: "action=cancel",
+              displayText: "ยกเลิก"
+            }
+          }
+        ]
+      }
+    };
+  }
+
+  return {
+    type: "text",
+    text: slipResult.message || "กำลังประมวลผลข้อมูลค่ะ"
+  };
+}
+
+/**
+ * Formats LINE reply from Receptionist output contract.
+ * Automatically generates Flex Messages if entitled, with complete text fallbacks.
+ */
 function formatLineReply(result, options = {}) {
-  // Premium Flex must fail closed: strictly require hasFlex === true
   const hasFlex = (options?.hasFlex === true || options?.lineFlex === true);
   const lines = [result.message];
 
@@ -134,6 +371,30 @@ function formatLineReply(result, options = {}) {
       "",
       "กรุณาตรวจสอบและกดยืนยันการจองด้านล่างค่ะ"
     );
+  } else if (result.state?.stage === "payment_pending" && result.state?.payment) {
+    const p = result.state.payment;
+    const serviceName = result.state.service?.name ?? "บริการ";
+    const staffName = result.state.staff?.name ?? "ช่างประจำร้าน";
+    const dateText = formatDateOnly(result.state.slot?.start_at);
+    const timeText = formatTime(result.state.slot?.start_at);
+    const servicePrice = Number(result.state.service?.price || 0);
+    const amountNum = p.amountDueSatang !== undefined ? p.amountDueSatang / 100 : Number(p.amount_due || 0);
+    const isDeposit = p.type === "deposit_fixed" || p.type === "deposit_percentage";
+    const remaining = Math.max(0, servicePrice - amountNum);
+
+    lines.push(
+      "",
+      `บริการ: ${serviceName}`,
+      `ช่าง: ${staffName}`,
+      `วันที่: ${dateText}`,
+      `เวลา: ${timeText}`,
+      `ราคาบริการเต็ม: ${servicePrice} บาท`,
+      `ยอดที่ต้องชำระตอนนี้: ${amountNum} บาท (${isDeposit ? "มัดจำ" : "ชำระเต็ม"})`,
+      ...(isDeposit ? [`ยอดคงเหลือจ่ายหน้าร้าน: ${remaining} บาท`] : []),
+      `หมดเวลาชำระ: ${formatTime(p.expiresAt || p.expires_at)}`,
+      "",
+      "เมื่อชำระแล้ว ส่งรูปสลิปในแชทนี้ได้เลยค่ะ"
+    );
   } else if (result.choices?.length && result.state?.stage !== "date") {
     lines.push("");
     const maxTextChoices = Math.min(result.choices.length, 12);
@@ -149,7 +410,7 @@ function formatLineReply(result, options = {}) {
     }
   }
 
-  if (result.state?.booking) {
+  if (result.state?.booking && (result.state?.stage === "success" || result.state?.stage === "booked")) {
     lines.push("", `รหัสนัด: ${result.state.booking.id}`, `สถานะ: ${result.state.booking.status}`);
   }
 
@@ -194,7 +455,49 @@ function formatLineReply(result, options = {}) {
   const stage = result.state?.stage;
 
   if (hasFlex) {
-    if (result.state?.booking) {
+    if (stage === "payment_pending" && result.state?.payment) {
+      const presentationProvider = options.presentationProvider || new MockPaymentPresentationProvider();
+      const presentation = presentationProvider.createPaymentPresentationSync
+        ? presentationProvider.createPaymentPresentationSync({
+            paymentId: result.state.payment.id,
+            amountDueSatang: result.state.payment.amountDueSatang,
+            currency: result.state.payment.currency,
+            expiresAt: result.state.payment.expiresAt,
+            businessId: options.businessId
+          })
+        : { displayAmount: `฿${result.state.payment.amountDueSatang / 100}` };
+
+      flexMessage = buildPaymentRequiredBubble({
+        service: result.state.service,
+        staff: result.state.staff,
+        slot: result.state.slot,
+        booking: result.state.booking,
+        payment: result.state.payment,
+        presentation
+      });
+    } else if (stage === "slip_received" || stage === "verifying") {
+      flexMessage = buildSlipReceivedBubble({
+        booking: result.state.booking,
+        payment: result.state.payment
+      });
+    } else if (stage === "payment_manual_review") {
+      flexMessage = buildPaymentManualReviewBubble({
+        booking: result.state.booking,
+        payment: result.state.payment,
+        reason: result.message
+      });
+    } else if (stage === "payment_failed") {
+      flexMessage = buildPaymentFailedBubble({
+        booking: result.state.booking,
+        payment: result.state.payment,
+        reason: result.message
+      });
+    } else if (stage === "payment_expired") {
+      flexMessage = buildPaymentExpiredBubble({
+        booking: result.state.booking,
+        payment: result.state.payment
+      });
+    } else if (result.state?.booking && (stage === "success" || stage === "booked")) {
       flexMessage = buildBookingSuccessPassBubble(result.state.booking, {
         service: result.state.service,
         staff: result.state.staff,
@@ -253,7 +556,7 @@ function formatLineReply(result, options = {}) {
   return message;
 }
 
-async function formatLineReplyWithEntitlement(result, { businessId = DEFAULT_SINGLE_BUSINESS_ID, entitlementService = null, hasFeatureFn = null } = {}) {
+async function formatLineReplyWithEntitlement(result, { businessId = DEFAULT_SINGLE_BUSINESS_ID, entitlementService = null, hasFeatureFn = null, presentationProvider = null } = {}) {
   let hasFlex = false;
   try {
     if (typeof hasFeatureFn === "function") {
@@ -266,7 +569,7 @@ async function formatLineReplyWithEntitlement(result, { businessId = DEFAULT_SIN
   } catch {
     hasFlex = false;
   }
-  return formatLineReply(result, { hasFlex, businessId });
+  return formatLineReply(result, { hasFlex, businessId, presentationProvider });
 }
 
 function getBangkokDate(offsetDays = 0) {
@@ -291,6 +594,7 @@ function truncate(text, max = 20) {
 module.exports = {
   LineWebhookService,
   formatLineReply,
+  formatSlipReply,
   formatLineReplyWithEntitlement,
   getBangkokDate,
   formatDateOnly,

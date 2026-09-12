@@ -6,7 +6,34 @@ const object = (properties) => ({ type: "object", additionalProperties: false, p
 const service = object({ id: uuid, name: string, price: { type: ["string", "number", "null"] }, duration_minutes: { type: "integer", minimum: 1 } });
 const staff = object({ id: uuid, name: string });
 const slot = object({ staff_id: uuid, start_at: string, end_at: string });
-const booking = object({ id: uuid, service_id: uuid, staff_id: uuid, start_at: string, end_at: string, status: string });
+const paymentContract = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    id: { type: "string" },
+    type: { type: "string" },
+    amountDueSatang: { type: "integer", minimum: 0 },
+    currency: { type: "string", minLength: 3, maxLength: 3 },
+    expiresAt: { type: "string" },
+    verificationDeadline: { anyOf: [{ type: "string" }, { type: "null" }] }
+  },
+  required: ["id", "type", "amountDueSatang", "currency", "expiresAt"]
+};
+
+const booking = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    id: uuid,
+    service_id: uuid,
+    staff_id: uuid,
+    start_at: string,
+    end_at: string,
+    status: string,
+    payment: paymentContract
+  },
+  required: ["id", "service_id", "staff_id", "start_at", "end_at", "status"]
+};
 const array = (items) => ({ type: "array", items });
 const schemas = {
   list_services: [{}, array(service), "List active services with current prices and durations."],

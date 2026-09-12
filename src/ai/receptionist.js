@@ -55,7 +55,7 @@ class Receptionist {
 
       if (postback) {
         if (postback.action === "restart" || postback.action === "start") {
-          Object.assign(session, { pending: null, booking: null, customer: null, service: null, staff: null, slot: null, action: "create", handoff: false });
+          Object.assign(session, { pending: null, booking: null, customer: null, service: null, staff: null, slot: null, payment: null, paymentId: null, bookingId: null, action: "create", handoff: false });
           session.services = await call("list_services", {});
           session.stage = "service";
           session.totalChoices = session.services.length;
@@ -64,6 +64,9 @@ class Receptionist {
         } else if (postback.action === "cancel") {
           session.pending = null;
           session.booking = null;
+          session.payment = null;
+          session.paymentId = null;
+          session.bookingId = null;
           session.stage = "service";
           if (!session.services) session.services = await call("list_services", {});
           choices = paginateChoices(buildServiceChoices(session.services), 0);
@@ -197,11 +200,27 @@ class Receptionist {
           } else {
             const pending = session.pending;
             const tool = { create: "create_booking_request", reschedule: "request_reschedule", cancel: "request_cancel" }[pending.action];
-            session.booking = await call(tool, { review_id: pending.id }, { confirmedReview: pending.id });
-            session.stage = "success";
-            session.pending = null;
-            text = pending.action === "cancel" ? "ยกเลิกนัดสำเร็จค่ะ" : pending.action === "reschedule" ? "เลื่อนนัดสำเร็จค่ะ" : "จองสำเร็จค่ะ";
-            choices = [{ label: "จองบริการอื่น", fullLabel: "จองบริการอื่น", value: "เริ่มใหม่", postbackData: "action=restart" }];
+            const bookingResult = await call(tool, { review_id: pending.id }, { confirmedReview: pending.id });
+            if (bookingResult?.status === "pending" && bookingResult?.payment) {
+              session.booking = { id: bookingResult.id, status: bookingResult.status };
+              session.payment = bookingResult.payment;
+              session.paymentId = bookingResult.payment.id;
+              session.bookingId = bookingResult.id;
+              session.stage = "payment_pending";
+              session.pending = null;
+              const isDeposit = session.payment.type === "deposit_fixed" || session.payment.type === "deposit_percentage";
+              const amountBaht = (Number(session.payment.amountDueSatang || 0) / 100).toLocaleString("th-TH");
+              text = `กรุณาชำระเงิน${isDeposit ? "มัดจำ" : ""} ฿${amountBaht} เพื่อยืนยันการจองค่ะ\nเมื่อชำระแล้ว ส่งรูปสลิปในแชทนี้ได้เลยค่ะ`;
+              choices = [{ label: "ยกเลิกการจอง", fullLabel: "ยกเลิกการจอง", value: "ยกเลิก", postbackData: "action=cancel" }];
+            } else {
+              session.booking = bookingResult;
+              session.stage = "success";
+              session.pending = null;
+              session.payment = null;
+              session.paymentId = null;
+              text = pending.action === "cancel" ? "ยกเลิกนัดสำเร็จค่ะ" : pending.action === "reschedule" ? "เลื่อนนัดสำเร็จค่ะ" : "จองสำเร็จค่ะ";
+              choices = [{ label: "จองบริการอื่น", fullLabel: "จองบริการอื่น", value: "เริ่มใหม่", postbackData: "action=restart" }];
+            }
           }
         }
         return {
@@ -230,7 +249,9 @@ class Receptionist {
               phone_last4: session.customer?.phone?.slice(-4),
               cancellation_window_hours: getBookingConfig().cancellationWindowHours
             } : null,
-            booking: session.booking
+            booking: session.booking,
+            payment: session.payment || null,
+            paymentId: session.paymentId || session.payment?.id || null
           }
         };
       }
@@ -246,13 +267,16 @@ class Receptionist {
       } else if (session.handoff && trimmed !== "เริ่มใหม่") {
         text = "กรุณาติดต่อพนักงานของร้าน หรือเริ่มบทสนทนาใหม่ค่ะ";
       } else if (trimmed === "เริ่มใหม่" || trimmed === "เปลี่ยนข้อมูล" || trimmed.toLowerCase() === "restart") {
-        Object.assign(session, { pending: null, booking: null, customer: null, service: null, staff: null, slot: null, action: "create", handoff: false });
+        Object.assign(session, { pending: null, booking: null, customer: null, service: null, staff: null, slot: null, payment: null, paymentId: null, bookingId: null, action: "create", handoff: false });
         session.services = await call("list_services", {}); session.stage = "service";
         text = session.services.length ? "เลือกบริการที่ต้องการค่ะ" : "ขณะนี้ยังไม่มีบริการเปิดจอง";
         choices = paginateChoices(buildServiceChoices(session.services), 0);
       } else if (trimmed === "ยกเลิก" || trimmed.toLowerCase() === "cancel") {
         session.pending = null;
         session.booking = null;
+        session.payment = null;
+        session.paymentId = null;
+        session.bookingId = null;
         session.stage = "service";
         if (!session.services) session.services = await call("list_services", {});
         choices = paginateChoices(buildServiceChoices(session.services), 0);
@@ -264,11 +288,47 @@ class Receptionist {
       } else if (session.stage === "review" && (trimmed === "ยืนยัน" || trimmed === "ยืนยันการจอง" || trimmed.toLowerCase() === "confirm") && session.pending) {
         const pending = session.pending;
         const tool = { create: "create_booking_request", reschedule: "request_reschedule", cancel: "request_cancel" }[pending.action];
-        session.booking = await call(tool, { review_id: pending.id }, { confirmedReview: pending.id });
-        session.stage = "success";
-        session.pending = null;
-        text = pending.action === "cancel" ? "ยกเลิกนัดสำเร็จค่ะ" : pending.action === "reschedule" ? "เลื่อนนัดสำเร็จค่ะ" : "จองสำเร็จค่ะ";
+        const bookingResult = await call(tool, { review_id: pending.id }, { confirmedReview: pending.id });
+        if (bookingResult?.status === "pending" && bookingResult?.payment) {
+          session.booking = { id: bookingResult.id, status: bookingResult.status };
+          session.payment = bookingResult.payment;
+          session.paymentId = bookingResult.payment.id;
+          session.bookingId = bookingResult.id;
+          session.stage = "payment_pending";
+          session.pending = null;
+          const isDeposit = session.payment.type === "deposit_fixed" || session.payment.type === "deposit_percentage";
+          const amountBaht = (Number(session.payment.amountDueSatang || 0) / 100).toLocaleString("th-TH");
+          text = `กรุณาชำระเงิน${isDeposit ? "มัดจำ" : ""} ฿${amountBaht} เพื่อยืนยันการจองค่ะ\nเมื่อชำระแล้ว ส่งรูปสลิปในแชทนี้ได้เลยค่ะ`;
+          choices = [{ label: "ยกเลิกการจอง", fullLabel: "ยกเลิกการจอง", value: "ยกเลิก", postbackData: "action=cancel" }];
+        } else {
+          session.booking = bookingResult;
+          session.stage = "success";
+          session.pending = null;
+          session.payment = null;
+          session.paymentId = null;
+          text = pending.action === "cancel" ? "ยกเลิกนัดสำเร็จค่ะ" : pending.action === "reschedule" ? "เลื่อนนัดสำเร็จค่ะ" : "จองสำเร็จค่ะ";
+          choices = [{ label: "จองบริการอื่น", fullLabel: "จองบริการอื่น", value: "เริ่มใหม่", postbackData: "action=restart" }];
+        }
+      } else if (session.stage === "payment_pending") {
+        const isDeposit = session.payment?.type === "deposit_fixed" || session.payment?.type === "deposit_percentage";
+        const amountBaht = session.payment?.amountDueSatang ? (Number(session.payment.amountDueSatang) / 100).toLocaleString("th-TH") : "";
+        text = `รายการจองของคุณกำลังรอชำระเงิน${isDeposit ? "มัดจำ" : ""} ฿${amountBaht} ค่ะ\nเมื่อชำระแล้ว กรุณาส่งรูปสลิปในแชทนี้ได้เลยค่ะ หรือพิมพ์ 'ยกเลิก' เพื่อยกเลิกรายการ`;
+        choices = [{ label: "ยกเลิกการจอง", fullLabel: "ยกเลิกการจอง", value: "ยกเลิก", postbackData: "action=cancel" }];
+      } else if (session.stage === "slip_received" || session.stage === "verifying") {
+        text = "ระบบได้รับรูปสลิปแล้ว กำลังอยู่ระหว่างการตรวจสอบยอดเงิน กรุณารอสักครู่ค่ะ";
+        choices = [{ label: "ยกเลิกการจอง", fullLabel: "ยกเลิกการจอง", value: "ยกเลิก", postbackData: "action=cancel" }];
+      } else if (session.stage === "payment_manual_review") {
+        text = "รายการจองของคุณอยู่ระหว่างการตรวจสอบโดยเจ้าหน้าที่ค่ะ ทางร้านจะแจ้งผลให้ทราบโดยเร็วที่สุดค่ะ";
         choices = [{ label: "จองบริการอื่น", fullLabel: "จองบริการอื่น", value: "เริ่มใหม่", postbackData: "action=restart" }];
+      } else if (session.stage === "payment_failed") {
+        text = "ตรวจสอบสลิปไม่สำเร็จค่ะ กรุณาส่งรูปสลิปใหม่อีกครั้ง หรือพิมพ์ 'ยกเลิก' เพื่อเริ่มจองใหม่ค่ะ";
+        choices = [{ label: "ยกเลิกการจอง", fullLabel: "ยกเลิกการจอง", value: "ยกเลิก", postbackData: "action=cancel" }];
+      } else if (session.stage === "payment_expired") {
+        Object.assign(session, { pending: null, booking: null, customer: null, service: null, staff: null, slot: null, payment: null, paymentId: null, action: "create" });
+        session.services = await call("list_services", {});
+        session.stage = "service";
+        text = "รายการชำระเงินหมดเวลาแล้วค่ะ กรุณาเลือกบริการใหม่ด้านล่างค่ะ:";
+        choices = paginateChoices(buildServiceChoices(session.services), 0);
       } else if (session.stage === "contact") {
         const matched = trimmed.match(/^(.{1,100}?)\s+([+\d][\d ()-]{8,23})$/);
         if (!matched || normalizePhone(matched[2]).length < 9) {

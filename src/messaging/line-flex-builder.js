@@ -947,6 +947,566 @@ function buildBookingSuccessPassBubble(booking, details = {}) {
   };
 }
 
+/**
+ * 9. Build Payment Required Bubble Card (State A)
+ */
+function buildPaymentRequiredBubble({ service, staff, slot, booking, payment, presentation } = {}) {
+  const serviceName = service?.name ?? "บริการซาลอน";
+  const staffName = staff?.name ?? "ช่างประจำร้าน";
+  const startAt = slot?.start_at || booking?.start_at;
+  const dateText = formatDateOnly(startAt);
+  const timeText = `${formatTime(startAt)} น.`;
+  const bookingRef = booking?.id ? `#${String(booking.id).slice(0, 8).toUpperCase()}` : "#HOLD";
+
+  const servicePriceNum = Number(service?.price || 0);
+  const servicePriceText = formatPrice(service?.price);
+
+  const isDeposit = payment?.type === "deposit_fixed" || payment?.type === "deposit_percentage";
+  const paymentTypeLabel = isDeposit ? "ชำระมัดจำเพื่อยืนยันการจอง" : "ชำระเงินเต็มจำนวนเพื่อยืนยันการจอง";
+  const paymentTypeBadge = isDeposit ? "มัดจำ" : "ชำระเต็ม";
+
+  const amountDueNum = payment?.amountDueSatang !== undefined
+    ? payment.amountDueSatang / 100
+    : (Number(payment?.amount_due || 0));
+  const amountDueText = presentation?.displayAmount || `฿${amountDueNum.toLocaleString("th-TH")}`;
+
+  const remainingNum = Math.max(0, servicePriceNum - amountDueNum);
+  const remainingText = isDeposit ? `฿${remainingNum.toLocaleString("th-TH")}` : "฿0";
+
+  const expiresText = payment?.expiresAt || payment?.expires_at
+    ? `${formatTime(payment.expiresAt || payment.expires_at)} น.`
+    : "15 นาที";
+
+  const qrImageUrl = presentation?.qrImageUrl || "https://images.unsplash.com/photo-1563013544-824ae1b704d3?auto=format&fit=crop&w=400&q=80";
+
+  const bodyContents = [
+    {
+      type: "box",
+      layout: "vertical",
+      backgroundColor: BRAND.SURFACE,
+      cornerRadius: "md",
+      paddingAll: "md",
+      alignItems: "center",
+      contents: [
+        {
+          type: "text",
+          text: "รหัสการจอง (ล็อคคิวชั่วคราว)",
+          size: "xxs",
+          color: BRAND.TEXT_SECONDARY
+        },
+        {
+          type: "text",
+          text: bookingRef,
+          size: "lg",
+          weight: "bold",
+          color: BRAND.TEXT_PRIMARY,
+          margin: "xs"
+        }
+      ]
+    },
+    {
+      type: "box",
+      layout: "horizontal",
+      margin: "lg",
+      contents: [
+        { type: "text", text: "บริการ", size: "sm", color: BRAND.TEXT_SECONDARY, flex: 2 },
+        { type: "text", text: serviceName, size: "sm", weight: "bold", color: BRAND.TEXT_PRIMARY, flex: 5, wrap: true }
+      ]
+    },
+    {
+      type: "box",
+      layout: "horizontal",
+      margin: "sm",
+      contents: [
+        { type: "text", text: "ช่าง", size: "sm", color: BRAND.TEXT_SECONDARY, flex: 2 },
+        { type: "text", text: staffName, size: "sm", weight: "bold", color: BRAND.TEXT_PRIMARY, flex: 5 }
+      ]
+    },
+    {
+      type: "box",
+      layout: "horizontal",
+      margin: "sm",
+      contents: [
+        { type: "text", text: "วันและเวลา", size: "sm", color: BRAND.TEXT_SECONDARY, flex: 2 },
+        { type: "text", text: `${dateText} (${timeText})`, size: "sm", weight: "bold", color: BRAND.TEXT_PRIMARY, flex: 5 }
+      ]
+    },
+    {
+      type: "separator",
+      margin: "md"
+    },
+    {
+      type: "box",
+      layout: "horizontal",
+      margin: "md",
+      contents: [
+        { type: "text", text: "ราคาเต็ม", size: "sm", color: BRAND.TEXT_SECONDARY, flex: 3 },
+        { type: "text", text: servicePriceText, size: "sm", color: BRAND.TEXT_PRIMARY, flex: 4, align: "end" }
+      ]
+    },
+    {
+      type: "box",
+      layout: "horizontal",
+      margin: "xs",
+      contents: [
+        { type: "text", text: "ประเภท", size: "sm", color: BRAND.TEXT_SECONDARY, flex: 3 },
+        { type: "text", text: paymentTypeBadge, size: "sm", color: BRAND.TEXT_PRIMARY, flex: 4, align: "end" }
+      ]
+    },
+    {
+      type: "box",
+      layout: "horizontal",
+      margin: "xs",
+      contents: [
+        { type: "text", text: "ยอดชำระตอนนี้", size: "sm", weight: "bold", color: BRAND.TEXT_PRIMARY, flex: 3 },
+        { type: "text", text: amountDueText, size: "lg", weight: "bold", color: BRAND.PRIMARY_GREEN, flex: 4, align: "end" }
+      ]
+    }
+  ];
+
+  if (isDeposit) {
+    bodyContents.push({
+      type: "box",
+      layout: "horizontal",
+      margin: "xs",
+      contents: [
+        { type: "text", text: "ยอดคงเหลือจ่ายหน้าร้าน", size: "xs", color: BRAND.MUTED, flex: 3 },
+        { type: "text", text: remainingText, size: "xs", color: BRAND.TEXT_SECONDARY, flex: 4, align: "end" }
+      ]
+    });
+  }
+
+  bodyContents.push(
+    {
+      type: "box",
+      layout: "horizontal",
+      margin: "xs",
+      contents: [
+        { type: "text", text: "หมดเวลาชำระ", size: "xs", color: BRAND.MUTED, flex: 3 },
+        { type: "text", text: expiresText, size: "xs", color: BRAND.MUTED, flex: 4, align: "end" }
+      ]
+    },
+    {
+      type: "box",
+      layout: "vertical",
+      margin: "lg",
+      alignItems: "center",
+      contents: [
+        {
+          type: "image",
+          url: qrImageUrl,
+          size: "xl",
+          aspectRatio: "1:1",
+          aspectMode: "cover"
+        },
+        {
+          type: "text",
+          text: "เมื่อชำระแล้ว ส่งรูปสลิปในแชทนี้ได้เลย",
+          size: "xs",
+          weight: "bold",
+          color: BRAND.DARK,
+          margin: "md",
+          align: "center"
+        },
+        {
+          type: "text",
+          text: "* ระบบทดสอบ (Mock Payment Presentation)",
+          size: "xxs",
+          color: BRAND.MUTED,
+          margin: "xs",
+          align: "center"
+        }
+      ]
+    }
+  );
+
+  return {
+    type: "flex",
+    altText: `กรุณาชำระเงิน ${amountDueText} เพื่อยืนยันการจอง (รหัส ${bookingRef})`,
+    contents: {
+      type: "bubble",
+      size: "mega",
+      header: {
+        type: "box",
+        layout: "vertical",
+        backgroundColor: BRAND.DARK,
+        paddingAll: "lg",
+        contents: [
+          {
+            type: "text",
+            text: "Salon Booking OS",
+            size: "xxs",
+            color: BRAND.PRIMARY_GREEN,
+            weight: "bold"
+          },
+          {
+            type: "text",
+            text: paymentTypeLabel,
+            weight: "bold",
+            color: BRAND.WHITE,
+            size: "md",
+            margin: "xs",
+            wrap: true
+          }
+        ]
+      },
+      body: {
+        type: "box",
+        layout: "vertical",
+        paddingAll: "lg",
+        contents: bodyContents
+      },
+      footer: {
+        type: "box",
+        layout: "vertical",
+        paddingAll: "md",
+        contents: [
+          {
+            type: "button",
+            style: "secondary",
+            height: "sm",
+            action: {
+              type: "postback",
+              label: "ยกเลิกการจอง",
+              data: "action=cancel",
+              displayText: "ยกเลิกการจอง"
+            }
+          }
+        ]
+      }
+    }
+  };
+}
+
+/**
+ * 10. Build Slip Received Bubble Card (State B)
+ */
+function buildSlipReceivedBubble({ booking, payment } = {}) {
+  const bookingRef = booking?.id ? `#${String(booking.id).slice(0, 8).toUpperCase()}` : "#VERIFY";
+  return {
+    type: "flex",
+    altText: "ได้รับสลิปแล้ว กำลังตรวจสอบ กรุณารอสักครู่ค่ะ",
+    contents: {
+      type: "bubble",
+      size: "kilo",
+      header: {
+        type: "box",
+        layout: "vertical",
+        backgroundColor: BRAND.DARK,
+        paddingAll: "lg",
+        contents: [
+          { type: "text", text: "Salon Booking OS", size: "xxs", color: BRAND.PRIMARY_GREEN, weight: "bold" },
+          { type: "text", text: "ได้รับสลิปแล้ว กำลังตรวจสอบ", weight: "bold", color: BRAND.WHITE, size: "md", margin: "xs" }
+        ]
+      },
+      body: {
+        type: "box",
+        layout: "vertical",
+        paddingAll: "lg",
+        contents: [
+          {
+            type: "box",
+            layout: "vertical",
+            backgroundColor: BRAND.SURFACE,
+            cornerRadius: "md",
+            paddingAll: "md",
+            alignItems: "center",
+            contents: [
+              { type: "text", text: "รหัสการจอง", size: "xxs", color: BRAND.TEXT_SECONDARY },
+              { type: "text", text: bookingRef, size: "md", weight: "bold", color: BRAND.TEXT_PRIMARY, margin: "xs" }
+            ]
+          },
+          {
+            type: "text",
+            text: "ระบบได้รับรูปสลิปของท่านแล้ว กำลังดำเนินการตรวจสอบยอดเงินอัตโนมัติ กรุณารอสักครู่ค่ะ",
+            size: "xs",
+            color: BRAND.TEXT_SECONDARY,
+            wrap: true,
+            margin: "md"
+          }
+        ]
+      }
+    }
+  };
+}
+
+/**
+ * 11. Build Payment Verified Bubble Card (State C)
+ */
+function buildPaymentVerifiedBubble({ booking, payment } = {}) {
+  const bookingRef = booking?.id ? `#${String(booking.id).slice(0, 8).toUpperCase()}` : "#PAID";
+  return {
+    type: "flex",
+    altText: "ชำระเงินสำเร็จเรียบร้อยค่ะ 🎉",
+    contents: {
+      type: "bubble",
+      size: "kilo",
+      header: {
+        type: "box",
+        layout: "vertical",
+        backgroundColor: BRAND.PRIMARY_GREEN,
+        paddingAll: "lg",
+        contents: [
+          { type: "text", text: "Salon Booking OS", size: "xxs", color: BRAND.DARK, weight: "bold" },
+          { type: "text", text: "ชำระเงินสำเร็จ 🎉", weight: "bold", color: BRAND.WHITE, size: "lg", margin: "xs" }
+        ]
+      },
+      body: {
+        type: "box",
+        layout: "vertical",
+        paddingAll: "lg",
+        contents: [
+          {
+            type: "box",
+            layout: "vertical",
+            backgroundColor: BRAND.SURFACE,
+            cornerRadius: "md",
+            paddingAll: "md",
+            alignItems: "center",
+            contents: [
+              { type: "text", text: "รหัสการจอง", size: "xxs", color: BRAND.TEXT_SECONDARY },
+              { type: "text", text: bookingRef, size: "md", weight: "bold", color: BRAND.TEXT_PRIMARY, margin: "xs" }
+            ]
+          },
+          {
+            type: "text",
+            text: "การชำระเงินได้รับการยืนยันเรียบร้อยแล้ว การจองของท่านได้รับการยืนยันค่ะ",
+            size: "xs",
+            color: BRAND.TEXT_SECONDARY,
+            wrap: true,
+            margin: "md"
+          }
+        ]
+      },
+      footer: {
+        type: "box",
+        layout: "vertical",
+        paddingAll: "md",
+        contents: [
+          {
+            type: "button",
+            style: "secondary",
+            height: "sm",
+            action: { type: "postback", label: "จองบริการอื่น", data: "action=restart", displayText: "จองบริการอื่น" }
+          }
+        ]
+      }
+    }
+  };
+}
+
+/**
+ * 12. Build Manual Review Bubble Card (State D)
+ */
+function buildPaymentManualReviewBubble({ booking, payment, reason } = {}) {
+  const bookingRef = booking?.id ? `#${String(booking.id).slice(0, 8).toUpperCase()}` : "#REVIEW";
+  return {
+    type: "flex",
+    altText: "ระบบส่งให้ร้านตรวจสอบยอดเงินค่ะ",
+    contents: {
+      type: "bubble",
+      size: "kilo",
+      header: {
+        type: "box",
+        layout: "vertical",
+        backgroundColor: BRAND.DARK,
+        paddingAll: "lg",
+        contents: [
+          { type: "text", text: "Salon Booking OS", size: "xxs", color: BRAND.PRIMARY_GREEN, weight: "bold" },
+          { type: "text", text: "ระบบส่งให้ร้านตรวจสอบ", weight: "bold", color: BRAND.WHITE, size: "md", margin: "xs" }
+        ]
+      },
+      body: {
+        type: "box",
+        layout: "vertical",
+        paddingAll: "lg",
+        contents: [
+          {
+            type: "box",
+            layout: "vertical",
+            backgroundColor: BRAND.SURFACE,
+            cornerRadius: "md",
+            paddingAll: "md",
+            alignItems: "center",
+            contents: [
+              { type: "text", text: "รหัสการจอง", size: "xxs", color: BRAND.TEXT_SECONDARY },
+              { type: "text", text: bookingRef, size: "md", weight: "bold", color: BRAND.TEXT_PRIMARY, margin: "xs" }
+            ]
+          },
+          {
+            type: "text",
+            text: reason || "ระบบได้ส่งรายการสลิปให้ทางร้านตรวจสอบยอดเงินโดยตรงแล้วค่ะ",
+            size: "xs",
+            color: BRAND.TEXT_PRIMARY,
+            wrap: true,
+            margin: "md"
+          },
+          {
+            type: "text",
+            text: "เจ้าหน้าที่จะตรวจสอบและยืนยันนัดหมายให้ท่านโดยเร็วที่สุดค่ะ",
+            size: "xxs",
+            color: BRAND.MUTED,
+            wrap: true,
+            margin: "xs"
+          }
+        ]
+      },
+      footer: {
+        type: "box",
+        layout: "vertical",
+        paddingAll: "md",
+        contents: [
+          {
+            type: "button",
+            style: "secondary",
+            height: "sm",
+            action: { type: "postback", label: "จองบริการอื่น", data: "action=restart", displayText: "จองบริการอื่น" }
+          }
+        ]
+      }
+    }
+  };
+}
+
+/**
+ * 13. Build Verification Failed Bubble Card (State E)
+ */
+function buildPaymentFailedBubble({ booking, payment, reason } = {}) {
+  const bookingRef = booking?.id ? `#${String(booking.id).slice(0, 8).toUpperCase()}` : "#RETRY";
+  return {
+    type: "flex",
+    altText: reason || "ตรวจสอบสลิปไม่สำเร็จ กรุณาส่งรูปใหม่อีกครั้งค่ะ",
+    contents: {
+      type: "bubble",
+      size: "kilo",
+      header: {
+        type: "box",
+        layout: "vertical",
+        backgroundColor: BRAND.DARK,
+        paddingAll: "lg",
+        contents: [
+          { type: "text", text: "Salon Booking OS", size: "xxs", color: BRAND.MUTED, weight: "bold" },
+          { type: "text", text: "ตรวจสอบสลิปไม่สำเร็จ", weight: "bold", color: BRAND.WHITE, size: "md", margin: "xs" }
+        ]
+      },
+      body: {
+        type: "box",
+        layout: "vertical",
+        paddingAll: "lg",
+        contents: [
+          {
+            type: "box",
+            layout: "vertical",
+            backgroundColor: BRAND.SURFACE,
+            cornerRadius: "md",
+            paddingAll: "md",
+            alignItems: "center",
+            contents: [
+              { type: "text", text: "รหัสการจอง", size: "xxs", color: BRAND.TEXT_SECONDARY },
+              { type: "text", text: bookingRef, size: "md", weight: "bold", color: BRAND.TEXT_PRIMARY, margin: "xs" }
+            ]
+          },
+          {
+            type: "text",
+            text: reason || "ไม่สามารถตรวจสอบสลิปได้ หรือยอดเงินไม่ตรงกับรายการจองค่ะ",
+            size: "xs",
+            color: BRAND.TEXT_PRIMARY,
+            wrap: true,
+            margin: "md"
+          },
+          {
+            type: "text",
+            text: "กรุณาตรวจสอบความถูกต้องและส่งรูปสลิปใหม่อีกครั้งในแชทนี้ค่ะ",
+            size: "xxs",
+            color: BRAND.MUTED,
+            wrap: true,
+            margin: "xs"
+          }
+        ]
+      },
+      footer: {
+        type: "box",
+        layout: "vertical",
+        paddingAll: "md",
+        contents: [
+          {
+            type: "button",
+            style: "secondary",
+            height: "sm",
+            action: { type: "postback", label: "ยกเลิกการจอง", data: "action=cancel", displayText: "ยกเลิกการจอง" }
+          }
+        ]
+      }
+    }
+  };
+}
+
+/**
+ * 14. Build Payment Expired Bubble Card (State F)
+ */
+function buildPaymentExpiredBubble({ booking, payment } = {}) {
+  const bookingRef = booking?.id ? `#${String(booking.id).slice(0, 8).toUpperCase()}` : "#EXPIRED";
+  return {
+    type: "flex",
+    altText: "รายการชำระเงินหมดเวลาแล้วค่ะ กรุณาจองใหม่ค่ะ",
+    contents: {
+      type: "bubble",
+      size: "kilo",
+      header: {
+        type: "box",
+        layout: "vertical",
+        backgroundColor: BRAND.DARK,
+        paddingAll: "lg",
+        contents: [
+          { type: "text", text: "Salon Booking OS", size: "xxs", color: BRAND.MUTED, weight: "bold" },
+          { type: "text", text: "รายการชำระเงินหมดเวลา", weight: "bold", color: BRAND.WHITE, size: "md", margin: "xs" }
+        ]
+      },
+      body: {
+        type: "box",
+        layout: "vertical",
+        paddingAll: "lg",
+        contents: [
+          {
+            type: "box",
+            layout: "vertical",
+            backgroundColor: BRAND.SURFACE,
+            cornerRadius: "md",
+            paddingAll: "md",
+            alignItems: "center",
+            contents: [
+              { type: "text", text: "รหัสการจอง", size: "xxs", color: BRAND.TEXT_SECONDARY },
+              { type: "text", text: bookingRef, size: "md", weight: "bold", color: BRAND.TEXT_PRIMARY, margin: "xs" }
+            ]
+          },
+          {
+            type: "text",
+            text: "รายการชำระเงินนี้หมดอายุแล้ว ระบบได้ยกเลิกและปล่อยคิวเรียบร้อยค่ะ หากต้องการใช้บริการ กรุณากดจองใหม่ค่ะ",
+            size: "xs",
+            color: BRAND.TEXT_SECONDARY,
+            wrap: true,
+            margin: "md"
+          }
+        ]
+      },
+      footer: {
+        type: "box",
+        layout: "vertical",
+        paddingAll: "md",
+        contents: [
+          {
+            type: "button",
+            style: "primary",
+            color: BRAND.PRIMARY_GREEN,
+            height: "sm",
+            action: { type: "postback", label: "จองบริการใหม่", data: "action=restart", displayText: "จองบริการใหม่" }
+          }
+        ]
+      }
+    }
+  };
+}
+
 module.exports = {
   BRAND,
   buildServiceCarousel,
@@ -957,6 +1517,12 @@ module.exports = {
   buildContactPromptBubble,
   buildReviewTicketBubble,
   buildBookingSuccessPassBubble,
+  buildPaymentRequiredBubble,
+  buildSlipReceivedBubble,
+  buildPaymentVerifiedBubble,
+  buildPaymentManualReviewBubble,
+  buildPaymentFailedBubble,
+  buildPaymentExpiredBubble,
   getServiceImage,
   getServiceCategory,
   getStaffImage,
@@ -965,3 +1531,4 @@ module.exports = {
   formatTime,
   truncate
 };
+

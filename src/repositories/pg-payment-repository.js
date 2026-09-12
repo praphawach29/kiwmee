@@ -171,6 +171,21 @@ class PgPaymentRepository {
     return rows[0] ?? null;
   }
 
+  async findPendingPaymentsByCustomer(customerId, statuses = ["pending", "slip_received", "verifying", "payment_failed", "payment_manual_review"]) {
+    return this.query(
+      `
+        select p.*
+        from payments p
+        join bookings b on p.original_booking_id = b.id
+        where b.customer_id = $1
+          and p.status = any($2::text[])
+          and b.status in ('pending', 'confirmed')
+        order by p.created_at desc
+      `,
+      [customerId, statuses]
+    );
+  }
+
   async updatePayment(paymentId, patch) {
     const fields = [];
     const values = [];
@@ -238,6 +253,13 @@ class PgPaymentRepository {
 
   async insertPaymentEvent(event) {
     return this.createPaymentEvent(event);
+  }
+
+  async getPaymentEvents(paymentId) {
+    return this.query(
+      "select * from payment_events where payment_id = $1 order by created_at asc",
+      [paymentId]
+    );
   }
 
   async createPaymentAllocation(allocation) {
@@ -461,6 +483,94 @@ class PgPaymentRepository {
 
   async insertPaymentAttempt(attempt) {
     return this.createPaymentAttempt(attempt);
+  }
+
+  async updatePaymentAttempt(id, patch) {
+    const fields = [];
+    const values = [];
+    let idx = 1;
+
+    const allowed = [
+      "provider_status", "normalized_result", "verified_amount",
+      "verified_receiver", "verified_sender", "verified_transaction_reference",
+      "verified_transaction_at", "failure_reason_code", "provider_request_id",
+      "slip_hash", "verification_provider"
+    ];
+
+    for (const key of allowed) {
+      if (patch[key] !== undefined) {
+        let val = patch[key];
+        if (key === "verified_amount" && val !== null) {
+          val = encodeMoneyForDb(val);
+        }
+        fields.push(`${key} = $${idx++}`);
+        values.push(val);
+      }
+    }
+
+    if (fields.length === 0) {
+      const rows = await this.query("select * from payment_attempts where id = $1", [id]);
+      return rows[0] ?? null;
+    }
+
+    values.push(id);
+    const sql = `update payment_attempts set ${fields.join(", ")} where id = $${idx} returning *`;
+    const rows = await this.query(sql, values);
+    return rows[0] ?? null;
+  }
+
+  async findPaymentAttemptBySlipHash(slipHash) {
+    if (!slipHash) return null;
+    const rows = await this.query(
+      "select * from payment_attempts where slip_hash = $1 order by created_at desc limit 1",
+      [slipHash]
+    );
+    return rows[0] ?? null;
+  }
+
+  async getPaymentAttempts(paymentId) {
+    return this.query(
+      "select * from payment_attempts where payment_id = $1 order by created_at asc",
+      [paymentId]
+    );
+  }
+
+  async getPaymentAttemptsByPaymentId(paymentId) {
+    return this.getPaymentAttempts(paymentId);
+  }
+
+  async claimLineEvent(id) {
+    const rows = await this.query(
+      `
+        insert into line_webhook_events (event_id, status, attempts)
+        values ($1, 'processing', 1)
+        on conflict (event_id) do update
+          set status = 'processing',
+              attempts = line_webhook_events.attempts + 1,
+              last_error = null,
+              updated_at = now()
+        where line_webhook_events.status = 'failed'
+        returning *
+      `,
+      [id]
+    );
+    return rows[0] ?? null;
+  }
+
+  async completeLineEvent(id) {
+    await this.query(
+      "update line_webhook_events set status = 'completed', updated_at = now() where event_id = $1",
+      [id]
+    );
+    return true;
+  }
+
+  async failLineEvent(id, errorMsg = "webhook processing failed") {
+    await this.query(
+      "update line_webhook_events set status = 'failed', last_error = $2, updated_at = now() where event_id = $1",
+      [id, errorMsg]
+    );
+    return true;
   }
 }
 

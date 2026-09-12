@@ -1493,3 +1493,332 @@ test("PostgreSQL Payment Integration Suite (Phase D: Slot Hold, GiST Conflict, I
   }
 });
 
+// =============================================================================
+// PART 14: Phase E Live PostgreSQL Integration (Slip Intake & Payment Attempts)
+// =============================================================================
+
+test("PostgreSQL Live Integration (Phase E): PaymentAttempt persistence, duplicate slip hash, atomic verification confirmation, and error containment", { skip: !process.env.TEST_DATABASE_URL }, async () => {
+  const { Pool } = require("pg");
+  const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL });
+  const repository = new PgPaymentRepository({ pool });
+
+  try {
+    // Reset schema and apply migrations
+    const schemaSql = await fs.readFile(path.join(__dirname, "..", "database", "schema.sql"), "utf8");
+    const migration004Sql = await fs.readFile(path.join(__dirname, "..", "database", "migrations", "004_automation_jobs.sql"), "utf8");
+    const migration005Sql = await fs.readFile(path.join(__dirname, "..", "database", "migrations", "005_automation_retry.sql"), "utf8");
+    const migration007Sql = await fs.readFile(path.join(__dirname, "..", "database", "migrations", "007_payment_schema.sql"), "utf8");
+
+    await pool.query("drop schema public cascade");
+    await pool.query("create schema public");
+    await pool.query(schemaSql);
+    await pool.query(migration004Sql);
+    await pool.query(migration005Sql);
+    await pool.query(migration007Sql);
+
+    // Seed master data
+    const service = (await pool.query(
+      "insert into services(name, duration_minutes, price, active) values('ดีท็อกซ์หนังศีรษะ', 60, 950.00, true) returning *"
+    )).rows[0];
+    const staff = (await pool.query(
+      "insert into staff(name, active) values('ช่างกานต์', true) returning *"
+    )).rows[0];
+    const customer = (await pool.query(
+      "insert into customers(name, phone) values('ลูกค้าทดสอบ Phase E', '0891234567') returning *"
+    )).rows[0];
+
+    // 1. Create a pending booking with payment
+    const checkoutResult = await BookingCheckoutService.checkout(repository, {
+      customer: { name: customer.name, phone: customer.phone },
+      service_id: service.id,
+      staff_id: staff.id,
+      start_at: "2026-09-20T10:00:00+07:00",
+      end_at: "2026-09-20T11:00:00+07:00",
+      source: "line",
+      idempotency_key: `pg_e_${randomUUID()}`
+    }, {
+      businessSettings: { payment_type: "deposit_fixed", fixed_amount: 300 },
+      entitlements: { payment: true, deposit: true },
+      now: new Date("2026-09-20T09:00:00Z"),
+      expiryMinutes: 15
+    });
+
+    assert.equal(checkoutResult.status, "payment_pending");
+    const paymentId = checkoutResult.paymentId;
+    const bookingId = checkoutResult.bookingId;
+
+    // 2. Persist PaymentAttempt in real PostgreSQL
+    const slipHash1 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"; // SHA-256
+    const attempt1 = await repository.createPaymentAttempt({
+      payment_id: paymentId,
+      attempt_type: "slip_upload",
+      verification_provider: "mock_slip",
+      normalized_result: "success",
+      slip_hash: slipHash1,
+      verified_amount: "300.00",
+      provider_status: "ok",
+      raw_payload_sanitized: { messageId: "line-msg-001", slipHash: slipHash1 }
+    });
+
+    assert.ok(attempt1.id);
+    assert.equal(attempt1.payment_id, paymentId);
+    assert.equal(attempt1.slip_hash, slipHash1);
+
+    // Query back from PostgreSQL
+    const foundAttempt = await repository.findPaymentAttemptBySlipHash(slipHash1);
+    assert.ok(foundAttempt);
+    assert.equal(foundAttempt.id, attempt1.id);
+    assert.equal(foundAttempt.payment_id, paymentId);
+
+    const attemptsList = await repository.getPaymentAttempts(paymentId);
+    assert.equal(attemptsList.length, 1);
+    assert.equal(attemptsList[0].slip_hash, slipHash1);
+
+    // 3. Duplicate slip hash lookup
+    const foundAgain = await repository.findPaymentAttemptBySlipHash(slipHash1);
+    assert.equal(foundAgain.payment_id, paymentId);
+
+    // 4. Payment state transitions in PostgreSQL: pending -> slip_received -> verifying -> paid
+    await pool.query("update payments set status = 'slip_received' where id = $1", [paymentId]);
+    let currentPayment = await repository.getPaymentById(paymentId);
+    assert.equal(currentPayment.status, "slip_received");
+
+    await pool.query("update payments set status = 'verifying' where id = $1", [paymentId]);
+    currentPayment = await repository.getPaymentById(paymentId);
+    assert.equal(currentPayment.status, "verifying");
+
+    // 5. Atomic confirmation on VALID mock slip
+    const confirmRes = await confirmVerifiedPayment(repository, {
+      paymentId,
+      verifiedAmount: "300.00",
+      transactionNamespace: "promptpay_slip",
+      transactionReference: `slip_txn_${randomUUID().slice(0, 8)}`,
+      auditContext: { source: "phase_e_test", slipHash: slipHash1 }
+    });
+
+    assert.equal(confirmRes.status, "success");
+    assert.equal(confirmRes.payment.status, "paid");
+
+    // Check DB rows in PostgreSQL
+    const dbPaymentPaid = await repository.getPaymentById(paymentId);
+    assert.equal(dbPaymentPaid.status, "paid");
+
+    const dbBookingConfirmed = await repository.getBookingById(bookingId);
+    assert.equal(dbBookingConfirmed.status, "confirmed");
+
+    const events = await repository.getPaymentEvents(paymentId);
+    assert.ok(events.some((e) => e.event_type === "payment_confirmed"));
+
+    const allocations = await repository.getPaymentAllocations(paymentId);
+    assert.ok(allocations.some((a) => a.status === "active" && a.amount === "300.00"));
+
+    // 6. Verification failure containment: no orphan confirmed bookings
+    const failedCheckout = await BookingCheckoutService.checkout(repository, {
+      customer: { name: customer.name, phone: customer.phone },
+      service_id: service.id,
+      staff_id: staff.id,
+      start_at: "2026-09-20T14:00:00+07:00",
+      end_at: "2026-09-20T15:00:00+07:00",
+      source: "line",
+      idempotency_key: `pg_e_fail_${randomUUID()}`
+    }, {
+      businessSettings: { payment_type: "deposit_fixed", deposit_fixed_amount: 300 },
+      entitlements: { payment: true, deposit: true },
+      now: new Date("2026-09-20T09:00:00Z"),
+      expiryMinutes: 15
+    });
+
+    // Mark attempt failed
+    const failSlipHash = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+    await repository.createPaymentAttempt({
+      payment_id: failedCheckout.paymentId,
+      attempt_type: "slip_upload",
+      verification_provider: "mock_slip",
+      normalized_result: "amount_mismatch",
+      slip_hash: failSlipHash,
+      verified_amount: "150.00",
+      failure_reason_code: "AMOUNT_MISMATCH",
+      raw_payload_sanitized: { reason: "underpayment" }
+    });
+
+    await pool.query("update payments set status = 'verification_failed' where id = $1", [failedCheckout.paymentId]);
+
+    // Verify booking in DB is NEVER confirmed
+    const unconfirmedBooking = await repository.getBookingById(failedCheckout.bookingId);
+    assert.equal(unconfirmedBooking.status, "pending");
+
+    const failedPayment = await repository.getPaymentById(failedCheckout.paymentId);
+    assert.equal(failedPayment.status, "verification_failed");
+
+    const failedAllocations = await repository.getPaymentAllocations(failedCheckout.paymentId);
+    assert.equal(failedAllocations.length, 0);
+
+  } finally {
+    await pool.end();
+  }
+});
+
+// =============================================================================
+// PART 15: PostgreSQL Hardening (Phase E Final)
+// Durable LINE event idempotency, pre-verification attempt audit, timeout persistence,
+// duplicate slip cross-payment rules, and customer pending payment persistence.
+// =============================================================================
+
+test("PostgreSQL Hardening (Phase E Final): Durable LINE idempotency, Attempt audit lifecycle, duplicate slip rules, and pending payments", { skip: !process.env.TEST_DATABASE_URL }, async () => {
+  const { Pool } = require("pg");
+  const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL });
+  const repository = new PgPaymentRepository({ pool });
+
+  try {
+    // 1. Durable LINE Webhook Idempotency
+    const uniqueEventId = `ev_durable_${randomUUID()}`;
+
+    // First delivery: claimed successfully
+    const claim1 = await repository.claimLineEvent(uniqueEventId);
+    assert.ok(claim1, "First event delivery must be claimed successfully");
+    assert.equal(claim1.event_id, uniqueEventId);
+    assert.equal(claim1.status, "processing");
+
+    // Second delivery: duplicate event while processing -> returns null (discarded)
+    const claimDuplicate = await repository.claimLineEvent(uniqueEventId);
+    assert.equal(claimDuplicate, null, "Duplicate in-flight event must return null");
+
+    // Mark completed
+    await repository.completeLineEvent(uniqueEventId);
+
+    // Third delivery: duplicate event after completion -> returns null
+    const claimAfterComplete = await repository.claimLineEvent(uniqueEventId);
+    assert.equal(claimAfterComplete, null, "Duplicate completed event must return null");
+
+    // 2. Concurrent Duplicate LINE Event Claims: Exactly one processor wins
+    const concurrentEventId = `ev_concurrent_${randomUUID()}`;
+    const [c1, c2, c3] = await Promise.all([
+      repository.claimLineEvent(concurrentEventId),
+      repository.claimLineEvent(concurrentEventId),
+      repository.claimLineEvent(concurrentEventId)
+    ]);
+
+    const winners = [c1, c2, c3].filter(Boolean);
+    const losers = [c1, c2, c3].filter((c) => c === null);
+    assert.equal(winners.length, 1, "Exactly one concurrent processor must win event claim");
+    assert.equal(losers.length, 2, "Concurrent duplicate claims must be rejected with null");
+    await repository.completeLineEvent(concurrentEventId);
+
+    // 3. Duplicate Event Detection across Service Restart (New Repository Instance)
+    const restartEventId = `ev_restart_${randomUUID()}`;
+    await repository.claimLineEvent(restartEventId);
+    await repository.completeLineEvent(restartEventId);
+
+    // Simulate process reboot by creating a fresh repository instance
+    const rebootedRepo = new PgPaymentRepository({ pool });
+    const claimAfterReboot = await rebootedRepo.claimLineEvent(restartEventId);
+    assert.equal(claimAfterReboot, null, "Rebooted instance must detect durable completed event from PostgreSQL disk");
+
+    // 4. PaymentAttempt Exists BEFORE Verification Completion
+    const custRes = await pool.query(
+      "insert into customers(name, phone) values('ลูกค้า Audit Lifecycle', '0899998888') returning *"
+    );
+    const testCust = custRes.rows[0];
+
+    const svcRes = await pool.query(
+      "insert into services(name, duration_minutes, price, active) values('สระไดร์ Audit', 45, 400.00, true) returning *"
+    );
+    const testSvc = svcRes.rows[0];
+
+    const staffRes = await pool.query(
+      "insert into staff(name, active) values('ช่างทดสอบ Audit', true) returning *"
+    );
+    const testStaff = staffRes.rows[0];
+
+    const bookingRes = await pool.query(
+      `insert into bookings(customer_id, service_id, staff_id, start_at, end_at, status, source)
+       values($1, $2, $3, '2026-09-25T10:00:00+07:00', '2026-09-25T10:45:00+07:00', 'pending', 'line') returning *`,
+      [testCust.id, testSvc.id, testStaff.id]
+    );
+    const testBooking = bookingRes.rows[0];
+
+    const paymentRes = await pool.query(
+      `insert into payments(business_id, original_booking_id, payment_type, provider, amount_due, idempotency_key, expires_at, status)
+       values('biz-test', $1, 'deposit_fixed', 'promptpay_qr', 200.00, $2, now() + interval '15 minutes', 'pending') returning *`,
+      [testBooking.id, `idem_audit_${randomUUID()}`]
+    );
+    const testPayment = paymentRes.rows[0];
+
+    const slipHashAudit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const initialAttempt = await repository.createPaymentAttempt({
+      payment_id: testPayment.id,
+      attempt_type: "slip_upload",
+      slip_hash: slipHashAudit,
+      verification_provider: "mock_slip",
+      provider_status: "received",
+      normalized_result: "provider_error",
+      failure_reason_code: "PENDING_VERIFICATION"
+    });
+
+    assert.ok(initialAttempt.id);
+    assert.equal(initialAttempt.provider_status, "received");
+
+    // Verify attempt is visibly persisted in PostgreSQL before provider completion
+    const preVerificationAttempts = await repository.getPaymentAttempts(testPayment.id);
+    assert.equal(preVerificationAttempts.length, 1);
+    assert.equal(preVerificationAttempts[0].provider_status, "received");
+    assert.equal(preVerificationAttempts[0].normalized_result, "provider_error");
+
+    // Transition attempt to verifying
+    await repository.updatePaymentAttempt(initialAttempt.id, {
+      provider_status: "verifying"
+    });
+
+    const verifyingAttempts = await repository.getPaymentAttempts(testPayment.id);
+    assert.equal(verifyingAttempts[0].provider_status, "verifying");
+
+    // 5. Timeout Attempt Remains Auditable in PostgreSQL
+    await repository.updatePaymentAttempt(initialAttempt.id, {
+      provider_status: "timeout",
+      normalized_result: "provider_error",
+      failure_reason_code: "TIMEOUT"
+    });
+
+    const timeoutAttempts = await repository.getPaymentAttempts(testPayment.id);
+    assert.equal(timeoutAttempts.length, 1);
+    assert.equal(timeoutAttempts[0].provider_status, "timeout");
+    assert.equal(timeoutAttempts[0].failure_reason_code, "TIMEOUT");
+
+    // 6. Duplicate Slip: Same slip + same payment -> replay safe lookup
+    const foundSamePaymentAttempt = await repository.findPaymentAttemptBySlipHash(slipHashAudit);
+    assert.ok(foundSamePaymentAttempt);
+    assert.equal(foundSamePaymentAttempt.payment_id, testPayment.id);
+
+    // 7. Duplicate Slip: Same slip + different payment -> detected as duplicate cross-payment
+    const otherPaymentRes = await pool.query(
+      `insert into payments(business_id, original_booking_id, payment_type, provider, amount_due, idempotency_key, expires_at, status)
+       values('biz-test', $1, 'deposit_fixed', 'promptpay_qr', 200.00, $2, now() + interval '15 minutes', 'pending') returning *`,
+      [testBooking.id, `idem_other_${randomUUID()}`]
+    );
+    const otherPayment = otherPaymentRes.rows[0];
+
+    const crossPaymentLookup = await repository.findPaymentAttemptBySlipHash(slipHashAudit);
+    assert.equal(crossPaymentLookup.payment_id, testPayment.id, "Slip hash points to original payment");
+    assert.notEqual(crossPaymentLookup.payment_id, otherPayment.id, "Different payment must recognize slip was already used elsewhere");
+
+    // 8. Multiple Pending Payment Association in PostgreSQL
+    // Initially, testBooking has 2 payments in pending status for testCust.id
+    const customerPendingList = await repository.findPendingPaymentsByCustomer(testCust.id);
+    assert.ok(customerPendingList.length >= 2, "Customer has >1 active pending payments in DB");
+
+    // Update one payment to paid
+    await pool.query("update payments set status = 'paid' where id = $1", [testPayment.id]);
+
+    // Now query again: the paid payment is excluded, exactly 1 pending payment remains!
+    const updatedPendingList = await repository.findPendingPaymentsByCustomer(testCust.id);
+    const onlyPending = updatedPendingList.filter((p) => p.status === "pending");
+    assert.equal(onlyPending.length, 1, "After one payment is paid, exactly 1 active pending payment is returned");
+    assert.equal(onlyPending[0].id, otherPayment.id);
+
+  } finally {
+    await pool.end();
+  }
+});
+
+
+

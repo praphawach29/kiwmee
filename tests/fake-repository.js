@@ -17,6 +17,7 @@ class FakeRepository {
     this.paymentAttempts = seed.paymentAttempts ?? [];
     this.paymentEvents = seed.paymentEvents ?? [];
     this.refunds = seed.refunds ?? [];
+    this.claimedLineEvents = new Set();
     this.transactionCount = 0;
     this.inTransaction = false;
     this.txLock = Promise.resolve();
@@ -381,6 +382,13 @@ class FakeRepository {
     return this.payments.find((p) => p.original_booking_id === bookingId) ?? null;
   }
 
+  async findPendingPaymentsByCustomer(customerId, statuses = ["pending", "slip_received", "verifying", "payment_failed", "payment_manual_review"]) {
+    return this.payments.filter((p) => {
+      const bk = this.bookings.find((b) => b.id === p.original_booking_id);
+      return bk && bk.customer_id === customerId && statuses.includes(p.status) && ["pending", "confirmed"].includes(bk.status);
+    });
+  }
+
   async createPaymentAllocation(allocation) {
     const row = { id: randomUUID(), ...allocation };
     this.paymentAllocations.push(row);
@@ -418,6 +426,41 @@ class FakeRepository {
 
   async insertPaymentAttempt(attempt) {
     return this.createPaymentAttempt(attempt);
+  }
+
+  async updatePaymentAttempt(id, patch) {
+    const attempt = this.paymentAttempts.find((a) => a.id === id);
+    if (!attempt) return null;
+    Object.assign(attempt, patch);
+    return attempt;
+  }
+
+  async findPaymentAttemptBySlipHash(slipHash) {
+    if (!slipHash) return null;
+    return this.paymentAttempts.find((a) => a.slip_hash === slipHash) ?? null;
+  }
+
+  async getPaymentAttempts(paymentId) {
+    return this.paymentAttempts.filter((a) => a.payment_id === paymentId);
+  }
+
+  async getPaymentAttemptsByPaymentId(paymentId) {
+    return this.getPaymentAttempts(paymentId);
+  }
+
+  async claimLineEvent(id) {
+    if (this.claimedLineEvents.has(id)) return null;
+    this.claimedLineEvents.add(id);
+    return { id, status: "processing" };
+  }
+
+  async completeLineEvent(id) {
+    return true;
+  }
+
+  async failLineEvent(id) {
+    this.claimedLineEvents.delete(id);
+    return true;
   }
 
   async createPaymentEvent(event) {

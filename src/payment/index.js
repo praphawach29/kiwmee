@@ -31,7 +31,8 @@ const {
 
 const {
   sanitizePayload,
-  sanitizePaymentAttempt
+  sanitizePaymentAttempt,
+  sanitizeProviderData
 } = require("./data-safety");
 
 const {
@@ -75,6 +76,34 @@ const { PaymentProvider } = require("./providers/payment-provider");
 const { SlipVerificationProvider } = require("./providers/slip-verification-provider");
 const { MockPaymentProvider } = require("./providers/mock-payment-provider");
 const { MockSlipProvider, MOCK_SLIP_SCENARIOS } = require("./providers/mock-slip-provider");
+const {
+  AuthoritativeSlipProvider,
+  DEFAULT_PROVIDER_CAPABILITIES,
+  hasRequiredAutoConfirmCapabilities
+} = require("./providers/authoritative-slip-provider");
+const {
+  SandboxAuthoritativeSlipProvider,
+  SANDBOX_SCENARIOS
+} = require("./providers/sandbox-authoritative-slip-provider");
+const {
+  SlipProviderTransport,
+  SlipTransportError
+} = require("./providers/slip-provider-transport");
+
+const {
+  PAYMENT_REASON_CODES,
+  normalizeVendorReasonCode
+} = require("./reason-codes");
+
+const {
+  ReceiverMatcher,
+  RECEIVER_MATCH_STATUS
+} = require("./receiver-matcher");
+
+const {
+  validateTransactionTime,
+  TRANSACTION_TIME_STATUS
+} = require("./transaction-time-validator");
 
 const {
   PaymentPresentationProvider,
@@ -83,7 +112,8 @@ const {
 
 const {
   SlipIntakeService,
-  processSlip
+  processSlip,
+  processAuthoritativeNotification
 } = require("./slip-intake-service");
 
 module.exports = {
@@ -114,6 +144,7 @@ module.exports = {
   // Data Safety
   sanitizePayload,
   sanitizePaymentAttempt,
+  sanitizeProviderData,
 
   // State Machine
   PAYMENT_STATUSES,
@@ -145,17 +176,33 @@ module.exports = {
   requestRefund,
   completeRefundMock,
 
-  // Providers
+  // Providers & Adapters (Phase E & F)
   PaymentProvider,
   SlipVerificationProvider,
   MockPaymentProvider,
   MockSlipProvider,
   MOCK_SLIP_SCENARIOS,
+  AuthoritativeSlipProvider,
+  DEFAULT_PROVIDER_CAPABILITIES,
+  hasRequiredAutoConfirmCapabilities,
+  SandboxAuthoritativeSlipProvider,
+  SANDBOX_SCENARIOS,
+  SlipProviderTransport,
+  SlipTransportError,
 
-  // Payment Presentation & Slip Intake (Phase E)
+  // Reason Codes & Verification Contracts (Phase F)
+  PAYMENT_REASON_CODES,
+  normalizeVendorReasonCode,
+  ReceiverMatcher,
+  RECEIVER_MATCH_STATUS,
+  validateTransactionTime,
+  TRANSACTION_TIME_STATUS,
+
+  // Payment Presentation & Slip Intake (Phase E & F)
   PaymentPresentationProvider,
   MockPaymentPresentationProvider,
   SlipIntakeService,
-  processSlip
+  processSlip,
+  processAuthoritativeNotification
 };
 

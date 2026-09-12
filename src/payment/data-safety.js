@@ -79,7 +79,41 @@ function sanitizePaymentAttempt(attempt) {
   return clean;
 }
 
+/**
+ * Sanitizes incoming vendor/provider response payload before storing.
+ * Redacts credentials, masks full account numbers, and strips unnecessary PII.
+ */
+function sanitizeProviderData(data) {
+  if (!data || typeof data !== "object") return data;
+
+  const sanitized = sanitizePayload(data);
+
+  // Recursively mask full account numbers and citizen IDs if found
+  function maskSensitiveValues(obj) {
+    if (!obj || typeof obj !== "object") return obj;
+    for (const [k, v] of Object.entries(obj)) {
+      if (typeof v === "string") {
+        const digits = v.replace(/[^0-9]/g, "");
+        // If looks like full 10-12 digit account number, mask middle digits
+        if (digits.length >= 10 && digits.length <= 12 && !v.includes("xxx")) {
+          obj[k] = `xxx-x-xx${digits.slice(-4, -1)}-${digits.slice(-1)}`;
+        }
+        // If looks like 13-digit Thai national ID
+        else if (digits.length === 13 && !v.includes("xxx")) {
+          obj[k] = `x-xxxx-xxxx-${digits.slice(-4)}`;
+        }
+      } else if (typeof v === "object" && v !== null) {
+        maskSensitiveValues(v);
+      }
+    }
+    return obj;
+  }
+
+  return maskSensitiveValues(sanitized);
+}
+
 module.exports = {
   sanitizePayload,
-  sanitizePaymentAttempt
+  sanitizePaymentAttempt,
+  sanitizeProviderData
 };

@@ -4,6 +4,10 @@
 const { randomUUID } = require("node:crypto");
 const { PAYMENT_STATUSES, validateTransition } = require("./payment-state-machine");
 const { calculatePricing } = require("./pricing-calculator");
+const { PAYMENT_REASON_CODES } = require("./reason-codes");
+const { ReceiverMatcher, RECEIVER_MATCH_STATUS } = require("./receiver-matcher");
+const { validateTransactionTime } = require("./transaction-time-validator");
+const { hasRequiredAutoConfirmCapabilities } = require("./providers/authoritative-slip-provider");
 
 const DEFAULT_PAYMENT_EXPIRY_MINUTES = 15;
 const DEFAULT_VERIFICATION_GRACE_MINUTES = 10;
@@ -91,15 +95,15 @@ async function createPayment(repository, {
 }
 
 /**
- * Evaluates amount verification and receiver matching according to domain policy.
+ * Evaluates amount verification, authoritative status, receiver matching, and timing according to domain policy.
  * AI/OCR is never authoritative; strict normalized comparison against expected payment parameters.
  */
-function evaluateSlipVerification({ payment, verificationResult, expectedReceiver }) {
+function evaluateSlipVerification({ payment, verificationResult, expectedReceiver, options = {} }) {
   if (!verificationResult || verificationResult.normalized_result === "invalid_slip") {
     return {
       eligibleForAutoConfirmation: false,
       recommendedStatus: PAYMENT_STATUSES.verificationFailed,
-      reasonCode: "INVALID_SLIP",
+      reasonCode: PAYMENT_REASON_CODES.INVALID_SLIP,
       description: "Slip could not be read or decoded"
     };
   }
@@ -108,50 +112,127 @@ function evaluateSlipVerification({ payment, verificationResult, expectedReceive
     return {
       eligibleForAutoConfirmation: false,
       recommendedStatus: PAYMENT_STATUSES.verificationFailed,
-      reasonCode: "DUPLICATE_TRANSACTION",
+      reasonCode: PAYMENT_REASON_CODES.DUPLICATE_TRANSACTION,
       description: "Slip has already been used for another payment"
     };
   }
 
-  // 1. Check receiver identity
-  const expectedRec = expectedReceiver || payment.business_id;
-  if (verificationResult.verified_receiver && expectedRec && verificationResult.verified_receiver !== expectedRec) {
+  // 1. Provider Capabilities Check
+  const capabilitiesToCheck = options.capabilities || verificationResult.capabilities;
+  if (capabilitiesToCheck && !hasRequiredAutoConfirmCapabilities(capabilitiesToCheck)) {
     return {
       eligibleForAutoConfirmation: false,
       recommendedStatus: PAYMENT_STATUSES.manualReview,
-      reasonCode: "RECEIVER_MISMATCH",
-      description: `Receiver ${verificationResult.verified_receiver} does not match expected ${expectedRec}`
+      reasonCode: PAYMENT_REASON_CODES.INSUFFICIENT_PROVIDER_CAPABILITY,
+      description: "Provider lacks required capabilities (transactionRef, amount, receiver, transactionTime) for auto-confirmation"
     };
   }
 
-  // 2. Strict amount verification
-  const verifiedSatang = Math.round(Number(verificationResult.verified_amount || 0) * 100);
+  // 2. Receiver Matching via ReceiverMatcher
+  const expectedRec = expectedReceiver || payment.business_id;
+  const verifiedRec = verificationResult.receiver || verificationResult.verified_receiver;
+
+  if (expectedRec && verifiedRec) {
+    const matchResult = ReceiverMatcher.match(expectedRec, verifiedRec);
+    if (matchResult.status === RECEIVER_MATCH_STATUS.MISMATCH) {
+      return {
+        eligibleForAutoConfirmation: false,
+        recommendedStatus: PAYMENT_STATUSES.manualReview,
+        reasonCode: PAYMENT_REASON_CODES.RECEIVER_MISMATCH,
+        description: `Receiver does not match expected merchant account (${matchResult.reason})`
+      };
+    }
+    if (matchResult.status === RECEIVER_MATCH_STATUS.INSUFFICIENT_DATA) {
+      return {
+        eligibleForAutoConfirmation: false,
+        recommendedStatus: PAYMENT_STATUSES.manualReview,
+        reasonCode: PAYMENT_REASON_CODES.INSUFFICIENT_RECEIVER_DATA,
+        description: `Receiver data insufficient for automated confirmation (${matchResult.reason})`
+      };
+    }
+  }
+
+  // 3. Strict Amount Verification
+  const verifiedSatang = verificationResult.amountSatang !== undefined
+    ? Number(verificationResult.amountSatang)
+    : Math.round(Number(verificationResult.verified_amount || 0) * 100);
   const dueSatang = Math.round(Number(payment.amount_due) * 100);
-
-  if (verifiedSatang === dueSatang) {
-    return {
-      eligibleForAutoConfirmation: true,
-      recommendedStatus: PAYMENT_STATUSES.paid,
-      reasonCode: "EXACT_AMOUNT_MATCH",
-      description: "Verified amount matches amount due exactly"
-    };
-  }
 
   if (verifiedSatang < dueSatang) {
     return {
       eligibleForAutoConfirmation: false,
       recommendedStatus: PAYMENT_STATUSES.verificationFailed,
-      reasonCode: "AMOUNT_MISMATCH_UNDERPAID",
-      description: `Verified amount (${verificationResult.verified_amount}) is less than amount due (${payment.amount_due})`
+      reasonCode: PAYMENT_REASON_CODES.AMOUNT_MISMATCH_UNDERPAID,
+      description: `Verified amount (${verifiedSatang / 100}) is less than amount due (${payment.amount_due})`
     };
   }
 
-  // Overpayment (verifiedSatang > dueSatang) -> manual review, never auto-paid
+  if (verifiedSatang > dueSatang) {
+    // Overpayment (verifiedSatang > dueSatang) -> manual review, never auto-paid
+    return {
+      eligibleForAutoConfirmation: false,
+      recommendedStatus: PAYMENT_STATUSES.manualReview,
+      reasonCode: PAYMENT_REASON_CODES.OVERPAYMENT_MANUAL_REVIEW,
+      description: `Verified amount (${verifiedSatang / 100}) exceeds amount due (${payment.amount_due})`
+    };
+  }
+
+  // 4. Authoritative Gate: verified=true is NOT enough, MUST have authoritative=true
+  if (verificationResult.authoritative !== true) {
+    return {
+      eligibleForAutoConfirmation: false,
+      recommendedStatus: PAYMENT_STATUSES.manualReview,
+      reasonCode: PAYMENT_REASON_CODES.NON_AUTHORITATIVE_VERIFICATION,
+      description: "Slip verification is non-authoritative (OCR/AI); requires manual review before confirmation"
+    };
+  }
+
+  if (verificationResult.verified !== true) {
+    return {
+      eligibleForAutoConfirmation: false,
+      recommendedStatus: PAYMENT_STATUSES.verificationFailed,
+      reasonCode: verificationResult.reasonCode || PAYMENT_REASON_CODES.INVALID_SLIP,
+      description: "Slip could not be verified by provider"
+    };
+  }
+
+  // 5. Mandatory Transaction Time Validation for Authoritative Verified Slips
+  const txnAt = verificationResult.transactionAt || verificationResult.verified_transaction_at;
+  if (!txnAt) {
+    return {
+      eligibleForAutoConfirmation: false,
+      recommendedStatus: PAYMENT_STATUSES.manualReview,
+      reasonCode: PAYMENT_REASON_CODES.MISSING_TRANSACTION_TIME,
+      description: "Authoritative verification is missing required transaction timestamp"
+    };
+  }
+
+  const txnDate = txnAt instanceof Date ? txnAt : new Date(txnAt);
+  if (Number.isNaN(txnDate.getTime())) {
+    return {
+      eligibleForAutoConfirmation: false,
+      recommendedStatus: PAYMENT_STATUSES.manualReview,
+      reasonCode: PAYMENT_REASON_CODES.INVALID_TRANSACTION_TIME,
+      description: "Transaction timestamp format is invalid"
+    };
+  }
+
+  const timeRes = validateTransactionTime({ payment, transactionAt: txnDate, options });
+  if (!timeRes.valid) {
+    return {
+      eligibleForAutoConfirmation: false,
+      recommendedStatus: PAYMENT_STATUSES.manualReview,
+      reasonCode: timeRes.reasonCode,
+      description: timeRes.description
+    };
+  }
+
+  // Exact amount, matching receiver, valid timing, and authoritative verification
   return {
-    eligibleForAutoConfirmation: false,
-    recommendedStatus: PAYMENT_STATUSES.manualReview,
-    reasonCode: "OVERPAYMENT_MANUAL_REVIEW",
-    description: `Verified amount (${verificationResult.verified_amount}) exceeds amount due (${payment.amount_due})`
+    eligibleForAutoConfirmation: true,
+    recommendedStatus: PAYMENT_STATUSES.paid,
+    reasonCode: PAYMENT_REASON_CODES.EXACT_AMOUNT_MATCH,
+    description: "Verified amount matches amount due exactly"
   };
 }
 

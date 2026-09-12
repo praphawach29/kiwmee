@@ -11,6 +11,7 @@ const {
   evaluateSlipVerification
 } = require("./payment-service");
 const { confirmVerifiedPayment } = require("./payment-confirmation-service");
+const { PAYMENT_REASON_CODES } = require("./reason-codes");
 const { logEvent } = require("../observability/logger");
 
 async function recordPaymentAttempt(repository, attempt) {
@@ -274,9 +275,9 @@ class SlipIntakeService {
       });
     }
 
-    // Step C: Entitlement Check: slipVerification
-    const slipVerificationAllowed = entitlements.slipVerification !== false;
-    const autoConfirmAllowed = entitlements.autoPaymentConfirmation !== false;
+    // Step C: Strict Fail-Closed Entitlement Check: slipVerification === true
+    const slipVerificationAllowed = entitlements?.slipVerification === true;
+    const autoConfirmAllowed = entitlements?.autoPaymentConfirmation === true;
 
     if (!slipVerificationAllowed) {
       const manualReviewDeadline = new Date(
@@ -438,8 +439,68 @@ class SlipIntakeService {
       failure_reason_code: evalResult.reasonCode || verificationResult.failure_reason_code || null
     });
 
-    // Step H: Domain Decision & confirmVerifiedPayment only if eligible
+    // Step H: Authoritative Confirmation Gate (Requires all 12 invariants)
     if (evalResult.eligibleForAutoConfirmation && evalResult.recommendedStatus === PAYMENT_STATUSES.paid) {
+      // Gate 1: Check booking is still pending
+      const isBookingStillPending = bookingRecord && bookingRecord.status === "pending";
+
+      // Gate 2: Check payment is still eligible (not expired)
+      const isPaymentStillEligible = paymentRecord && paymentRecord.status !== PAYMENT_STATUSES.expired;
+
+      // Gate 3: Check slot still belongs to booking (no other active booking took the slot)
+      let slotTakenByOther = false;
+      if (bookingRecord && repository.findConflictingActiveBooking) {
+        const conflict = await repository.findConflictingActiveBooking(
+          bookingRecord.staff_id,
+          bookingRecord.start_at,
+          bookingRecord.end_at,
+          bookingRecord.id
+        );
+        if (conflict) {
+          slotTakenByOther = true;
+        }
+      }
+
+      if (!isBookingStillPending || !isPaymentStillEligible || slotTakenByOther) {
+        // Late Payment Invariant: Persist evidence, do NOT confirm original booking, do NOT reclaim slot
+        if (repository.updatePayment) {
+          await repository.updatePayment(paymentId, {
+            status: PAYMENT_STATUSES.manualReview,
+            updated_at: nowDate.toISOString()
+          });
+          await repository.insertPaymentEvent?.({
+            id: randomUUID(),
+            payment_id: paymentId,
+            event_type: "late_payment_detected",
+            from_status: paymentRecord.status,
+            to_status: PAYMENT_STATUSES.manualReview,
+            actor: "system",
+            reason_code: "LATE_PAYMENT_REVIEW",
+            metadata: {
+              slot_taken: slotTakenByOther,
+              booking_status: bookingRecord?.status,
+              transaction_reference: verificationResult.verified_transaction_reference || verificationResult.transactionReference
+            },
+            created_at: nowDate.toISOString()
+          });
+        }
+
+        session.stage = "payment_manual_review";
+        return {
+          success: false,
+          code: "LATE_PAYMENT_MANUAL_REVIEW",
+          route: "LATE_PAYMENT_MANUAL_REVIEW",
+          stage: "payment_manual_review",
+          message: "ช่วงเวลาการจองนี้หมดอายุหรือถูกจัดสรรให้คิวอื่นแล้ว ระบบได้บันทึกหลักฐานการชำระเงินเพื่อส่งต่อให้เจ้าหน้าที่ดูแลการคืนเงินหรือจัดสรรคิวใหม่ค่ะ",
+          booking: bookingRecord,
+          payment: paymentRecord,
+          evidence: {
+            transactionReference: verificationResult.verified_transaction_reference || verificationResult.transactionReference,
+            verifiedAmount: verificationResult.verified_amount
+          }
+        };
+      }
+
       if (!autoConfirmAllowed) {
         if (repository.updatePayment) {
           await repository.updatePayment(paymentId, {
@@ -474,8 +535,8 @@ class SlipIntakeService {
         confirmResult = await confirmVerifiedPayment(repository, {
           paymentId,
           verifiedAmount: verificationResult.verified_amount,
-          transactionNamespace: "promptpay_qr",
-          transactionReference: verificationResult.verified_transaction_reference,
+          transactionNamespace: verificationResult.transactionNamespace || "promptpay_qr",
+          transactionReference: verificationResult.verified_transaction_reference || verificationResult.transactionReference,
           actor: "slip_verifier",
           now: nowDate
         });
@@ -504,7 +565,56 @@ class SlipIntakeService {
       };
     }
 
-    // Invalid / Mismatch Scenarios:
+    // Invalid / Mismatch / Non-Authoritative Scenarios:
+    if (evalResult.reasonCode === "NON_AUTHORITATIVE_VERIFICATION") {
+      if (repository.updatePayment) {
+        await repository.updatePayment(paymentId, {
+          status: PAYMENT_STATUSES.manualReview,
+          updated_at: nowDate.toISOString()
+        });
+      }
+      session.stage = "payment_manual_review";
+      return {
+        success: true,
+        code: "NON_AUTHORITATIVE_MANUAL_REVIEW",
+        stage: "payment_manual_review",
+        message: "สลิปนี้ต้องรอเจ้าหน้าที่ตรวจสอบความถูกต้องก่อนยืนยันการจองค่ะ"
+      };
+    }
+
+    if (evalResult.reasonCode === "INSUFFICIENT_RECEIVER_DATA") {
+      if (repository.updatePayment) {
+        await repository.updatePayment(paymentId, {
+          status: PAYMENT_STATUSES.manualReview,
+          updated_at: nowDate.toISOString()
+        });
+      }
+      session.stage = "payment_manual_review";
+      return {
+        success: true,
+        code: "INSUFFICIENT_RECEIVER_DATA",
+        stage: "payment_manual_review",
+        message: "ข้อมูลบัญชีผู้รับในสลิปไม่เพียงพอต่อการตรวจสอบอัตโนมัติ เจ้าหน้าที่จะตรวจสอบให้โดยตรงค่ะ"
+      };
+    }
+
+    if (evalResult.reasonCode === "LATE_PAYMENT_REVIEW") {
+      if (repository.updatePayment) {
+        await repository.updatePayment(paymentId, {
+          status: PAYMENT_STATUSES.manualReview,
+          updated_at: nowDate.toISOString()
+        });
+      }
+      session.stage = "payment_manual_review";
+      return {
+        success: false,
+        code: "LATE_PAYMENT_MANUAL_REVIEW",
+        route: "LATE_PAYMENT_MANUAL_REVIEW",
+        stage: "payment_manual_review",
+        message: "รายการนี้มีการชำระเงินเข้ามาล่าช้าหลังหมดเวลาจอง ระบบได้บันทึกหลักฐานและส่งต่อให้เจ้าหน้าที่ตรวจสอบเพื่อดูแลการคืนเงินหรือจัดสรรคิวใหม่ค่ะ"
+      };
+    }
+
     if (evalResult.reasonCode === "AMOUNT_MISMATCH_UNDERPAID") {
       session.stage = "payment_pending";
       return {
@@ -582,9 +692,204 @@ class SlipIntakeService {
       message: evalResult.description || "ตรวจสอบสลิปไม่สำเร็จ กรุณาส่งรูปใหม่อีกครั้งค่ะ"
     };
   }
+
+  /**
+   * Processes a direct authoritative verification notification (e.g. from webhook or external async query).
+   * Ensures authoritative confirmation gate, records attempt evidence, prevents reclaims of released slots,
+   * and routes late payments safely to LATE_PAYMENT_MANUAL_REVIEW.
+   */
+  static async processAuthoritativeNotification(repository, {
+    paymentId,
+    verificationResult,
+    expectedReceiver = null,
+    entitlements = {},
+    providerCapabilities = null,
+    now = new Date()
+  }) {
+    const nowDate = now instanceof Date ? now : new Date(now);
+    const payment = await (
+      repository.getPaymentById?.(paymentId) ??
+      repository.getPaymentForUpdate?.(paymentId)
+    );
+    if (!payment) {
+      throw new Error(`Payment ${paymentId} not found for authoritative notification`);
+    }
+
+    const booking = await (
+      repository.getBookingById?.(payment.original_booking_id) ??
+      repository.getBooking?.(payment.original_booking_id)
+    );
+
+    const attemptId = randomUUID();
+    const verifiedAmount = verificationResult.amountSatang !== undefined
+      ? (verificationResult.amountSatang / 100)
+      : (verificationResult.verified_amount || 0);
+
+    const evalResult = evaluateSlipVerification({
+      payment,
+      verificationResult,
+      expectedReceiver: expectedReceiver || payment.business_id,
+      options: {
+        capabilities: providerCapabilities || verificationResult.capabilities
+      }
+    });
+
+    const isAuthoritative = verificationResult.authoritative === true;
+    const isVerified = verificationResult.verified === true;
+    const isLatePayment = (booking && booking.status !== "pending") ||
+      payment.status === PAYMENT_STATUSES.expired ||
+      evalResult.reasonCode === "LATE_PAYMENT_REVIEW";
+
+    // Check slot collision if booking or slot was released/re-allocated
+    let slotTakenByOther = false;
+    if (booking && repository.findConflictingActiveBooking) {
+      const conflict = await repository.findConflictingActiveBooking(
+        booking.staff_id,
+        booking.start_at,
+        booking.end_at,
+        booking.id
+      );
+      if (conflict) {
+        slotTakenByOther = true;
+      }
+    }
+
+    // Format receiver and sender as safe text strings for database column constraints
+    const receiverStr = typeof verificationResult.receiver === "object" && verificationResult.receiver !== null
+      ? (verificationResult.receiver.merchantIdentifier || verificationResult.receiver.promptPayIdentifierMasked || verificationResult.receiver.accountNumberMasked || verificationResult.receiver.accountName || "merchant")
+      : (verificationResult.receiver || null);
+
+    const senderStr = typeof verificationResult.sender === "object" && verificationResult.sender !== null
+      ? (verificationResult.sender.accountNumberMasked || verificationResult.sender.accountName || "sender")
+      : (verificationResult.sender || null);
+
+    // Map to allowed DB normalized_result enum values:
+    // ('success', 'amount_mismatch', 'overpaid', 'receiver_mismatch', 'duplicate', 'provider_error', 'invalid_slip')
+    let dbNormalizedResult = "provider_error";
+    if (isVerified && isAuthoritative) {
+      dbNormalizedResult = "success";
+    } else if (evalResult.reasonCode === "AMOUNT_MISMATCH_UNDERPAID" || evalResult.reasonCode === "AMOUNT_MISMATCH") {
+      dbNormalizedResult = "amount_mismatch";
+    } else if (evalResult.reasonCode === "OVERPAYMENT" || evalResult.reasonCode === "OVERPAYMENT_MANUAL_REVIEW") {
+      dbNormalizedResult = "overpaid";
+    } else if (evalResult.reasonCode === "RECEIVER_MISMATCH") {
+      dbNormalizedResult = "receiver_mismatch";
+    } else if (evalResult.reasonCode === "DUPLICATE_TRANSACTION") {
+      dbNormalizedResult = "duplicate";
+    } else if (evalResult.reasonCode === "INVALID_SLIP" || !isVerified) {
+      dbNormalizedResult = "invalid_slip";
+    }
+
+    let safeTxnAt = null;
+    if (verificationResult.transactionAt) {
+      const parsed = new Date(verificationResult.transactionAt);
+      if (!Number.isNaN(parsed.getTime())) {
+        safeTxnAt = parsed.toISOString();
+      }
+    }
+
+    // Persist PaymentAttempt evidence of authoritative transaction
+    await recordPaymentAttempt(repository, {
+      id: attemptId,
+      payment_id: payment.id,
+      attempt_type: "gateway_callback",
+      verification_provider: verificationResult.provider || "authoritative_slip",
+      provider_request_id: verificationResult.providerRequestId || null,
+      provider_status: isVerified ? "completed" : "failed",
+      normalized_result: dbNormalizedResult,
+      verified_amount: verifiedAmount,
+      verified_receiver: receiverStr,
+      verified_sender: senderStr,
+      verified_transaction_reference: verificationResult.transactionReference || null,
+      verified_transaction_at: safeTxnAt,
+      failure_reason_code: (isLatePayment || slotTakenByOther)
+        ? "LATE_PAYMENT_REVIEW"
+        : (evalResult.reasonCode || null),
+      created_at: nowDate.toISOString()
+    });
+
+    // If late payment or slot taken: NEVER confirm original booking, NEVER touch other booking
+    if (isLatePayment || slotTakenByOther) {
+      if (repository.updatePayment) {
+        await repository.updatePayment(payment.id, {
+          status: PAYMENT_STATUSES.manualReview,
+          updated_at: nowDate.toISOString()
+        });
+      }
+      return {
+        success: false,
+        code: "LATE_PAYMENT_MANUAL_REVIEW",
+        route: "LATE_PAYMENT_MANUAL_REVIEW",
+        payment,
+        booking,
+        evidence: {
+          transactionReference: verificationResult.transactionReference,
+          amountSatang: verificationResult.amountSatang,
+          verifiedAmount
+        }
+      };
+    }
+
+    // If not eligible for auto confirmation (e.g. non-authoritative, mismatch, overpayment)
+    if (!evalResult.eligibleForAutoConfirmation) {
+      if (repository.updatePayment) {
+        await repository.updatePayment(payment.id, {
+          status: evalResult.recommendedStatus,
+          updated_at: nowDate.toISOString()
+        });
+      }
+      return {
+        success: false,
+        code: evalResult.reasonCode,
+        recommendedStatus: evalResult.recommendedStatus,
+        payment,
+        booking
+      };
+    }
+
+    // Strict Fail-Closed Financial Entitlement Check:
+    // Both slipVerification AND autoPaymentConfirmation MUST be strictly true.
+    // Any other value (false, undefined, null, error) halts auto-confirm and routes to manual_review.
+    const slipVerificationAllowed = entitlements?.slipVerification === true;
+    const autoConfirmAllowed = entitlements?.autoPaymentConfirmation === true;
+
+    if (!slipVerificationAllowed || !autoConfirmAllowed) {
+      if (repository.updatePayment) {
+        await repository.updatePayment(payment.id, {
+          status: PAYMENT_STATUSES.manualReview,
+          updated_at: nowDate.toISOString()
+        });
+      }
+      return {
+        success: false,
+        code: PAYMENT_REASON_CODES.ENTITLEMENT_NOT_GRANTED,
+        recommendedStatus: PAYMENT_STATUSES.manualReview,
+        payment,
+        booking
+      };
+    }
+
+    // Auto-confirm atomically
+    const confirmResult = await confirmVerifiedPayment(repository, {
+      paymentId: payment.id,
+      verifiedAmount,
+      transactionNamespace: verificationResult.transactionNamespace || "promptpay_qr",
+      transactionReference: verificationResult.transactionReference,
+      actor: "authoritative_provider",
+      now: nowDate
+    });
+
+    return {
+      success: true,
+      code: "PAYMENT_CONFIRMED",
+      payment: confirmResult.payment,
+      booking: confirmResult.booking
+    };
+  }
 }
 
 module.exports = {
   SlipIntakeService,
-  processSlip: SlipIntakeService.processSlip
+  processSlip: SlipIntakeService.processSlip,
+  processAuthoritativeNotification: SlipIntakeService.processAuthoritativeNotification
 };

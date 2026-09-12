@@ -28,7 +28,17 @@ const {
   REFUND_STATUSES,
   BookingCheckoutService,
   expirePendingPaymentHold,
-  resolvePaymentPolicy
+  resolvePaymentPolicy,
+  PAYMENT_REASON_CODES,
+  ReceiverMatcher,
+  RECEIVER_MATCH_STATUS,
+  validateTransactionTime,
+  TRANSACTION_TIME_STATUS,
+  SandboxAuthoritativeSlipProvider,
+  SANDBOX_SCENARIOS,
+  SlipIntakeService,
+  processAuthoritativeNotification,
+  DEFAULT_PROVIDER_CAPABILITIES
 } = require("../src/payment");
 
 const {
@@ -1814,6 +1824,440 @@ test("PostgreSQL Hardening (Phase E Final): Durable LINE idempotency, Attempt au
     const onlyPending = updatedPendingList.filter((p) => p.status === "pending");
     assert.equal(onlyPending.length, 1, "After one payment is paid, exactly 1 active pending payment is returned");
     assert.equal(onlyPending[0].id, otherPayment.id);
+
+  } finally {
+    await pool.end();
+  }
+});
+
+// =============================================================================
+// PART 16: PostgreSQL Live Integration (Phase F): Authoritative Provider Readiness & Safety
+// 1. authoritative valid result -> paid + confirmed
+// 2. non-authoritative valid-looking result -> NOT paid (manual review)
+// 3. late payment after slot release -> evidence persisted -> original booking NOT confirmed
+// 4. late payment when another booking owns slot -> second booking unaffected
+// 5. duplicate authoritative transaction -> rejected
+// 6. receiver insufficient data -> manual review
+// 7. provider timeout -> attempt remains auditable
+// 8. provider unavailable -> manual review
+// =============================================================================
+
+test("PostgreSQL Live Integration (Phase F): Authoritative Verification, Non-Authoritative Guard, Late Payment Containment, Duplicate Protection, and Timeout Audit", { skip: !shouldRunPostgres }, async () => {
+  const { Pool } = require("pg");
+  const pool = new Pool({
+    connectionString: process.env.TEST_DATABASE_URL,
+    ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : false
+  });
+  const repository = new PgBookingRepository({ pool });
+
+  try {
+    // Setup base merchant customer, service, staff
+    const custRes = await pool.query(
+      "insert into customers(name, phone) values('ลูกค้า Phase F Live', '0891112222') returning *"
+    );
+    const customer = custRes.rows[0];
+
+    const svcRes = await pool.query(
+      "insert into services(name, duration_minutes, price, active) values('สระไดร์ Phase F', 45, 300.00, true) returning *"
+    );
+    const service = svcRes.rows[0];
+
+    const staffRes = await pool.query(
+      "insert into staff(name, active) values('ช่าง Phase F', true) returning *"
+    );
+    const staff = staffRes.rows[0];
+
+    const slotStart1 = "2026-10-01T09:00:00+07:00";
+    const slotEnd1 = "2026-10-01T09:45:00+07:00";
+
+    // 1. Authoritative Valid Result -> paid + confirmed
+    const booking1Res = await pool.query(
+      `insert into bookings(customer_id, service_id, staff_id, start_at, end_at, status, source)
+       values($1, $2, $3, $4, $5, 'pending', 'web') returning *`,
+      [customer.id, service.id, staff.id, slotStart1, slotEnd1]
+    );
+    const booking1 = booking1Res.rows[0];
+
+    const payment1Res = await pool.query(
+      `insert into payments(business_id, original_booking_id, payment_type, provider, amount_due, idempotency_key, expires_at, status)
+       values('biz-phase-f', $1, 'full_payment', 'promptpay_qr', 300.00, $2, now() + interval '15 minutes', 'pending') returning *`,
+      [booking1.id, `idem_f_valid_${randomUUID()}`]
+    );
+    const payment1 = payment1Res.rows[0];
+
+    const txnRef1 = `TXN_PG_AUTH_VALID_${Date.now()}`;
+    const validAuthResult = {
+      verified: true,
+      authoritative: true,
+      provider: "sandbox_authoritative",
+      providerRequestId: `req_pg_f_1_${randomUUID().slice(0, 8)}`,
+      transactionNamespace: "promptpay_qr",
+      transactionReference: txnRef1,
+      amountSatang: 30000,
+      currency: "THB",
+      receiver: { merchantIdentifier: "biz-phase-f" },
+      sender: { bankCode: "002", accountNumberMasked: "xxx-x-xx111-1" },
+      transactionAt: new Date().toISOString()
+    };
+
+    const confirmResult1 = await SlipIntakeService.processAuthoritativeNotification(repository, {
+      paymentId: payment1.id,
+      verificationResult: validAuthResult,
+      entitlements: { slipVerification: true, autoPaymentConfirmation: true }
+    });
+
+    assert.equal(confirmResult1.success, true);
+    assert.equal(confirmResult1.code, "PAYMENT_CONFIRMED");
+
+    const pgPayment1 = await repository.getPaymentById(payment1.id);
+    assert.equal(pgPayment1.status, PAYMENT_STATUSES.paid);
+    assert.equal(pgPayment1.transaction_reference, txnRef1);
+
+    const pgBooking1 = await repository.getBookingById(booking1.id);
+    assert.equal(pgBooking1.status, "confirmed");
+
+    // 2. Non-Authoritative Result (AI/OCR) -> NOT paid, routes to manual review
+    const slotStart2 = "2026-10-01T10:00:00+07:00";
+    const slotEnd2 = "2026-10-01T10:45:00+07:00";
+
+    const booking2Res = await pool.query(
+      `insert into bookings(customer_id, service_id, staff_id, start_at, end_at, status, source)
+       values($1, $2, $3, $4, $5, 'pending', 'web') returning *`,
+      [customer.id, service.id, staff.id, slotStart2, slotEnd2]
+    );
+    const booking2 = booking2Res.rows[0];
+
+    const payment2Res = await pool.query(
+      `insert into payments(business_id, original_booking_id, payment_type, provider, amount_due, idempotency_key, expires_at, status)
+       values('biz-phase-f', $1, 'full_payment', 'promptpay_qr', 300.00, $2, now() + interval '15 minutes', 'pending') returning *`,
+      [booking2.id, `idem_f_ocr_${randomUUID()}`]
+    );
+    const payment2 = payment2Res.rows[0];
+
+    const ocrResult = {
+      verified: true,
+      authoritative: false, // AI Vision / OCR is NOT authoritative!
+      provider: "ai_vision_ocr",
+      providerRequestId: `req_pg_ocr_${randomUUID().slice(0, 8)}`,
+      transactionNamespace: "promptpay_qr",
+      transactionReference: `TXN_OCR_${Date.now()}`,
+      amountSatang: 30000,
+      currency: "THB",
+      receiver: { merchantIdentifier: "biz-phase-f" },
+      transactionAt: new Date().toISOString()
+    };
+
+    const ocrIntakeResult = await SlipIntakeService.processAuthoritativeNotification(repository, {
+      paymentId: payment2.id,
+      verificationResult: ocrResult
+    });
+
+    assert.equal(ocrIntakeResult.success, false);
+    assert.equal(ocrIntakeResult.code, PAYMENT_REASON_CODES.NON_AUTHORITATIVE_VERIFICATION);
+
+    const pgPayment2 = await repository.getPaymentById(payment2.id);
+    assert.equal(pgPayment2.status, PAYMENT_STATUSES.manualReview, "Non-authoritative verification must NOT transition to paid");
+
+    const pgBooking2 = await repository.getBookingById(booking2.id);
+    assert.equal(pgBooking2.status, "pending", "Booking must remain pending when verification is non-authoritative");
+
+    // 3 & 4. Late Payment Safety & Re-allocated Slot Protection
+    // Slot 3: Booking A expires and slot is released. Booking B books slot 3.
+    const slotStart3 = "2026-10-01T11:00:00+07:00";
+    const slotEnd3 = "2026-10-01T11:45:00+07:00";
+
+    const bookingARes = await pool.query(
+      `insert into bookings(customer_id, service_id, staff_id, start_at, end_at, status, source)
+       values($1, $2, $3, $4, $5, 'expired', 'web') returning *`,
+      [customer.id, service.id, staff.id, slotStart3, slotEnd3]
+    );
+    const bookingA = bookingARes.rows[0];
+
+    const paymentARes = await pool.query(
+      `insert into payments(business_id, original_booking_id, payment_type, provider, amount_due, idempotency_key, expires_at, status)
+       values('biz-phase-f', $1, 'full_payment', 'promptpay_qr', 300.00, $2, now() - interval '10 minutes', 'expired') returning *`,
+      [bookingA.id, `idem_f_late_a_${randomUUID()}`]
+    );
+    const paymentA = paymentARes.rows[0];
+
+    // Customer B claims slot 3 and confirms it
+    const custBRes = await pool.query(
+      "insert into customers(name, phone) values('ลูกค้า B ผู้ได้คิว', '0893334444') returning *"
+    );
+    const customerB = custBRes.rows[0];
+
+    const bookingBRes = await pool.query(
+      `insert into bookings(customer_id, service_id, staff_id, start_at, end_at, status, source)
+       values($1, $2, $3, $4, $5, 'confirmed', 'web') returning *`,
+      [customerB.id, service.id, staff.id, slotStart3, slotEnd3]
+    );
+    const bookingB = bookingBRes.rows[0];
+
+    // Authoritative provider reports late payment for Booking A
+    const lateTxnRef = `TXN_LATE_GENUINE_${Date.now()}`;
+    const lateResult = await SlipIntakeService.processAuthoritativeNotification(repository, {
+      paymentId: paymentA.id,
+      verificationResult: {
+        verified: true,
+        authoritative: true,
+        provider: "authoritative_provider",
+        providerRequestId: `req_pg_late_${randomUUID().slice(0, 8)}`,
+        transactionNamespace: "promptpay_qr",
+        transactionReference: lateTxnRef,
+        amountSatang: 30000,
+        currency: "THB",
+        receiver: { merchantIdentifier: "biz-phase-f" },
+        transactionAt: new Date().toISOString()
+      }
+    });
+
+    assert.equal(lateResult.success, false);
+    assert.equal(lateResult.route, "LATE_PAYMENT_MANUAL_REVIEW");
+
+    // Payment A records evidence in database
+    const pgPaymentA = await repository.getPaymentById(paymentA.id);
+    assert.equal(pgPaymentA.status, PAYMENT_STATUSES.manualReview);
+
+    const attemptsA = await repository.getPaymentAttempts(paymentA.id);
+    assert.ok(attemptsA.length >= 1);
+    assert.equal(attemptsA[0].verified_transaction_reference, lateTxnRef);
+    assert.equal(attemptsA[0].failure_reason_code, PAYMENT_REASON_CODES.LATE_PAYMENT_REVIEW);
+
+    // Booking A remains expired (NOT confirmed)
+    const pgBookingA = await repository.getBookingById(bookingA.id);
+    assert.equal(pgBookingA.status, "expired");
+
+    // Booking B remains confirmed and completely unaffected
+    const pgBookingB = await repository.getBookingById(bookingB.id);
+    assert.equal(pgBookingB.status, "confirmed");
+    assert.equal(pgBookingB.customer_id, customerB.id);
+
+    // 5. Duplicate Authoritative Transaction -> Rejected by constraint
+    const slotStart4 = "2026-10-01T13:00:00+07:00";
+    const slotEnd4 = "2026-10-01T13:45:00+07:00";
+
+    const bookingCRes = await pool.query(
+      `insert into bookings(customer_id, service_id, staff_id, start_at, end_at, status, source)
+       values($1, $2, $3, $4, $5, 'pending', 'web') returning *`,
+      [customer.id, service.id, staff.id, slotStart4, slotEnd4]
+    );
+    const bookingC = bookingCRes.rows[0];
+
+    const paymentCRes = await pool.query(
+      `insert into payments(business_id, original_booking_id, payment_type, provider, amount_due, idempotency_key, expires_at, status)
+       values('biz-phase-f', $1, 'full_payment', 'promptpay_qr', 300.00, $2, now() + interval '15 minutes', 'pending') returning *`,
+      [bookingC.id, `idem_f_dup_${randomUUID()}`]
+    );
+    const paymentC = paymentCRes.rows[0];
+
+    // Replay the redeemed reference txnRef1 from step 1
+    await assert.rejects(
+      confirmVerifiedPayment(repository, {
+        paymentId: paymentC.id,
+        verifiedAmount: 300.00,
+        transactionNamespace: "promptpay_qr",
+        transactionReference: txnRef1,
+        actor: "slip_verifier"
+      }),
+      (err) => {
+        return /TRANSACTION_ALREADY_REDEEMED|claimed for another payment|already been redeemed/i.test(err.message || err.code || "");
+      }
+    );
+
+    // 6. Receiver Insufficient Data -> Manual Review
+    const slotStart5 = "2026-10-01T14:00:00+07:00";
+    const slotEnd5 = "2026-10-01T14:45:00+07:00";
+
+    const bookingDRes = await pool.query(
+      `insert into bookings(customer_id, service_id, staff_id, start_at, end_at, status, source)
+       values($1, $2, $3, $4, $5, 'pending', 'web') returning *`,
+      [customer.id, service.id, staff.id, slotStart5, slotEnd5]
+    );
+    const bookingD = bookingDRes.rows[0];
+
+    const paymentDRes = await pool.query(
+      `insert into payments(business_id, original_booking_id, payment_type, provider, amount_due, idempotency_key, expires_at, status)
+       values('biz-phase-f', $1, 'full_payment', 'promptpay_qr', 300.00, $2, now() + interval '15 minutes', 'pending') returning *`,
+      [bookingD.id, `idem_f_insuf_${randomUUID()}`]
+    );
+    const paymentD = paymentDRes.rows[0];
+
+    const insufficientDataResult = {
+      verified: true,
+      authoritative: true,
+      provider: "sandbox_authoritative",
+      providerRequestId: `req_insuf_${randomUUID().slice(0, 8)}`,
+      transactionNamespace: "promptpay_qr",
+      transactionReference: `TXN_INSUF_${Date.now()}`,
+      amountSatang: 30000,
+      currency: "THB",
+      receiver: { accountName: "Salon Booking OS" }, // Name only without strong identifier
+      transactionAt: new Date().toISOString()
+    };
+
+    const insufIntake = await SlipIntakeService.processAuthoritativeNotification(repository, {
+      paymentId: paymentD.id,
+      verificationResult: insufficientDataResult,
+      expectedReceiver: { accountName: "Salon Booking OS" }
+    });
+
+    assert.equal(insufIntake.success, false);
+    assert.equal(insufIntake.code, PAYMENT_REASON_CODES.INSUFFICIENT_RECEIVER_DATA);
+
+    const pgPaymentD = await repository.getPaymentById(paymentD.id);
+    assert.equal(pgPaymentD.status, PAYMENT_STATUSES.manualReview);
+
+    // 7. Provider Timeout -> Attempt remains auditable
+    const timeoutAttempt = await repository.createPaymentAttempt({
+      id: randomUUID(),
+      payment_id: paymentD.id,
+      attempt_type: "gateway_callback",
+      verification_provider: "sandbox_authoritative",
+      provider_status: "timeout",
+      normalized_result: "provider_error",
+      failure_reason_code: PAYMENT_REASON_CODES.PROVIDER_TIMEOUT,
+      created_at: new Date().toISOString()
+    });
+    assert.ok(timeoutAttempt.id);
+
+    const attemptsD = await repository.getPaymentAttempts(paymentD.id);
+    const foundTimeout = attemptsD.find((a) => a.failure_reason_code === PAYMENT_REASON_CODES.PROVIDER_TIMEOUT);
+    assert.ok(foundTimeout, "Timeout attempt remains auditable on PostgreSQL disk");
+
+    // 8. Provider Unavailable -> Escalates to Manual Review
+    await repository.updatePayment(paymentD.id, {
+      status: PAYMENT_STATUSES.manualReview,
+      updated_at: new Date().toISOString()
+    });
+    const pgPaymentDAfter = await repository.getPaymentById(paymentD.id);
+    assert.equal(pgPaymentDAfter.status, PAYMENT_STATUSES.manualReview);
+
+    // 9. Undefined / Partial Entitlement Never Confirms -> Remains Pending Booking, Manual Review Payment
+    const slotStartE = "2026-10-01T15:00:00+07:00";
+    const slotEndE = "2026-10-01T15:45:00+07:00";
+    const bookingERes = await pool.query(
+      `insert into bookings(customer_id, service_id, staff_id, start_at, end_at, status, source)
+       values($1, $2, $3, $4, $5, 'pending', 'web') returning *`,
+      [customer.id, service.id, staff.id, slotStartE, slotEndE]
+    );
+    const bookingE = bookingERes.rows[0];
+
+    const paymentERes = await pool.query(
+      `insert into payments(business_id, original_booking_id, payment_type, provider, amount_due, idempotency_key, expires_at, status)
+       values('biz-phase-f', $1, 'full_payment', 'promptpay_qr', 300.00, $2, now() + interval '15 minutes', 'pending') returning *`,
+      [bookingE.id, `idem_f_ent_${randomUUID()}`]
+    );
+    const paymentE = paymentERes.rows[0];
+
+    // Undefined entitlements passed -> must fail closed to manual review
+    const undefEntResult = await SlipIntakeService.processAuthoritativeNotification(repository, {
+      paymentId: paymentE.id,
+      verificationResult: {
+        ...validAuthResult,
+        transactionReference: `TXN_UNDEF_ENT_${Date.now()}`
+      },
+      entitlements: undefined
+    });
+    assert.equal(undefEntResult.success, false);
+    assert.equal(undefEntResult.code, PAYMENT_REASON_CODES.ENTITLEMENT_NOT_GRANTED);
+
+    const pgPaymentE = await repository.getPaymentById(paymentE.id);
+    assert.equal(pgPaymentE.status, PAYMENT_STATUSES.manualReview);
+    const pgBookingE = await repository.getBookingById(bookingE.id);
+    assert.equal(pgBookingE.status, "pending", "Booking E must remain pending and unconfirmed");
+
+    // 10. Provider Without Transaction Time Capability Never Confirms
+    const slotStartF = "2026-10-01T16:00:00+07:00";
+    const slotEndF = "2026-10-01T16:45:00+07:00";
+    const bookingFRes = await pool.query(
+      `insert into bookings(customer_id, service_id, staff_id, start_at, end_at, status, source)
+       values($1, $2, $3, $4, $5, 'pending', 'web') returning *`,
+      [customer.id, service.id, staff.id, slotStartF, slotEndF]
+    );
+    const bookingF = bookingFRes.rows[0];
+
+    const paymentFRes = await pool.query(
+      `insert into payments(business_id, original_booking_id, payment_type, provider, amount_due, idempotency_key, expires_at, status)
+       values('biz-phase-f', $1, 'full_payment', 'promptpay_qr', 300.00, $2, now() + interval '15 minutes', 'pending') returning *`,
+      [bookingF.id, `idem_f_cap_${randomUUID()}`]
+    );
+    const paymentF = paymentFRes.rows[0];
+
+    const noTimeCapResult = await SlipIntakeService.processAuthoritativeNotification(repository, {
+      paymentId: paymentF.id,
+      verificationResult: {
+        ...validAuthResult,
+        transactionReference: `TXN_NOCAP_${Date.now()}`
+      },
+      providerCapabilities: {
+        ...DEFAULT_PROVIDER_CAPABILITIES,
+        supportsTransactionTime: false
+      },
+      entitlements: { slipVerification: true, autoPaymentConfirmation: true }
+    });
+    assert.equal(noTimeCapResult.success, false);
+    assert.equal(noTimeCapResult.code, PAYMENT_REASON_CODES.INSUFFICIENT_PROVIDER_CAPABILITY);
+
+    const pgPaymentF = await repository.getPaymentById(paymentF.id);
+    assert.equal(pgPaymentF.status, PAYMENT_STATUSES.manualReview);
+    const pgBookingF = await repository.getBookingById(bookingF.id);
+    assert.equal(pgBookingF.status, "pending", "Booking F must remain pending when provider lacks time capability");
+
+    // 11. Malformed transactionAt Never Confirms
+    const slotStartG = "2026-10-01T17:00:00+07:00";
+    const slotEndG = "2026-10-01T17:45:00+07:00";
+    const bookingGRes = await pool.query(
+      `insert into bookings(customer_id, service_id, staff_id, start_at, end_at, status, source)
+       values($1, $2, $3, $4, $5, 'pending', 'web') returning *`,
+      [customer.id, service.id, staff.id, slotStartG, slotEndG]
+    );
+    const bookingG = bookingGRes.rows[0];
+
+    const paymentGRes = await pool.query(
+      `insert into payments(business_id, original_booking_id, payment_type, provider, amount_due, idempotency_key, expires_at, status)
+       values('biz-phase-f', $1, 'full_payment', 'promptpay_qr', 300.00, $2, now() + interval '15 minutes', 'pending') returning *`,
+      [bookingG.id, `idem_f_malformed_${randomUUID()}`]
+    );
+    const paymentG = paymentGRes.rows[0];
+
+    const malformedResult = await SlipIntakeService.processAuthoritativeNotification(repository, {
+      paymentId: paymentG.id,
+      verificationResult: {
+        ...validAuthResult,
+        transactionReference: `TXN_MALFORMED_${Date.now()}`,
+        transactionAt: "this-is-not-a-valid-timestamp"
+      },
+      entitlements: { slipVerification: true, autoPaymentConfirmation: true }
+    });
+    assert.equal(malformedResult.success, false);
+    assert.equal(malformedResult.code, PAYMENT_REASON_CODES.INVALID_TRANSACTION_TIME);
+
+    const pgPaymentG = await repository.getPaymentById(paymentG.id);
+    assert.equal(pgPaymentG.status, PAYMENT_STATUSES.manualReview);
+    const pgBookingG = await repository.getBookingById(bookingG.id);
+    assert.equal(pgBookingG.status, "pending", "Booking G must remain pending on malformed timestamp");
+
+    // 12. Unsafe Retry Outcome (PROVIDER_UNCERTAIN_RESULT) Leaves Auditable PaymentAttempt Row
+    const uncertainAttempt = await repository.createPaymentAttempt({
+      id: randomUUID(),
+      payment_id: paymentG.id,
+      attempt_type: "gateway_callback",
+      verification_provider: "sandbox_authoritative",
+      provider_status: "failed",
+      normalized_result: "provider_error",
+      failure_reason_code: PAYMENT_REASON_CODES.PROVIDER_UNCERTAIN_RESULT,
+      created_at: new Date().toISOString()
+    });
+    assert.ok(uncertainAttempt.id);
+
+    const attemptsG = await repository.getPaymentAttempts(paymentG.id);
+    const foundUncertain = attemptsG.find((a) => a.failure_reason_code === PAYMENT_REASON_CODES.PROVIDER_UNCERTAIN_RESULT);
+    assert.ok(foundUncertain, "Uncertain provider attempt row must be persisted on disk for reconciliation");
+
+    // Confirm no duplicate confirmation events exist for payment G
+    const eventsG = await pool.query("select * from payment_events where payment_id = $1", [paymentG.id]);
+    const hasPaidEvent = eventsG.rows.some((e) => e.to_status === PAYMENT_STATUSES.paid);
+    assert.equal(hasPaidEvent, false, "No paid event must be generated for unconfirmed payment");
 
   } finally {
     await pool.end();

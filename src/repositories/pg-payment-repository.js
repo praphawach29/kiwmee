@@ -440,6 +440,27 @@ class PgPaymentRepository {
     return rows[0] ?? null;
   }
 
+  async listBookingsForStaff(staffId, start, end, statuses = ["pending", "confirmed"], excludeBookingId = null) {
+    return this.query(
+      `
+        select *
+        from bookings
+        where staff_id = $1
+          and status = any($4::text[])
+          and start_at < $3
+          and end_at > $2
+          and ($5::uuid is null or id <> $5::uuid)
+        order by start_at, end_at
+      `,
+      [staffId, start, end, statuses, excludeBookingId]
+    );
+  }
+
+  async findConflictingActiveBooking(staffId, start, end, excludeBookingId = null) {
+    const rows = await this.listBookingsForStaff(staffId, start, end, ["pending", "confirmed"], excludeBookingId);
+    return rows[0] || null;
+  }
+
   async createPaymentAttempt(attempt) {
     const clean = sanitizePaymentAttempt(attempt);
     const id = clean.id ?? randomUUID();

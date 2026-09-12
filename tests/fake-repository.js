@@ -108,12 +108,19 @@ class FakeRepository {
   }
 
   async listBookingsForStaff(staffId, start, end, statuses, excludeBookingId) {
+    const sStart = start instanceof Date ? start : new Date(start);
+    const sEnd = end instanceof Date ? end : new Date(end);
     return this.bookings.filter((booking) => (
       booking.staff_id === staffId &&
       booking.id !== excludeBookingId &&
       statuses.includes(booking.status) &&
-      overlaps(new Date(booking.start_at), new Date(booking.end_at), start, end)
+      overlaps(new Date(booking.start_at), new Date(booking.end_at), sStart, sEnd)
     ));
+  }
+
+  async findConflictingActiveBooking(staffId, start, end, excludeBookingId = null) {
+    const rows = await this.listBookingsForStaff(staffId, start, end, ["pending", "confirmed"], excludeBookingId);
+    return rows[0] || null;
   }
 
   async findCustomerByContact(contact) {
@@ -445,6 +452,10 @@ class FakeRepository {
   }
 
   async getPaymentAttemptsByPaymentId(paymentId) {
+    return this.getPaymentAttempts(paymentId);
+  }
+
+  async listPaymentAttempts(paymentId) {
     return this.getPaymentAttempts(paymentId);
   }
 

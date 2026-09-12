@@ -18,6 +18,7 @@ class MockSlipProvider extends SlipVerificationProvider {
     super();
     this.defaultScenario = options.scenario || MOCK_SLIP_SCENARIOS.VALID;
     this.receiverAccount = options.receiverAccount || "0812345678";
+    this.authoritative = options.authoritative !== undefined ? options.authoritative : true;
     this.history = [];
   }
 
@@ -25,10 +26,15 @@ class MockSlipProvider extends SlipVerificationProvider {
     this.defaultScenario = scenario;
   }
 
+  setAuthoritative(authoritative) {
+    this.authoritative = authoritative;
+  }
+
   async verifySlip({ slipUrl, slipData, expectedAmount, expectedReceiver, scenarioOverride }) {
     const scenario = scenarioOverride || this.defaultScenario;
     const targetReceiver = expectedReceiver || this.receiverAccount;
     const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const isAuth = this.authoritative;
 
     this.history.push({
       requestId,
@@ -41,14 +47,28 @@ class MockSlipProvider extends SlipVerificationProvider {
     switch (scenario) {
       case MOCK_SLIP_SCENARIOS.VALID:
         return {
+          verified: true,
+          authoritative: isAuth,
+          provider: "mock_slip",
           provider_request_id: requestId,
+          providerRequestId: requestId,
           provider_status: "verified",
+          rawStatus: "verified",
           normalized_result: "success",
           verified_amount: Number(expectedAmount),
+          amountSatang: Math.round(Number(expectedAmount) * 100),
+          amount: Number(expectedAmount),
+          currency: "THB",
           verified_receiver: targetReceiver,
+          receiver: { merchantIdentifier: targetReceiver, promptPayIdentifierMasked: targetReceiver, accountName: targetReceiver },
           verified_sender: "0899999999",
+          sender: { accountNumberMasked: "0899999999", accountName: "Customer" },
+          transactionNamespace: "promptpay_qr",
+          transactionReference: `TXN_${Date.now()}`,
           verified_transaction_reference: `TXN_${Date.now()}`,
           verified_transaction_at: new Date().toISOString(),
+          transactionAt: new Date().toISOString(),
+          reasonCode: "SUCCESS",
           failure_reason_code: null
         };
 

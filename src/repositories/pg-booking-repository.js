@@ -22,6 +22,10 @@ class PgBookingRepository extends PgPaymentRepository {
     }
     const client = await this.pool.connect();
     const tx = new PgBookingRepository({ pool: this.pool, client });
+    // If specific repository methods were mocked/overridden on this instance, pass them to tx
+    if (this._overrides) {
+      Object.assign(tx, this._overrides);
+    }
 
     try {
       await client.query("begin");

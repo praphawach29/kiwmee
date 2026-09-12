@@ -237,6 +237,29 @@ class FakeRepository {
     return row;
   }
 
+  async enqueueAutomationJob(job) {
+    let existing = this.automationJobs.find((j) => j.event_key === job.event_key);
+    if (existing) {
+      existing.payload = job.payload ?? existing.payload;
+      return existing;
+    }
+    const row = {
+      id: randomUUID(),
+      booking_id: job.booking_id,
+      automation_type: job.automation_type,
+      event_key: job.event_key,
+      scheduled_at: job.scheduled_at,
+      status: "pending",
+      payload: job.payload ?? {},
+      attempts: 0,
+      last_error: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    this.automationJobs.push(row);
+    return row;
+  }
+
   async cancelPendingAutomationJobs(bookingId, automationTypes, exceptEventKey = null) {
     const cancelled = [];
     for (const job of this.automationJobs) {
@@ -394,6 +417,40 @@ class FakeRepository {
       const bk = this.bookings.find((b) => b.id === p.original_booking_id);
       return bk && bk.customer_id === customerId && statuses.includes(p.status) && ["pending", "confirmed"].includes(bk.status);
     });
+  }
+
+  async listPaymentsForManualReview(options = {}) {
+    const limit = options.limit ?? 50;
+    const offset = options.offset ?? 0;
+    return this.payments
+      .filter((p) => p.status === "manual_review")
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .slice(offset, offset + limit)
+      .map((p) => {
+        const b = this.bookings.find((bk) => bk.id === p.original_booking_id);
+        const s = b ? this.services.find((sv) => sv.id === b.service_id) : null;
+        const st = b ? this.staff.find((stf) => stf.id === b.staff_id) : null;
+        const c = b ? this.customers.find((cst) => cst.id === b.customer_id) : null;
+        return {
+          payment_id: p.id,
+          business_id: p.business_id,
+          payment_status: p.status,
+          amount_due: p.amount_due,
+          currency: p.currency,
+          provider: p.provider,
+          expires_at: p.expires_at,
+          manual_review_deadline: p.manual_review_deadline,
+          payment_created_at: p.created_at,
+          review_status: p.review_status,
+          booking_id: b?.id,
+          booking_status: b?.status,
+          start_at: b?.start_at,
+          end_at: b?.end_at,
+          service_name: s?.name,
+          staff_name: st?.name,
+          customer_name: c?.name
+        };
+      });
   }
 
   async createPaymentAllocation(allocation) {

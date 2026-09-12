@@ -90,8 +90,8 @@ class ReceiverMatcher {
     }
 
     // 2. Check PromptPay Identifier (Strong)
-    const expPP = cleanIdentifier(expObj.promptPayIdentifierMasked || expObj.promptpay);
-    const verPP = cleanIdentifier(verObj.promptPayIdentifierMasked || verObj.promptpay);
+    const expPP = cleanIdentifier(expObj.promptPayIdentifierMasked || expObj.promptpay || expObj.promptpayId || expObj.promptPayId);
+    const verPP = cleanIdentifier(verObj.promptPayIdentifierMasked || verObj.promptpay || verObj.promptpayId || verObj.promptPayId);
     if (expPP && verPP) {
       strongComparisonEvaluated = true;
       if (expPP === verPP || maskedIdentifiersMatch(expPP, verPP)) {

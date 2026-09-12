@@ -131,6 +131,7 @@ function Header() {
       <nav className="nav-links">
         <a href="/">จองคิว</a>
         <a href="/manage">จัดการนัด</a>
+        <a href="/admin/payments">ตรวจสอบสลิป</a>
       </nav>
     </header>
   );

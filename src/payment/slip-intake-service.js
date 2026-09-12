@@ -24,6 +24,32 @@ async function recordPaymentAttempt(repository, attempt) {
   return null;
 }
 
+async function enqueuePaymentReviewRequiredJob(repository, { bookingId, paymentId, amountDue, currency, reasonCode, now }) {
+  if (repository && typeof repository.enqueueAutomationJob === "function" && bookingId && paymentId) {
+    try {
+      await repository.enqueueAutomationJob({
+        booking_id: bookingId,
+        automation_type: "payment_review_required",
+        event_key: `payment-review-required:${paymentId}`,
+        scheduled_at: (now || new Date()).toISOString(),
+        payload: {
+          booking_id: bookingId,
+          payment_id: paymentId,
+          amount_due: amountDue,
+          currency: currency || "THB",
+          reason_code: reasonCode || "MANUAL_REVIEW_REQUIRED"
+        }
+      });
+    } catch (err) {
+      logEvent("enqueue_review_required_error", {
+        paymentId,
+        bookingId,
+        error: err.message
+      });
+    }
+  }
+}
+
 async function updatePaymentAttemptRecord(repository, id, patch) {
   if (repository.updatePaymentAttempt) {
     return repository.updatePaymentAttempt(id, patch);
@@ -51,6 +77,7 @@ class SlipIntakeService {
     repository,
     entitlements = {},
     businessId = "default",
+    expectedReceiver = null,
     now = new Date()
   }) {
     const nowDate = now instanceof Date ? now : new Date(now);
@@ -428,7 +455,7 @@ class SlipIntakeService {
     const evalResult = evaluateSlipVerification({
       payment: evalTarget,
       verificationResult,
-      expectedReceiver: businessId
+      expectedReceiver: expectedReceiver || businessId
     });
 
     await updatePaymentAttemptRecord(repository, attemptId, {
@@ -522,6 +549,14 @@ class SlipIntakeService {
             metadata: { slip_hash: slipHash },
             created_at: nowDate.toISOString()
           });
+          await enqueuePaymentReviewRequiredJob(repository, {
+            bookingId: paymentRecord?.original_booking_id,
+            paymentId,
+            amountDue: paymentRecord?.amount_due,
+            currency: paymentRecord?.currency,
+            reasonCode: "AUTO_CONFIRMATION_DISABLED",
+            now: nowDate
+          });
         }
 
         session.stage = "payment_manual_review";
@@ -576,6 +611,14 @@ class SlipIntakeService {
           status: PAYMENT_STATUSES.manualReview,
           updated_at: nowDate.toISOString()
         });
+        await enqueuePaymentReviewRequiredJob(repository, {
+          bookingId: paymentRecord?.original_booking_id,
+          paymentId,
+          amountDue: paymentRecord?.amount_due,
+          currency: paymentRecord?.currency,
+          reasonCode: "NON_AUTHORITATIVE_VERIFICATION",
+          now: nowDate
+        });
       }
       session.stage = "payment_manual_review";
       return {
@@ -592,6 +635,14 @@ class SlipIntakeService {
           status: PAYMENT_STATUSES.manualReview,
           updated_at: nowDate.toISOString()
         });
+        await enqueuePaymentReviewRequiredJob(repository, {
+          bookingId: paymentRecord?.original_booking_id,
+          paymentId,
+          amountDue: paymentRecord?.amount_due,
+          currency: paymentRecord?.currency,
+          reasonCode: "INSUFFICIENT_RECEIVER_DATA",
+          now: nowDate
+        });
       }
       session.stage = "payment_manual_review";
       return {
@@ -607,6 +658,14 @@ class SlipIntakeService {
         await repository.updatePayment(paymentId, {
           status: PAYMENT_STATUSES.manualReview,
           updated_at: nowDate.toISOString()
+        });
+        await enqueuePaymentReviewRequiredJob(repository, {
+          bookingId: paymentRecord?.original_booking_id,
+          paymentId,
+          amountDue: paymentRecord?.amount_due,
+          currency: paymentRecord?.currency,
+          reasonCode: "LATE_PAYMENT_REVIEW",
+          now: nowDate
         });
       }
       session.stage = "payment_manual_review";
@@ -634,6 +693,14 @@ class SlipIntakeService {
         await repository.updatePayment(paymentId, {
           status: PAYMENT_STATUSES.manualReview,
           updated_at: nowDate.toISOString()
+        });
+        await enqueuePaymentReviewRequiredJob(repository, {
+          bookingId: paymentRecord?.original_booking_id,
+          paymentId,
+          amountDue: paymentRecord?.amount_due,
+          currency: paymentRecord?.currency,
+          reasonCode: "OVERPAYMENT_MANUAL_REVIEW",
+          now: nowDate
         });
       }
       session.stage = "payment_manual_review";

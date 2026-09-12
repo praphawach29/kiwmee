@@ -52,6 +52,10 @@ create table if not exists payments (
   verification_deadline timestamptz,
   manual_review_deadline timestamptz,
   paid_at timestamptz,
+  reviewed_by text,
+  reviewed_at timestamptz,
+  review_status text check (review_status in ('pending', 'approved', 'rejected')),
+  review_reason text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -62,9 +66,31 @@ create trigger payments_set_updated_at before update on payments for each row ex
 create index if not exists idx_payments_booking on payments(original_booking_id);
 create index if not exists idx_payments_pending_expires on payments(status, expires_at)
   where status in ('pending', 'slip_received', 'verifying');
+create index if not exists idx_payments_manual_review on payments(status, created_at)
+  where status = 'manual_review';
 create unique index if not exists idx_payments_provider_txn
   on payments(transaction_namespace, transaction_reference)
   where transaction_reference is not null;
+
+-- 2.1 Safely expand automation_jobs.automation_type constraint for payment review workflows
+do $$
+begin
+  if exists (
+    select 1 from information_schema.tables where table_schema = 'public' and table_name = 'automation_jobs'
+  ) then
+    alter table automation_jobs drop constraint if exists automation_jobs_automation_type_check;
+    alter table automation_jobs add constraint automation_jobs_automation_type_check
+      check (automation_type in (
+        'booking_confirmation',
+        'appointment_reminder',
+        'booking_cancellation',
+        'no_show_followup',
+        'post_service_followup',
+        'payment_review_required',
+        'payment_review_rejected'
+      ));
+  end if;
+end $$;
 
 -- 3. TABLE: payment_allocations
 -- Source of truth for current booking allocation.

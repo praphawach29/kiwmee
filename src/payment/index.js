@@ -65,6 +65,15 @@ const {
 } = require("./payment-confirmation-service");
 
 const {
+  PaymentReviewError,
+  computeTransRefFingerprint,
+  maskAccountNumber,
+  approvePaymentReview,
+  rejectPaymentReview,
+  getPaymentReviewDetails
+} = require("./payment-review-service");
+
+const {
   REFUND_STATUSES,
   calculateRefundBalances,
   decideRefund,
@@ -175,6 +184,14 @@ module.exports = {
   // Confirmation
   PaymentConfirmationError,
   confirmVerifiedPayment,
+
+  // Manual Review (Phase J)
+  PaymentReviewError,
+  computeTransRefFingerprint,
+  maskAccountNumber,
+  approvePaymentReview,
+  rejectPaymentReview,
+  getPaymentReviewDetails,
 
   // Refunds
   REFUND_STATUSES,

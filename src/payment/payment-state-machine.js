@@ -32,7 +32,8 @@ const ALLOWED_TRANSITIONS = Object.freeze({
   ]),
   [PAYMENT_STATUSES.manualReview]: Object.freeze([
     PAYMENT_STATUSES.paid,
-    PAYMENT_STATUSES.verificationFailed
+    PAYMENT_STATUSES.verificationFailed,
+    PAYMENT_STATUSES.expired
   ]),
   [PAYMENT_STATUSES.verificationFailed]: Object.freeze([
     PAYMENT_STATUSES.slipReceived,

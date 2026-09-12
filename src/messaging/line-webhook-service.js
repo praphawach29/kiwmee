@@ -281,16 +281,17 @@ function formatSlipReply(slipResult, state, options = {}) {
   }
 
   if (slipResult.stage === "payment_manual_review") {
+    const manualReviewNotice = "ได้รับข้อมูลการชำระเงินแล้วค่ะ\nกำลังรอร้านตรวจสอบและยืนยันการจอง";
     if (hasFlex) {
       return buildPaymentManualReviewBubble({
         booking: state.booking,
         payment: state.payment,
-        reason: slipResult.message
+        reason: manualReviewNotice
       });
     }
     return {
       type: "text",
-      text: `${slipResult.message}\n\nรายการนี้อยู่ระหว่างการตรวจสอบโดยเจ้าหน้าที่ค่ะ`,
+      text: manualReviewNotice,
       quickReply: {
         items: [
           {

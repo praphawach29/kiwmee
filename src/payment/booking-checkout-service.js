@@ -164,6 +164,7 @@ class BookingCheckoutService {
 
     try {
       const result = await createPendingBookingWithPayment(repository, {
+        businessId,
         customer: input.customer,
         serviceId,
         staffId: input.staff_id ?? input.staffId,

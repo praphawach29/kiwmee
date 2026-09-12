@@ -385,6 +385,8 @@ async function transferAllocationForReschedule(repository, {
  * - If payment or allocation creation fails, pending booking is ROLLED BACK.
  */
 async function createPendingBookingWithPayment(repository, {
+  businessId,
+  business_id,
   customer,
   serviceId,
   service_id,
@@ -474,6 +476,7 @@ async function createPendingBookingWithPayment(repository, {
     } : undefined);
 
     const payment = await createPayment(tx, {
+      businessId: businessId || (booking.business_id ?? "default"),
       bookingId: booking.id,
       servicePrice: resolvedPrice,
       servicePolicy: resolvedPolicy,

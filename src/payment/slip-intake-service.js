@@ -238,12 +238,16 @@ class SlipIntakeService {
     // Step A: Create PaymentAttempt with provider_status = 'received' BEFORE provider call
     // =========================================================================
     const attemptId = randomUUID();
+    const providerIdentifier = slipProvider?.getCapabilities?.()?.providerName ||
+      slipProvider?.providerName ||
+      "mock_slip";
+
     await recordPaymentAttempt(repository, {
       id: attemptId,
       payment_id: paymentId,
       attempt_type: "slip_upload",
       slip_hash: slipHash,
-      verification_provider: "mock_slip",
+      verification_provider: providerIdentifier,
       provider_status: "received",
       normalized_result: "provider_error",
       failure_reason_code: "PENDING_VERIFICATION",

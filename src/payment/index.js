@@ -86,6 +86,13 @@ const {
   SANDBOX_SCENARIOS
 } = require("./providers/sandbox-authoritative-slip-provider");
 const {
+  EasySlipV2Provider,
+  DEFAULT_EASYSLIP_BASE_URL,
+  DEFAULT_EASYSLIP_ENDPOINT,
+  EASYSLIP_ERROR_MAPPING,
+  normalizeEasySlipErrorCode
+} = require("./providers/easyslip-v2-provider");
+const {
   SlipProviderTransport,
   SlipTransportError
 } = require("./providers/slip-provider-transport");
@@ -187,6 +194,11 @@ module.exports = {
   hasRequiredAutoConfirmCapabilities,
   SandboxAuthoritativeSlipProvider,
   SANDBOX_SCENARIOS,
+  EasySlipV2Provider,
+  DEFAULT_EASYSLIP_BASE_URL,
+  DEFAULT_EASYSLIP_ENDPOINT,
+  EASYSLIP_ERROR_MAPPING,
+  normalizeEasySlipErrorCode,
   SlipProviderTransport,
   SlipTransportError,
 

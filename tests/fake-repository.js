@@ -422,8 +422,9 @@ class FakeRepository {
   async listPaymentsForManualReview(options = {}) {
     const limit = options.limit ?? 50;
     const offset = options.offset ?? 0;
+    const businessId = options.businessId ?? null;
     return this.payments
-      .filter((p) => p.status === "manual_review")
+      .filter((p) => p.status === "manual_review" && (!businessId || p.business_id === businessId))
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
       .slice(offset, offset + limit)
       .map((p) => {

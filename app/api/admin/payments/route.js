@@ -6,9 +6,10 @@ const { computeTransRefFingerprint, maskAccountNumber } = require("../../../../s
 
 async function GET(request) {
   return route(async () => {
-    await requireAdmin(request);
+    const session = await requireAdmin(request);
     const repository = getRepository();
-    const rows = await repository.listPaymentsForManualReview();
+    const tenantId = session.business_id || session.tenant_id || request.headers.get("x-business-id") || null;
+    const rows = await repository.listPaymentsForManualReview({ businessId: tenantId });
 
     // Map each item to safe sanitized view without leaking sensitive secrets
     const payments = await Promise.all(rows.map(async (row) => {

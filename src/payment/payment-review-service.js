@@ -72,6 +72,15 @@ async function approvePaymentReview(repository, {
       throw new PaymentReviewError(`Payment ${paymentId} not found`, "PAYMENT_NOT_FOUND");
     }
 
+    // Tenant Isolation Check
+    if (tenantId && payment.business_id && payment.business_id !== tenantId) {
+      throw new PaymentReviewError(
+        `Unauthorized cross-tenant review attempt on payment ${paymentId}`,
+        "TENANT_ISOLATION_VIOLATION",
+        { paymentBusinessId: payment.business_id, requestedTenantId: tenantId }
+      );
+    }
+
     // 2. Idempotency Check: if already paid & approved by staff, return idempotent success
     if (payment.status === PAYMENT_STATUSES.paid) {
       if (payment.review_status === "approved" || payment.reviewed_by) {
@@ -277,6 +286,15 @@ async function rejectPaymentReview(repository, {
       throw new PaymentReviewError(`Payment ${paymentId} not found`, "PAYMENT_NOT_FOUND");
     }
 
+    // Tenant Isolation Check
+    if (tenantId && payment.business_id && payment.business_id !== tenantId) {
+      throw new PaymentReviewError(
+        `Unauthorized cross-tenant review attempt on payment ${paymentId}`,
+        "TENANT_ISOLATION_VIOLATION",
+        { paymentBusinessId: payment.business_id, requestedTenantId: tenantId }
+      );
+    }
+
     // 2. Idempotency Check: if already rejected, return idempotent result
     if (payment.status === PAYMENT_STATUSES.verificationFailed && payment.review_status === "rejected") {
       const existingBooking = await tx.getBookingById(payment.original_booking_id);
@@ -381,10 +399,19 @@ async function rejectPaymentReview(repository, {
  * Returns safe sanitized payment review detail for admin review UI.
  * Strips all internal secrets, raw auth tokens, and full account numbers.
  */
-async function getPaymentReviewDetails(repository, { paymentId }) {
+async function getPaymentReviewDetails(repository, { paymentId, tenantId = null }) {
   const payment = await repository.getPaymentById(paymentId);
   if (!payment) {
     throw new PaymentReviewError(`Payment ${paymentId} not found`, "PAYMENT_NOT_FOUND");
+  }
+
+  // Tenant Isolation Check
+  if (tenantId && payment.business_id && payment.business_id !== tenantId) {
+    throw new PaymentReviewError(
+      `Unauthorized cross-tenant review attempt on payment ${paymentId}`,
+      "TENANT_ISOLATION_VIOLATION",
+      { paymentBusinessId: payment.business_id, requestedTenantId: tenantId }
+    );
   }
 
   const booking = await repository.getBookingById(payment.original_booking_id);

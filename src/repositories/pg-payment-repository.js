@@ -197,6 +197,43 @@ class PgPaymentRepository {
   async listPaymentsForManualReview(options = {}) {
     const limit = options.limit ?? 50;
     const offset = options.offset ?? 0;
+    const businessId = options.businessId ?? null;
+
+    if (businessId) {
+      return this.query(
+        `
+          select
+            p.id as payment_id,
+            p.business_id,
+            p.status as payment_status,
+            p.amount_due,
+            p.currency,
+            p.provider,
+            p.expires_at,
+            p.manual_review_deadline,
+            p.created_at as payment_created_at,
+            p.review_status,
+            b.id as booking_id,
+            b.status as booking_status,
+            b.start_at,
+            b.end_at,
+            s.name as service_name,
+            st.name as staff_name,
+            c.name as customer_name
+          from payments p
+          join bookings b on p.original_booking_id = b.id
+          left join services s on b.service_id = s.id
+          left join staff st on b.staff_id = st.id
+          left join customers c on b.customer_id = c.id
+          where p.status = 'manual_review'
+            and p.business_id = $3
+          order by p.created_at desc
+          limit $1 offset $2
+        `,
+        [limit, offset, businessId]
+      );
+    }
+
     return this.query(
       `
         select

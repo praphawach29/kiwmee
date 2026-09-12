@@ -13,17 +13,21 @@ const {
 
 async function GET(request, { params }) {
   return route(async () => {
-    await requireAdmin(request);
+    const session = await requireAdmin(request);
     const resolvedParams = await params;
     const paymentId = resolvedParams.id;
     const repository = getRepository();
+    const tenantId = session.business_id || session.tenant_id || request.headers.get("x-business-id") || null;
 
     try {
-      const review = await getPaymentReviewDetails(repository, { paymentId });
+      const review = await getPaymentReviewDetails(repository, { paymentId, tenantId });
       return json({ review });
     } catch (err) {
       if (err instanceof PaymentReviewError && err.code === "PAYMENT_NOT_FOUND") {
         throw new AppError("NOT_FOUND", "ไม่พบรายการชำระเงินนี้", 404);
+      }
+      if (err instanceof PaymentReviewError && err.code === "TENANT_ISOLATION_VIOLATION") {
+        throw new AppError("FORBIDDEN", "ไม่มีสิทธิ์เข้าถึงรายการชำระเงินของร้านอื่น", 403);
       }
       throw err;
     }
@@ -41,11 +45,13 @@ async function POST(request, { params }) {
 
     const action = body.action;
     const adminIdentity = session.id ? `admin_${session.id.slice(0, 8)}` : "admin";
+    const tenantId = session.business_id || session.tenant_id || request.headers.get("x-business-id") || null;
 
     try {
       if (action === "approve") {
         const result = await approvePaymentReview(repository, {
           paymentId,
+          tenantId,
           reviewedBy: adminIdentity,
           notes: body.notes ?? null
         });
@@ -53,6 +59,7 @@ async function POST(request, { params }) {
       } else if (action === "reject") {
         const result = await rejectPaymentReview(repository, {
           paymentId,
+          tenantId,
           reviewedBy: adminIdentity,
           reasonCode: body.reasonCode || "STAFF_MANUAL_REJECTION",
           notes: body.notes ?? null,
@@ -60,10 +67,13 @@ async function POST(request, { params }) {
         });
         return json({ success: true, action: "reject", result });
       } else {
-        throw new AppError("BAD_REQUEST", "การกระทำไม่ถูกต้อง (ต้องเป็น approve หรือ reject)", 400);
+        throw new AppError("BAD_REQUEST", `Invalid review action '${action}'`, 400);
       }
     } catch (err) {
       if (err instanceof PaymentReviewError) {
+        if (err.code === "TENANT_ISOLATION_VIOLATION") {
+          throw new AppError("FORBIDDEN", "ไม่มีสิทธิ์จัดการรายการชำระเงินของร้านอื่น", 403);
+        }
         if (err.code === "MANUAL_REVIEW_LATE_PAYMENT") {
           throw new AppError("MANUAL_REVIEW_LATE_PAYMENT", "ไม่สามารถยืนยันได้เนื่องจากช่วงเวลาจองหมดอายุหรือถูกจองโดยรายการอื่นแล้ว", 409);
         }

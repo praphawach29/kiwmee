@@ -135,9 +135,14 @@ class EasySlipV2Provider extends AuthoritativeSlipProvider {
     } else if (url && typeof url === "string") {
       body.url = url;
     } else if (image && (Buffer.isBuffer(image) || image instanceof Uint8Array)) {
-      // Data URI format for base64
-      const b64 = Buffer.from(image).toString("base64");
-      body.base64 = `data:image/jpeg;base64,${b64}`;
+      // Data URI format with proper MIME detection from magic bytes
+      const buf = Buffer.from(image);
+      let mime = "image/jpeg";
+      if (buf.length >= 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) {
+        mime = "image/png";
+      }
+      const b64 = buf.toString("base64");
+      body.base64 = `data:${mime};base64,${b64}`;
     } else {
       throw new Error("EasySlip v2 request requires one of: payload, image, base64, or url");
     }

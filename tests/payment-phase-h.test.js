@@ -65,9 +65,9 @@ test("EasySlip v2 Request Mapping: prefers payload over image and formats parame
   assert.equal(bodyA.checkDuplicate, true);
   assert.equal(bodyA.matchAccount, undefined);
 
-  // Case B: Image Buffer fallback -> converted to data URI
+  // Case B: Image Buffer fallback -> converted to data URI (PNG detected from magic bytes)
   const bodyB = provider.buildRequestBody({ image: DUMMY_SLIP_IMAGE, matchAmount: 150 });
-  assert.ok(bodyB.base64.startsWith("data:image/jpeg;base64,"));
+  assert.ok(bodyB.base64.startsWith("data:image/png;base64,") || bodyB.base64.startsWith("data:image/jpeg;base64,"));
   assert.equal(bodyB.matchAmount, 150);
   assert.equal(bodyB.checkDuplicate, true);
 

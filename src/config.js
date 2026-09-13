@@ -86,6 +86,27 @@ function readPositiveNumber(value, fallback) {
   return number;
 }
 
+function getBusinessPaymentPolicy(env = process.env) {
+  if (env.BUSINESS_PAYMENT_POLICY) {
+    try {
+      const parsed = JSON.parse(env.BUSINESS_PAYMENT_POLICY);
+      if (parsed && typeof parsed === "object") return parsed;
+    } catch {
+      // ignore
+    }
+  }
+
+  if (env.BUSINESS_PAYMENT_TYPE) {
+    return {
+      payment_type: env.BUSINESS_PAYMENT_TYPE,
+      fixed_amount: readPositiveNumber(env.BUSINESS_PAYMENT_FIXED_AMOUNT, 200),
+      currency: env.BUSINESS_PAYMENT_CURRENCY || "THB"
+    };
+  }
+
+  return null;
+}
+
 module.exports = {
   DEFAULT_CANCELLATION_WINDOW_HOURS,
   DEFAULT_NO_SHOW_FOLLOWUP_HOURS,
@@ -94,5 +115,6 @@ module.exports = {
   DEFAULT_REMINDER_HOURS_BEFORE,
   getBookingConfig,
   getPilotConfig,
+  getBusinessPaymentPolicy,
   validateRuntimeConfig
 };

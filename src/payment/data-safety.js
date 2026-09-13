@@ -3,6 +3,7 @@
 // or event logs. Prevents sensitive secrets/credentials from being persisted.
 
 const SENSITIVE_KEYS = new Set([
+  "key",
   "apikey",
   "api_key",
   "secret",

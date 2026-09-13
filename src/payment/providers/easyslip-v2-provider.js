@@ -82,7 +82,7 @@ class EasySlipV2Provider extends AuthoritativeSlipProvider {
     this.baseUrl = (options.baseUrl || process.env.EASYSLIP_BASE_URL || DEFAULT_EASYSLIP_BASE_URL).replace(/\/$/, "");
     this.endpoint = options.endpoint || DEFAULT_EASYSLIP_ENDPOINT;
     this.apiKeyReference = options.apiKeyReference || "EASYSLIP_API_KEY";
-    this.apiKey = options.apiKey || (process.env[this.apiKeyReference] || null);
+    this.apiKey = options.apiKey !== undefined ? options.apiKey : (process.env[this.apiKeyReference] || null);
 
     // Hard Rule: Authoritative defaults to false in Phase H unless proven by contractual / clearinghouse evidence.
     // Client-side config cannot bypass this domain invariant without explicit evidence.

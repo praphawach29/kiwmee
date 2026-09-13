@@ -11,6 +11,7 @@ const {
   createPendingBookingWithPayment
 } = require("./payment-service");
 const { createBooking } = require("../automation/booking-orchestration");
+const { getBusinessPaymentPolicy } = require("../config");
 
 /**
  * Formats the standard Payment Pending Result Contract.
@@ -110,7 +111,7 @@ class BookingCheckoutService {
 
     const servicePrice = options.servicePrice ?? input.service_price ?? service.price ?? 500;
     const effectiveServicePolicy = options.serviceSettings || options.servicePolicy || service.payment_policy;
-    const effectiveBusinessPolicy = options.businessSettings || options.businessPolicy;
+    const effectiveBusinessPolicy = options.businessSettings || options.businessPolicy || getBusinessPaymentPolicy();
 
     // 3. Resolve active payment policy
     const resolvedPolicy = await resolvePaymentPolicy({

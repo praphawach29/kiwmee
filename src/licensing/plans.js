@@ -7,6 +7,7 @@ const PLANS = Object.freeze({
   BASIC: "BASIC",
   PRO: "PRO",
   AI_PRO: "AI_PRO",
+  PILOT_MANUAL_REVIEW: "PILOT_MANUAL_REVIEW",
   CUSTOM: "CUSTOM"
 });
 
@@ -91,6 +92,36 @@ const PLAN_PRESETS = Object.freeze({
       [FEATURES.autoPaymentConfirmation]: true,
       [FEATURES.paymentGateway]: false,
       [FEATURES.refundManagement]: true
+    }),
+    limits: Object.freeze({
+      [LIMITS.maxStaff]: 50,
+      [LIMITS.maxServices]: 100,
+      [LIMITS.monthlyBookings]: 5000,
+      [LIMITS.aiMonthlyTurns]: 10000,
+      [LIMITS.automationMonthlyRuns]: 20000
+    })
+  }),
+
+  [PLANS.PILOT_MANUAL_REVIEW]: Object.freeze({
+    features: Object.freeze({
+      [FEATURES.booking]: true,
+      [FEATURES.webBooking]: true,
+      [FEATURES.lineBasic]: true,
+      [FEATURES.lineFlex]: true,
+      [FEATURES.automation]: true,
+      [FEATURES.payment]: true,
+      [FEATURES.deposit]: true,
+      [FEATURES.aiReceptionist]: true,
+      [FEATURES.aiFaq]: true,
+      [FEATURES.aiRecommendation]: true,
+      [FEATURES.humanHandoff]: true,
+      [FEATURES.analytics]: true,
+      [FEATURES.customBranding]: true,
+      [FEATURES.customFlow]: true,
+      [FEATURES.slipVerification]: true,
+      [FEATURES.autoPaymentConfirmation]: false,
+      [FEATURES.paymentGateway]: false,
+      [FEATURES.refundManagement]: false
     }),
     limits: Object.freeze({
       [LIMITS.maxStaff]: 50,

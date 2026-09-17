@@ -187,6 +187,7 @@ async function makeBooking(repository, startAt) {
     service_id: "svc-cut",
     staff_id: "staff-ann",
     start_at: startAt,
+    now: "2026-09-10T09:00:00+07:00",
     source: "test"
   });
 }
@@ -197,7 +198,8 @@ test("outbox failure rolls back booking, customer and history together", async (
   const { createBooking: createWithJobs } = require("../src/automation/booking-orchestration");
   await assert.rejects(createWithJobs(repository, {
     customer: { name: "Rollback", phone: "0888888888" }, service_id: "svc-cut",
-    staff_id: "staff-ann", start_at: "2026-09-10T13:00:00+07:00"
+    staff_id: "staff-ann", start_at: "2026-09-10T13:00:00+07:00",
+    now: "2026-09-10T09:00:00+07:00"
   }), /outbox unavailable/);
   assert.equal(repository.bookings.length, 0);
   assert.equal(repository.customers.length, 0);

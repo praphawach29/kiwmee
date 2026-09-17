@@ -7,6 +7,7 @@ import {
   conflictMessage,
   formatDateTime,
   formatMoney,
+  getTodayBangkok,
   selectedStaffName
 } from "../src/ui/booking-flow-client.mjs";
 
@@ -24,7 +25,7 @@ function BookingClient() {
   const [services, setServices] = useState([]);
   const [staffList, setStaffList] = useState([]);
   const [slots, setSlots] = useState([]);
-  const [selectedDate, setSelectedDate] = useState("2026-09-10");
+  const [selectedDate, setSelectedDate] = useState(getTodayBangkok);
   const [state, setState] = useState({
     service: null,
     staffChoice: "any",

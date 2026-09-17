@@ -150,6 +150,7 @@ test("Checkout: no_payment produces confirmed booking and zero payment rows (Reg
     service_id: "svc-cut",
     staff_id: "staff-ann",
     start_at: "2026-09-10T10:00:00+07:00",
+    now: "2026-09-10T09:00:00+07:00",
     source: "web"
   };
 
@@ -662,6 +663,7 @@ test("Hardening 1: no_payment duplicate checkout returns same booking and does n
     service_id: seed.services[0].id,
     staff_id: seed.staff[0].id,
     start_at: "2026-09-10T14:00:00+07:00",
+    now: "2026-09-10T09:00:00+07:00",
     idempotency_key: "idem_nopay_123"
   };
 
@@ -738,6 +740,7 @@ test("Hardening 1: concurrent duplicate no_payment checkouts resolve to single b
     service_id: seed.services[0].id,
     staff_id: seed.staff[0].id,
     start_at: "2026-09-10T16:00:00+07:00",
+    now: "2026-09-10T09:00:00+07:00",
     idempotency_key: "idem_race_789"
   };
 

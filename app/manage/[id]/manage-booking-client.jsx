@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { conflictMessage, formatDateTime, formatMoney } from "../../../src/ui/booking-flow-client.mjs";
+import { conflictMessage, formatDateTime, formatMoney, getTodayBangkok } from "../../../src/ui/booking-flow-client.mjs";
 
 function ManageBookingClient({ bookingId }) {
   const [booking, setBooking] = useState(null);
   const [phone, setPhone] = useState("");
   const [slots, setSlots] = useState([]);
   const [selectedSlot, setSelectedSlot] = useState(null);
-  const [date, setDate] = useState("2026-09-10");
+  const [date, setDate] = useState(getTodayBangkok);
   const [loading, setLoading] = useState({ booking: false, slots: false, action: false });
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");

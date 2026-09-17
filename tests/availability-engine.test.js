@@ -45,7 +45,8 @@ test("availability is calculated from working hours minus blocked time and activ
   const result = await getAvailableSlots(repository, {
     serviceId: "svc-cut",
     staffId: "staff-ann",
-    date: "2026-09-10"
+    date: "2026-09-10",
+    now: "2026-09-10T09:00:00+07:00"
   });
 
   const starts = result.slots.map((slot) => slot.start_at);
@@ -62,7 +63,8 @@ test("availability can search all active staff who can perform the service", asy
 
   const result = await getAvailableSlots(repository, {
     serviceId: "svc-cut",
-    date: "2026-09-10"
+    date: "2026-09-10",
+    now: "2026-09-10T09:00:00+07:00"
   });
 
   assert.ok(result.slots.some((slot) => slot.staff_id === "staff-ann"));
@@ -76,7 +78,8 @@ test("availability rejects a selected staff member who cannot perform the servic
     getAvailableSlots(repository, {
       serviceId: "svc-color",
       staffId: "staff-mean",
-      date: "2026-09-10"
+      date: "2026-09-10",
+      now: "2026-09-10T09:00:00+07:00"
     }),
     /staff cannot perform service/
   );

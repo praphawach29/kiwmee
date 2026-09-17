@@ -125,7 +125,7 @@ class Receptionist {
               session.staff = null;
               session.stage = "date";
               choices = buildDateChoices();
-              text = "ต้องการวันไหนคะ เลือกจากปุ่มด้านล่าง หรือระบุวันที่ (เช่น 2026-09-10 หรือ 10/09/2026)";
+              text = `ต้องการวันไหนคะ เลือกจากปุ่มด้านล่าง หรือระบุวันที่ (เช่น ${getBangkokDate(0)} หรือ ${getBangkokDate(0).split("-").reverse().join("/")})`;
             } else {
               if (!session.staffList && session.service) session.staffList = await call("list_staff", { service_id: session.service.id });
               const found = session.staffList?.find((s) => s.id === postback.staff_id);
@@ -133,7 +133,7 @@ class Receptionist {
                 session.staff = found;
                 session.stage = "date";
                 choices = buildDateChoices();
-                text = "ต้องการวันไหนคะ เลือกจากปุ่มด้านล่าง หรือระบุวันที่ (เช่น 2026-09-10 หรือ 10/09/2026)";
+                text = `ต้องการวันไหนคะ เลือกจากปุ่มด้านล่าง หรือระบุวันที่ (เช่น ${getBangkokDate(0)} หรือ ${getBangkokDate(0).split("-").reverse().join("/")})`;
               } else {
                 choices = paginateChoices(buildStaffChoices(session.staffList), 0);
                 text = "ไม่พบช่างที่ระบุค่ะ กรุณาเลือกจากรายการที่แสดง หรือเลือก ใครก็ได้";
@@ -152,7 +152,7 @@ class Receptionist {
             else targetDate = parseDateInput(postback.date);
 
             if (!targetDate) {
-              text = "รูปแบบวันที่ไม่ถูกต้องค่ะ กรุณาเลือกจากปุ่มด้านล่าง หรือพิมพ์ เช่น 2026-09-10 หรือ 10/09/2026";
+              text = `รูปแบบวันที่ไม่ถูกต้องค่ะ กรุณาเลือกจากปุ่มด้านล่าง หรือพิมพ์ เช่น ${getBangkokDate(0)} หรือ ${getBangkokDate(0).split("-").reverse().join("/")}`;
               choices = buildDateChoices();
             } else {
               session.date = targetDate;
@@ -346,7 +346,7 @@ class Receptionist {
           session.date = parsedDate;
           await slots();
         } else {
-          text = "รูปแบบวันที่ไม่ถูกต้องค่ะ กรุณาเลือกจากปุ่มด้านล่าง หรือพิมพ์ เช่น 2026-09-10 หรือ 10/09/2026";
+          text = `รูปแบบวันที่ไม่ถูกต้องค่ะ กรุณาเลือกจากปุ่มด้านล่าง หรือพิมพ์ เช่น ${getBangkokDate(0)} หรือ ${getBangkokDate(0).split("-").reverse().join("/")}`;
           choices = buildDateChoices();
         }
       } else {
@@ -799,7 +799,7 @@ function getStagePrompt(stage) {
   switch (stage) {
     case "service": return "เลือกบริการที่ต้องการค่ะ หรือพิมพ์ เริ่มใหม่ เพื่อดูรายการบริการ";
     case "staff": return "เลือกช่างที่ต้องการค่ะ หรือพิมพ์ เริ่มใหม่ เพื่อเลือกบริการใหม่";
-    case "date": return "ต้องการวันไหนคะ เลือกจากปุ่มด้านล่าง หรือระบุวันที่ เช่น 2026-09-10";
+    case "date": return `ต้องการวันไหนคะ เลือกจากปุ่มด้านล่าง หรือระบุวันที่ เช่น ${getBangkokDate(0)}`;
     case "slot": return "เลือกเวลาที่ต้องการค่ะ หรือพิมพ์ เริ่มใหม่ เพื่อเลือกบริการใหม่";
     case "contact": return "ขอชื่อและเบอร์โทรที่ใช้จองค่ะ เช่น มาลี 0812345678";
     case "review": return "กรุณาตรวจสอบรายละเอียดการจองด้านล่าง แล้วกดยืนยันเพื่อดำเนินการค่ะ";

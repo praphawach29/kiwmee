@@ -2,7 +2,7 @@ const { getAvailableSlots, requireEligibleStaff } = require("./availability-engi
 const { getBookingConfig } = require("./config");
 const { addMinutes, toBangkokISOString } = require("./time");
 
-async function createBooking(repository, input) {
+async function createBooking(repository, input, options = {}) {
   return repository.transaction(async (tx) => {
     const service = await tx.getActiveService(input.service_id);
     if (!service) {
@@ -18,7 +18,8 @@ async function createBooking(repository, input) {
       serviceId: input.service_id,
       staffId: input.staff_id,
       startAt,
-      date: toBangkokISOString(startAt).slice(0, 10)
+      date: toBangkokISOString(startAt).slice(0, 10),
+      now: input.now ?? options.now
     });
 
     const customer = await findOrCreateCustomer(tx, input.customer);
@@ -49,7 +50,7 @@ async function createBooking(repository, input) {
   });
 }
 
-async function rescheduleBooking(repository, bookingId, input) {
+async function rescheduleBooking(repository, bookingId, input, options = {}) {
   return repository.transaction(async (tx) => {
     const existing = await tx.getBookingForUpdate(bookingId);
     if (!existing) {
@@ -75,7 +76,8 @@ async function rescheduleBooking(repository, bookingId, input) {
       staffId: nextStaffId,
       startAt,
       date: toBangkokISOString(startAt).slice(0, 10),
-      excludeBookingId: bookingId
+      excludeBookingId: bookingId,
+      now: input.now ?? options.now
     });
 
     const updated = await tx.updateBookingTime(bookingId, {
@@ -153,7 +155,8 @@ async function assertRequestedSlotAvailable(repository, options) {
     serviceId: options.serviceId,
     staffId: options.staffId,
     date: options.date,
-    excludeBookingId: options.excludeBookingId
+    excludeBookingId: options.excludeBookingId,
+    now: options.now
   });
   const requestedStart = toBangkokISOString(new Date(options.startAt));
   const match = availability.slots.some((slot) => slot.start_at === requestedStart);

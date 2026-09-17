@@ -52,3 +52,7 @@ export function formatDateTime(value) {
     timeZone: "Asia/Bangkok"
   }).format(new Date(value));
 }
+
+export function getTodayBangkok() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date());
+}

@@ -16,6 +16,7 @@ test("createBooking runs in a transaction, calculates duration, reuses customer,
     service_id: "svc-cut",
     staff_id: "staff-ann",
     start_at: "2026-09-10T13:00:00+07:00",
+    now: "2026-09-10T09:00:00+07:00",
     source: "web"
   });
 
@@ -33,7 +34,8 @@ test("createBooking rejects a double booking before insert", async () => {
     customer: { name: "A", phone: "0800000000" },
     service_id: "svc-cut",
     staff_id: "staff-ann",
-    start_at: "2026-09-10T13:00:00+07:00"
+    start_at: "2026-09-10T13:00:00+07:00",
+    now: "2026-09-10T09:00:00+07:00"
   });
 
   await assert.rejects(
@@ -41,7 +43,8 @@ test("createBooking rejects a double booking before insert", async () => {
       customer: { name: "B", phone: "0800000001" },
       service_id: "svc-cut",
       staff_id: "staff-ann",
-      start_at: "2026-09-10T13:30:00+07:00"
+      start_at: "2026-09-10T13:30:00+07:00",
+      now: "2026-09-10T09:00:00+07:00"
     }),
     /requested slot is not available/
   );
@@ -53,12 +56,14 @@ test("rescheduleBooking runs in a transaction and excludes the booking being mov
     customer: { name: "A", phone: "0800000000" },
     service_id: "svc-cut",
     staff_id: "staff-ann",
-    start_at: "2026-09-10T13:00:00+07:00"
+    start_at: "2026-09-10T13:00:00+07:00",
+    now: "2026-09-10T09:00:00+07:00"
   });
 
   const updated = await rescheduleBooking(repository, booking.id, {
     staff_id: "staff-ann",
     start_at: "2026-09-10T14:00:00+07:00",
+    now: "2026-09-10T09:00:00+07:00",
     reason: "customer request"
   });
 
@@ -75,19 +80,22 @@ test("rescheduleBooking rejects conflicts with another active booking", async ()
     customer: { name: "A", phone: "0800000000" },
     service_id: "svc-cut",
     staff_id: "staff-ann",
-    start_at: "2026-09-10T13:00:00+07:00"
+    start_at: "2026-09-10T13:00:00+07:00",
+    now: "2026-09-10T09:00:00+07:00"
   });
   await createBooking(repository, {
     customer: { name: "B", phone: "0800000001" },
     service_id: "svc-cut",
     staff_id: "staff-ann",
-    start_at: "2026-09-10T14:00:00+07:00"
+    start_at: "2026-09-10T14:00:00+07:00",
+    now: "2026-09-10T09:00:00+07:00"
   });
 
   await assert.rejects(
     rescheduleBooking(repository, first.id, {
       staff_id: "staff-ann",
-      start_at: "2026-09-10T14:30:00+07:00"
+      start_at: "2026-09-10T14:30:00+07:00",
+      now: "2026-09-10T09:00:00+07:00"
     }),
     /requested slot is not available/
   );
@@ -99,7 +107,8 @@ test("cancelBooking changes status so the slot becomes available again", async (
     customer: { name: "A", phone: "0800000000" },
     service_id: "svc-cut",
     staff_id: "staff-ann",
-    start_at: "2026-09-10T13:00:00+07:00"
+    start_at: "2026-09-10T13:00:00+07:00",
+    now: "2026-09-10T09:00:00+07:00"
   });
 
   await cancelBooking(repository, booking.id, {
@@ -111,7 +120,8 @@ test("cancelBooking changes status so the slot becomes available again", async (
   const availability = await getAvailableSlots(repository, {
     serviceId: "svc-cut",
     staffId: "staff-ann",
-    date: "2026-09-10"
+    date: "2026-09-10",
+    now: "2026-09-10T09:00:00+07:00"
   });
 
   assert.ok(availability.slots.some((slot) => slot.start_at === "2026-09-10T13:00:00+07:00"));
@@ -125,7 +135,8 @@ test("createBooking rolls back customer and booking if history insert fails", as
       customer: { name: "A", phone: "0800000000" },
       service_id: "svc-cut",
       staff_id: "staff-ann",
-      start_at: "2026-09-10T13:00:00+07:00"
+      start_at: "2026-09-10T13:00:00+07:00",
+      now: "2026-09-10T09:00:00+07:00"
     }),
     /forced history failure/
   );

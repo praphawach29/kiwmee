@@ -12,9 +12,9 @@ async function perform(repository, operation, args, handler) {
 }
 
 const createBooking = (repository, input, options = {}) => perform(repository, core.createBooking,
-  [input], (tx, booking) => automation.handleBookingCreated(tx, booking, undefined, options));
+  [input, options], (tx, booking) => automation.handleBookingCreated(tx, booking, undefined, options));
 const rescheduleBooking = (repository, id, input, options = {}) => perform(repository, core.rescheduleBooking,
-  [id, input], (tx, booking) => automation.handleBookingRescheduled(tx, booking, undefined, options));
+  [id, input, options], (tx, booking) => automation.handleBookingRescheduled(tx, booking, undefined, options));
 const cancelBooking = (repository, id, input, config, options = {}) => {
   const isOptions = config && (config.businessId || config.entitlementService || config.hasFeatureFn);
   const cfg = isOptions ? undefined : config;

@@ -42,6 +42,7 @@ async function makeBookingInput(startAt = "2026-09-10T13:00:00+07:00") {
     service_id: serviceId,
     staff_id: staffId,
     start_at: startAt,
+    now: "2026-09-10T09:00:00+07:00",
     source: "web"
   };
 }

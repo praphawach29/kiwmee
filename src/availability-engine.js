@@ -33,7 +33,7 @@ async function getAvailableSlots(repository, options) {
     const todayBangkok = toBangkokISOString(refNow).slice(0, 10);
     const isPastDate = options.date < todayBangkok;
 
-    if (isPastDate && !(options.now === undefined && options.date === "2026-09-10")) {
+    if (isPastDate) {
       return { date: options.date, slots: [] };
     }
 

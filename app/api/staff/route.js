@@ -5,8 +5,16 @@ const { requireUuid } = require("../../../src/validation");
 async function GET(request) {
   return route(async () => {
     const url = new URL(request.url);
-    const serviceId = requireUuid(url.searchParams.get("service_id"), "service_id");
-    const staff = await getRepository().listActiveStaffForService(serviceId);
+    const serviceId = url.searchParams.get("service_id");
+    const repository = getRepository();
+    if (serviceId) {
+      requireUuid(serviceId, "service_id");
+      const staff = await repository.listActiveStaffForService(serviceId);
+      return json(staff);
+    }
+    const staff = typeof repository.listAllStaff === "function"
+      ? await repository.listAllStaff()
+      : [];
     return json(staff);
   });
 }

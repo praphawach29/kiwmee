@@ -132,6 +132,7 @@ function Header() {
         <a href="/">จองคิว</a>
         <a href="/manage">จัดการนัด</a>
         <a href="/admin/payments">ตรวจสอบสลิป</a>
+        <a href="/admin/settings">ตั้งค่าร้าน</a>
       </nav>
     </header>
   );

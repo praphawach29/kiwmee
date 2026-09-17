@@ -97,6 +97,12 @@ class PgBookingRepository extends PgPaymentRepository {
     );
   }
 
+  async listAllStaff() {
+    return this.query(
+      "select * from staff where active = true order by name, id"
+    );
+  }
+
   async listServices() {
     return this.query(
       "select * from services where active = true order by name, id"
@@ -558,6 +564,205 @@ class PgBookingRepository extends PgPaymentRepository {
         limit 100
       `
     );
+  }
+
+  // =========================================================================
+  // Phase A1: Business Hours, Closures, Staff Schedules & Booking Settings
+  // =========================================================================
+
+  async listBusinessHours(businessId = "default") {
+    return this.query(
+      "select * from business_hours where business_id = $1 order by day_of_week asc",
+      [businessId]
+    );
+  }
+
+  async upsertBusinessHours(businessId = "default", hoursList = []) {
+    return this.transaction(async (tx) => {
+      const results = [];
+      for (const h of hoursList) {
+        const rows = await tx.query(
+          `insert into business_hours (business_id, day_of_week, is_open, open_time, close_time)
+           values ($1, $2, $3, $4, $5)
+           on conflict (business_id, day_of_week)
+           do update set is_open = excluded.is_open, open_time = excluded.open_time, close_time = excluded.close_time, updated_at = now()
+           returning *`,
+          [businessId, h.day_of_week, h.is_open !== false, h.open_time || "10:00", h.close_time || "19:00"]
+        );
+        if (rows[0]) results.push(rows[0]);
+      }
+      return results;
+    });
+  }
+
+  async listBusinessClosures(businessId = "default", fromDate = null, toDate = null) {
+    const conditions = ["business_id = $1"];
+    const params = [businessId];
+    if (fromDate && toDate) {
+      params.push(fromDate, toDate);
+      conditions.push(`date between $${params.length - 1} and $${params.length}`);
+    } else if (fromDate) {
+      params.push(fromDate);
+      conditions.push(`date = $${params.length}`);
+    }
+    return this.query(
+      `select *, date as closure_date, is_full_day as is_all_day from business_closures where ${conditions.join(" and ")} order by date asc, start_time asc nulls first`,
+      params
+    );
+  }
+
+  async createBusinessClosure(arg1, arg2) {
+    const businessId = arg2 && typeof arg2 === "object" ? arg1 : (arg1?.business_id || "default");
+    const data = arg2 && typeof arg2 === "object" ? arg2 : arg1;
+    const dateVal = data.closure_date || data.date;
+    const isFullDay = data.is_full_day === true || data.is_all_day === true || (!data.start_time && !data.end_time);
+    const rows = await this.query(
+      `insert into business_closures (business_id, date, start_time, end_time, is_full_day, reason)
+       values ($1, $2, $3, $4, $5, $6)
+       returning *, date as closure_date, is_full_day as is_all_day`,
+      [
+        businessId,
+        dateVal,
+        data.start_time || null,
+        data.end_time || null,
+        isFullDay,
+        data.reason || null
+      ]
+    );
+    return rows[0];
+  }
+
+  async deleteBusinessClosure(arg1, arg2 = "default") {
+    const isFirstUuid = typeof arg1 === "string" && /^[0-9a-f-]{36}$/i.test(arg1);
+    const id = isFirstUuid ? arg1 : arg2;
+    const businessId = isFirstUuid ? (arg2 || "default") : arg1;
+    const rows = await this.query(
+      "delete from business_closures where business_id = $1 and id = $2 returning id",
+      [businessId, id]
+    );
+    return rows.length > 0;
+  }
+
+  async listStaffSchedules(businessId = "default", staffId = null) {
+    if (staffId) {
+      return this.query(
+        "select * from staff_schedules where business_id = $1 and staff_id = $2 order by day_of_week asc",
+        [businessId, staffId]
+      );
+    }
+    return this.query(
+      "select * from staff_schedules where business_id = $1 order by staff_id asc, day_of_week asc",
+      [businessId]
+    );
+  }
+
+  async upsertStaffSchedule(businessId = "default", scheduleList = []) {
+    return this.transaction(async (tx) => {
+      const results = [];
+      for (const s of scheduleList) {
+        const rows = await tx.query(
+          `insert into staff_schedules (business_id, staff_id, day_of_week, start_time, end_time, is_working)
+           values ($1, $2, $3, $4, $5, $6)
+           on conflict (business_id, staff_id, day_of_week)
+           do update set is_working = excluded.is_working, start_time = excluded.start_time, end_time = excluded.end_time, updated_at = now()
+           returning *`,
+          [businessId, s.staff_id, s.day_of_week, s.start_time || "10:00", s.end_time || "19:00", s.is_working !== false]
+        );
+        if (rows[0]) results.push(rows[0]);
+      }
+      return results;
+    });
+  }
+
+  async listStaffTimeOff(businessId = "default", dateOrFrom = null, staffIdOrTo = null) {
+    const conditions = ["business_id = $1"];
+    const params = [businessId];
+    if (dateOrFrom) {
+      params.push(dateOrFrom);
+      conditions.push(`date = $${params.length}`);
+    }
+    if (staffIdOrTo) {
+      params.push(staffIdOrTo);
+      conditions.push(`staff_id = $${params.length}`);
+    }
+    return this.query(
+      `select *, date as start_date, date as end_date, is_full_day as is_all_day from staff_time_off where ${conditions.join(" and ")} order by date asc, start_time asc nulls first`,
+      params
+    );
+  }
+
+  async createStaffTimeOff(arg1, arg2) {
+    const businessId = arg2 && typeof arg2 === "object" ? arg1 : (arg1?.business_id || "default");
+    const data = arg2 && typeof arg2 === "object" ? arg2 : arg1;
+    const dateVal = data.start_date || data.date;
+    const isFullDay = data.is_full_day === true || data.is_all_day === true || (!data.start_time && !data.end_time);
+    const rows = await this.query(
+      `insert into staff_time_off (business_id, staff_id, date, start_time, end_time, is_full_day, reason)
+       values ($1, $2, $3, $4, $5, $6, $7)
+       returning *, date as start_date, date as end_date, is_full_day as is_all_day`,
+      [
+        businessId,
+        data.staff_id,
+        dateVal,
+        data.start_time || null,
+        data.end_time || null,
+        isFullDay,
+        data.reason || null
+      ]
+    );
+    return rows[0];
+  }
+
+  async deleteStaffTimeOff(arg1, arg2 = "default") {
+    const isFirstUuid = typeof arg1 === "string" && /^[0-9a-f-]{36}$/i.test(arg1);
+    const id = isFirstUuid ? arg1 : arg2;
+    const businessId = isFirstUuid ? (arg2 || "default") : arg1;
+    const rows = await this.query(
+      "delete from staff_time_off where business_id = $1 and id = $2 returning id",
+      [businessId, id]
+    );
+    return rows.length > 0;
+  }
+
+  async getBusinessBookingSettings(businessId = "default") {
+    const rows = await this.query(
+      "select * from business_booking_settings where business_id = $1",
+      [businessId]
+    );
+    if (!rows[0]) return null;
+    const s = rows[0];
+    return {
+      ...s,
+      lead_time_minutes: s.booking_min_lead_minutes,
+      booking_min_lead_minutes: s.booking_min_lead_minutes,
+      max_advance_days: s.max_advance_booking_days,
+      max_advance_booking_days: s.max_advance_booking_days
+    };
+  }
+
+  async updateBusinessBookingSettings(businessId = "default", settings = {}) {
+    const lead = settings.lead_time_minutes ?? settings.booking_min_lead_minutes ?? 15;
+    const interval = settings.slot_interval_minutes ?? 15;
+    const maxDays = settings.max_advance_days ?? settings.max_advance_booking_days ?? 60;
+    const rows = await this.query(
+      `insert into business_booking_settings (business_id, booking_min_lead_minutes, slot_interval_minutes, max_advance_booking_days)
+       values ($1, $2, $3, $4)
+       on conflict (business_id)
+       do update set booking_min_lead_minutes = excluded.booking_min_lead_minutes,
+                     slot_interval_minutes = excluded.slot_interval_minutes,
+                     max_advance_booking_days = excluded.max_advance_booking_days,
+                     updated_at = now()
+       returning *`,
+      [businessId, lead, interval, maxDays]
+    );
+    const s = rows[0];
+    return {
+      ...s,
+      lead_time_minutes: s.booking_min_lead_minutes,
+      booking_min_lead_minutes: s.booking_min_lead_minutes,
+      max_advance_days: s.max_advance_booking_days,
+      max_advance_booking_days: s.max_advance_booking_days
+    };
   }
 }
 

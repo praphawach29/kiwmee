@@ -10,9 +10,15 @@ function getRepository() {
   return repository;
 }
 
+function setRepository(repo) {
+  repository = repo;
+}
+
 async function closeRepository() {
   if (repository) {
-    await repository.close();
+    if (typeof repository.close === "function") {
+      await repository.close();
+    }
     repository = null;
   }
 }
@@ -20,6 +26,7 @@ async function closeRepository() {
 module.exports = {
   closeRepository,
   getRepository,
+  setRepository,
   PgBookingRepository,
   PgPaymentRepository
 };

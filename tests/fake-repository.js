@@ -17,6 +17,11 @@ class FakeRepository {
     this.paymentAttempts = seed.paymentAttempts ?? [];
     this.paymentEvents = seed.paymentEvents ?? [];
     this.refunds = seed.refunds ?? [];
+    this.businessHours = seed.businessHours ?? [];
+    this.businessClosures = seed.businessClosures ?? [];
+    this.staffSchedules = seed.staffSchedules ?? [];
+    this.staffTimeOff = seed.staffTimeOff ?? [];
+    this.businessBookingSettings = seed.businessBookingSettings ?? [];
     this.claimedLineEvents = new Set();
     this.transactionCount = 0;
     this.inTransaction = false;
@@ -58,7 +63,12 @@ class FakeRepository {
       paymentAllocations: structuredClone(this.paymentAllocations),
       paymentAttempts: structuredClone(this.paymentAttempts),
       paymentEvents: structuredClone(this.paymentEvents),
-      refunds: structuredClone(this.refunds)
+      refunds: structuredClone(this.refunds),
+      businessHours: structuredClone(this.businessHours),
+      businessClosures: structuredClone(this.businessClosures),
+      staffSchedules: structuredClone(this.staffSchedules),
+      staffTimeOff: structuredClone(this.staffTimeOff),
+      businessBookingSettings: structuredClone(this.businessBookingSettings)
     };
   }
 
@@ -73,6 +83,11 @@ class FakeRepository {
     this.paymentAttempts = snapshot.paymentAttempts;
     this.paymentEvents = snapshot.paymentEvents;
     this.refunds = snapshot.refunds;
+    this.businessHours = snapshot.businessHours;
+    this.businessClosures = snapshot.businessClosures;
+    this.staffSchedules = snapshot.staffSchedules;
+    this.staffTimeOff = snapshot.staffTimeOff;
+    this.businessBookingSettings = snapshot.businessBookingSettings;
   }
 
   async lockStaffSchedule(staffId) {
@@ -98,6 +113,10 @@ class FakeRepository {
         .map((row) => row.staff_id)
     );
     return this.staff.filter((staff) => staff.active !== false && staffIds.has(staff.id));
+  }
+
+  async listAllStaff() {
+    return this.staff.filter((staff) => staff.active !== false);
   }
 
   async listAvailabilityForStaff(staffId, start, end) {
@@ -573,6 +592,237 @@ class FakeRepository {
 
   async findRefundByIdempotencyKey(key) {
     return this.refunds.find((r) => r.idempotency_key === key) ?? null;
+  }
+
+  // =========================================================================
+  // Phase A1: Settings & Schedules
+  // =========================================================================
+
+  async listBusinessHours(businessId = "default") {
+    return this.businessHours
+      .filter((h) => (h.business_id || "default") === businessId)
+      .sort((a, b) => a.day_of_week - b.day_of_week);
+  }
+
+  async upsertBusinessHours(businessId = "default", hoursList = []) {
+    const results = [];
+    for (const h of hoursList) {
+      const idx = this.businessHours.findIndex(
+        (item) => (item.business_id || "default") === businessId && item.day_of_week === h.day_of_week
+      );
+      const row = {
+        id: h.id || randomUUID(),
+        business_id: businessId,
+        day_of_week: h.day_of_week,
+        is_open: h.is_open !== false,
+        open_time: h.open_time || "10:00",
+        close_time: h.close_time || "19:00",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      if (idx >= 0) {
+        this.businessHours[idx] = { ...this.businessHours[idx], ...row };
+        results.push(this.businessHours[idx]);
+      } else {
+        this.businessHours.push(row);
+        results.push(row);
+      }
+    }
+    return results;
+  }
+
+  async listBusinessClosures(businessId = "default", fromDate = null, toDate = null) {
+    return this.businessClosures
+      .filter((c) => {
+        const matchBiz = (c.business_id || "default") === businessId;
+        const d = c.date || c.closure_date;
+        if (!matchBiz) return false;
+        if (fromDate && toDate) return d >= fromDate && d <= toDate;
+        if (fromDate) return d === fromDate;
+        return true;
+      })
+      .map((c) => ({
+        ...c,
+        date: c.date || c.closure_date,
+        closure_date: c.date || c.closure_date,
+        is_all_day: c.is_all_day ?? c.is_full_day ?? (!c.start_time && !c.end_time),
+        is_full_day: c.is_full_day ?? c.is_all_day ?? (!c.start_time && !c.end_time)
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date) || (a.start_time || "").localeCompare(b.start_time || ""));
+  }
+
+  async createBusinessClosure(arg1, arg2) {
+    const businessId = arg2 && typeof arg2 === "object" ? arg1 : (arg1?.business_id || "default");
+    const data = arg2 && typeof arg2 === "object" ? arg2 : arg1;
+    const dateVal = data.closure_date || data.date;
+    const isFullDay = data.is_full_day === true || data.is_all_day === true || (!data.start_time && !data.end_time);
+    const row = {
+      id: data.id || randomUUID(),
+      business_id: businessId,
+      date: dateVal,
+      closure_date: dateVal,
+      start_time: data.start_time || null,
+      end_time: data.end_time || null,
+      is_full_day: isFullDay,
+      is_all_day: isFullDay,
+      reason: data.reason || null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    this.businessClosures.push(row);
+    return row;
+  }
+
+  async deleteBusinessClosure(arg1, arg2 = "default") {
+    const isFirstUuid = typeof arg1 === "string" && /^[0-9a-f-]{36}$/i.test(arg1);
+    const id = isFirstUuid ? arg1 : arg2;
+    const businessId = isFirstUuid ? (arg2 || "default") : arg1;
+    const idx = this.businessClosures.findIndex(
+      (c) => (c.business_id || "default") === businessId && c.id === id
+    );
+    if (idx >= 0) {
+      this.businessClosures.splice(idx, 1);
+      return true;
+    }
+    return false;
+  }
+
+  async listStaffSchedules(businessId = "default", staffId = null) {
+    return this.staffSchedules
+      .filter((s) => {
+        const matchBiz = (s.business_id || "default") === businessId;
+        const matchStaff = staffId ? s.staff_id === staffId : true;
+        return matchBiz && matchStaff;
+      })
+      .sort((a, b) => a.day_of_week - b.day_of_week);
+  }
+
+  async upsertStaffSchedule(businessId = "default", scheduleList = []) {
+    const results = [];
+    for (const s of scheduleList) {
+      const idx = this.staffSchedules.findIndex(
+        (item) => (item.business_id || "default") === businessId &&
+                  item.staff_id === s.staff_id &&
+                  item.day_of_week === s.day_of_week
+      );
+      const row = {
+        id: s.id || randomUUID(),
+        business_id: businessId,
+        staff_id: s.staff_id,
+        day_of_week: s.day_of_week,
+        start_time: s.start_time || "10:00",
+        end_time: s.end_time || "19:00",
+        is_working: s.is_working !== false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      if (idx >= 0) {
+        this.staffSchedules[idx] = { ...this.staffSchedules[idx], ...row };
+        results.push(this.staffSchedules[idx]);
+      } else {
+        this.staffSchedules.push(row);
+        results.push(row);
+      }
+    }
+    return results;
+  }
+
+  async listStaffTimeOff(businessId = "default", dateOrFrom = null, staffIdOrTo = null) {
+    return this.staffTimeOff
+      .filter((t) => {
+        const matchBiz = (t.business_id || "default") === businessId;
+        const d = t.date || t.start_date;
+        if (!matchBiz) return false;
+        if (dateOrFrom && d !== dateOrFrom) return false;
+        if (staffIdOrTo && t.staff_id !== staffIdOrTo) return false;
+        return true;
+      })
+      .map((t) => ({
+        ...t,
+        date: t.date || t.start_date,
+        start_date: t.date || t.start_date,
+        end_date: t.end_date || t.date || t.start_date,
+        is_all_day: t.is_all_day ?? t.is_full_day ?? (!t.start_time && !t.end_time),
+        is_full_day: t.is_full_day ?? t.is_all_day ?? (!t.start_time && !t.end_time)
+      }))
+      .sort((a, b) => (a.date || a.start_date).localeCompare(b.date || b.start_date));
+  }
+
+  async createStaffTimeOff(arg1, arg2) {
+    const businessId = arg2 && typeof arg2 === "object" ? arg1 : (arg1?.business_id || "default");
+    const data = arg2 && typeof arg2 === "object" ? arg2 : arg1;
+    const dateVal = data.start_date || data.date;
+    const isFullDay = data.is_full_day === true || data.is_all_day === true || (!data.start_time && !data.end_time);
+    const row = {
+      id: data.id || randomUUID(),
+      business_id: businessId,
+      staff_id: data.staff_id,
+      date: dateVal,
+      start_date: dateVal,
+      end_date: data.end_date || dateVal,
+      start_time: data.start_time || null,
+      end_time: data.end_time || null,
+      is_full_day: isFullDay,
+      is_all_day: isFullDay,
+      reason: data.reason || null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    this.staffTimeOff.push(row);
+    return row;
+  }
+
+  async deleteStaffTimeOff(arg1, arg2 = "default") {
+    const isFirstUuid = typeof arg1 === "string" && /^[0-9a-f-]{36}$/i.test(arg1);
+    const id = isFirstUuid ? arg1 : arg2;
+    const businessId = isFirstUuid ? (arg2 || "default") : arg1;
+    const idx = this.staffTimeOff.findIndex(
+      (t) => (t.business_id || "default") === businessId && t.id === id
+    );
+    if (idx >= 0) {
+      this.staffTimeOff.splice(idx, 1);
+      return true;
+    }
+    return false;
+  }
+
+  async getBusinessBookingSettings(businessId = "default") {
+    const s = this.businessBookingSettings.find((x) => (x.business_id || "default") === businessId);
+    if (!s) return null;
+    return {
+      ...s,
+      lead_time_minutes: s.lead_time_minutes ?? s.booking_min_lead_minutes ?? 15,
+      booking_min_lead_minutes: s.booking_min_lead_minutes ?? s.lead_time_minutes ?? 15,
+      slot_interval_minutes: s.slot_interval_minutes ?? 15,
+      max_advance_days: s.max_advance_days ?? s.max_advance_booking_days ?? 60,
+      max_advance_booking_days: s.max_advance_booking_days ?? s.max_advance_days ?? 60
+    };
+  }
+
+  async updateBusinessBookingSettings(businessId = "default", settings = {}) {
+    const idx = this.businessBookingSettings.findIndex(
+      (s) => (s.business_id || "default") === businessId
+    );
+    const lead = settings.lead_time_minutes ?? settings.booking_min_lead_minutes ?? 15;
+    const interval = settings.slot_interval_minutes ?? 15;
+    const maxDays = settings.max_advance_days ?? settings.max_advance_booking_days ?? 60;
+    const row = {
+      id: settings.id || randomUUID(),
+      business_id: businessId,
+      booking_min_lead_minutes: lead,
+      lead_time_minutes: lead,
+      slot_interval_minutes: interval,
+      max_advance_booking_days: maxDays,
+      max_advance_days: maxDays,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    if (idx >= 0) {
+      this.businessBookingSettings[idx] = { ...this.businessBookingSettings[idx], ...row };
+      return this.businessBookingSettings[idx];
+    }
+    this.businessBookingSettings.push(row);
+    return row;
   }
 }
 

@@ -33,12 +33,15 @@ class Receptionist {
       choices = paginateChoices(allSlots, 0);
       if (customMessage) {
         text = customMessage;
+      } else if (choices.length) {
+        text = "เลือกเวลาที่ต้องการค่ะ";
       } else {
-        text = choices.length ? "เลือกเวลาที่ต้องการค่ะ" : "วันที่เลือกไม่มีเวลาว่าง กรุณาเลือกวันอื่นค่ะ";
+        const reason = session.availabilityReason || "NO_AVAILABLE_SLOTS";
+        text = getZeroSlotMessage(reason);
       }
       if (!choices.length) {
         session.stage = "date";
-        choices = buildDateChoices();
+        choices = buildZeroSlotChoices(session, session.availabilityReason);
       }
     };
 
@@ -140,6 +143,12 @@ class Receptionist {
               }
             }
           }
+        } else if (postback.action === "change_staff") {
+          session.staff = null;
+          session.stage = "staff";
+          if (!session.staffList && session.service) session.staffList = await call("list_staff", { service_id: session.service.id });
+          choices = paginateChoices(buildStaffChoices(session.staffList), 0);
+          text = "เลือกช่างที่ต้องการค่ะ";
         } else if (postback.action === "date" || postback.action === "date_picker") {
           if (session.stage !== "date") {
             // Stale date postback
@@ -341,13 +350,21 @@ class Receptionist {
           review();
         }
       } else if (session.stage === "date") {
-        const parsedDate = parseDateInput(trimmed);
-        if (parsedDate) {
-          session.date = parsedDate;
-          await slots();
+        if (/เปลี่ยนช่าง|ช่างคนอื่น/i.test(trimmed)) {
+          session.staff = null;
+          session.stage = "staff";
+          if (!session.staffList && session.service) session.staffList = await call("list_staff", { service_id: session.service.id });
+          choices = paginateChoices(buildStaffChoices(session.staffList), 0);
+          text = "เลือกช่างที่ต้องการค่ะ";
         } else {
-          text = `รูปแบบวันที่ไม่ถูกต้องค่ะ กรุณาเลือกจากปุ่มด้านล่าง หรือพิมพ์ เช่น ${getBangkokDate(0)} หรือ ${getBangkokDate(0).split("-").reverse().join("/")}`;
-          choices = buildDateChoices();
+          const parsedDate = parseDateInput(trimmed);
+          if (parsedDate) {
+            session.date = parsedDate;
+            await slots();
+          } else {
+            text = `รูปแบบวันที่ไม่ถูกต้องค่ะ กรุณาเลือกจากปุ่มด้านล่าง หรือพิมพ์ เช่น ${getBangkokDate(0)} หรือ ${getBangkokDate(0).split("-").reverse().join("/")}`;
+            choices = buildDateChoices();
+          }
         }
       } else {
         // Check direct matches first before provider
@@ -762,6 +779,41 @@ function buildDateChoices() {
   ];
 }
 
+function getZeroSlotMessage(reason) {
+  switch (reason) {
+    case "PAST_WORKING_HOURS":
+      return "วันนี้หมดช่วงเวลาที่สามารถจองได้แล้วค่ะ\nกรุณาเลือกวันอื่น หรือเลือกพรุ่งนี้ได้เลย";
+    case "BUSINESS_CLOSED":
+      return "วันที่เลือก ร้านหยุดให้บริการค่ะ\nกรุณาเลือกวันอื่น";
+    case "STAFF_OFF":
+      return "วันที่เลือก ช่างคนนี้ไม่เข้าร้านค่ะ\nคุณสามารถเลือกช่างคนอื่น หรือเลือกวันใหม่ได้";
+    case "FULLY_BOOKED":
+      return "วันที่เลือกคิวเต็มแล้วค่ะ\nกรุณาเลือกวันอื่น";
+    case "NO_WORKING_WINDOW":
+    case "NO_AVAILABLE_SLOTS":
+    default:
+      return "ไม่มีรอบเวลาว่างสำหรับวันที่เลือกค่ะ\nกรุณาเลือกวันอื่น";
+  }
+}
+
+function buildZeroSlotChoices(session, reason) {
+  const choices = [
+    { label: "พรุ่งนี้", fullLabel: "พรุ่งนี้", value: "พรุ่งนี้", postbackData: "action=date&date=tomorrow" },
+    { label: "เลือกวันที่อื่น", fullLabel: "เลือกวันที่อื่น", value: "เลือกวันที่อื่น", type: "datetimepicker", postbackData: "action=date_picker" }
+  ];
+
+  if (session?.staff || session?.staffId || reason === "STAFF_OFF") {
+    choices.push({
+      label: "เปลี่ยนช่าง",
+      fullLabel: "เปลี่ยนช่าง",
+      value: "เปลี่ยนช่าง",
+      postbackData: "action=change_staff"
+    });
+  }
+
+  return choices;
+}
+
 function buildSlotChoices(slots, staffList) {
   if (!Array.isArray(slots)) return [];
   return slots.map((slot) => {
@@ -991,5 +1043,7 @@ module.exports = {
   buildReviewChoices,
   getAllChoicesForStage,
   paginateChoices,
-  getStagePrompt
+  getStagePrompt,
+  getZeroSlotMessage,
+  buildZeroSlotChoices
 };

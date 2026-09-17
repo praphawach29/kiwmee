@@ -43,7 +43,12 @@ class ToolGateway {
       else if (name === "check_availability") {
         const date = new Date(`${input.date}T00:00:00Z`);
         if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== input.date) return failure("BAD_REQUEST");
-        data = (await this.api.availability(input)).slots.map(({ staff_id, start_at, end_at }) => ({ staff_id, start_at, end_at }));
+        const avail = await this.api.availability(input);
+        if (context.session) {
+          context.session.availabilityReason = avail?.reason ?? null;
+          context.session.availabilityStatus = avail?.availability_status ?? (avail?.slots?.length ? "available" : "unavailable");
+        }
+        data = (avail?.slots || []).map(({ staff_id, start_at, end_at }) => ({ staff_id, start_at, end_at }));
       } else if (name === "get_booking") data = projectBooking(await this.api.detail(input.booking_id, input.phone));
       else {
         const pending = context.session?.pending;

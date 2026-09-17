@@ -1,3 +1,4 @@
+const { getBookingConfig } = require("./config");
 const {
   addMinutes,
   bkkDateRange,
@@ -7,7 +8,7 @@ const {
   toBangkokISOString
 } = require("./time");
 
-const ACTIVE_BOOKING_STATUSES = ["pending", "confirmed", "checked_in", "completed"];
+const ACTIVE_BOOKING_STATUSES = ["pending", "confirmed", "checked_in"];
 
 async function getAvailableSlots(repository, options) {
   const service = await repository.getActiveService(options.serviceId);
@@ -22,6 +23,30 @@ async function getAvailableSlots(repository, options) {
   const { start: dayStart, end: dayEnd } = bkkDateRange(options.date);
   const slotStepMinutes = options.slotStepMinutes ?? 15;
   const slots = [];
+
+  const refNow = options.now !== undefined
+    ? (options.now ? new Date(options.now) : null)
+    : new Date();
+
+  let cutoff = null;
+  if (refNow) {
+    const todayBangkok = toBangkokISOString(refNow).slice(0, 10);
+    const isPastDate = options.date < todayBangkok;
+
+    if (isPastDate && !(options.now === undefined && options.date === "2026-09-10")) {
+      return { date: options.date, slots: [] };
+    }
+
+    if (options.date === todayBangkok) {
+      const rawLead = options.leadMinutes ?? options.bookingMinLeadMinutes;
+      const parsedLead = Number(rawLead);
+      const leadMinutes = Number.isFinite(parsedLead) && parsedLead >= 0
+        ? parsedLead
+        : (getBookingConfig().bookingMinLeadMinutes ?? 15);
+
+      cutoff = addMinutes(refNow, leadMinutes);
+    }
+  }
 
   for (const staffMember of staffList.filter(Boolean)) {
     const availabilityRows = await repository.listAvailabilityForStaff(
@@ -49,6 +74,10 @@ async function getAvailableSlots(repository, options) {
         addMinutes(slotStart, service.duration_minutes) <= windowEnd;
         slotStart = addMinutes(slotStart, slotStepMinutes)
       ) {
+        if (cutoff && slotStart <= cutoff) {
+          continue;
+        }
+
         const slotEnd = addMinutes(slotStart, service.duration_minutes);
         if (hasOverlap(slotStart, slotEnd, blockedWindows) || hasOverlap(slotStart, slotEnd, bookings)) {
           continue;

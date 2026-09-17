@@ -345,6 +345,48 @@ test("Text Fallback: payment_pending returns rich text instructions when lineFle
   assert.ok(reply.quickReply.items.some((i) => i.action.label === "ยกเลิกการจอง"));
 });
 
+test("Resilience: create_booking_request succeeds when API omits service/slot details from payment_required response", async () => {
+  const customApi = {
+    services: async () => [{ id: sid, name: "ดีท็อกซ์หนังศีรษะ", price: 950, duration_minutes: 60 }],
+    create: async () => ({
+      id: randomUUID(),
+      status: "pending",
+      mode: "payment_required",
+      amount_due: 200,
+      currency: "THB",
+      payment: {
+        id: randomUUID(),
+        type: "deposit_fixed",
+        amountDueSatang: 20000,
+        currency: "THB",
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+        verificationDeadline: null
+      }
+    })
+  };
+  const gateway = new ToolGateway(customApi);
+  const revId = randomUUID();
+  const session = {
+    pending: {
+      id: revId,
+      action: "create",
+      expires: Date.now() + 60000,
+      draft: {
+        service: { id: sid },
+        slot: { staff_id: staffId, start_at: "2026-09-10T13:00:00+07:00", end_at: "2026-09-10T14:00:00+07:00" },
+        customer: { name: "สมใจ", phone: "0811112222" }
+      }
+    }
+  };
+
+  const res = await gateway.execute("create_booking_request", { review_id: revId }, { session, confirmedReview: revId });
+  assert.equal(res.ok, true);
+  assert.equal(res.data.status, "pending");
+  assert.equal(res.data.service_id, sid);
+  assert.equal(res.data.staff_id, staffId);
+  assert.equal(res.data.payment.amountDueSatang, 20000);
+});
+
 // =============================================================================
 // 3. Payment Flex Visual States & Brand Palette Compliance
 // =============================================================================

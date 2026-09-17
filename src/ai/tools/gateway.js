@@ -52,12 +52,21 @@ class ToolGateway {
         // Consume before awaiting: a second call cannot reuse this confirmation.
         context.session.pending = null;
         const draft = pending.draft;
-        if (name === "create_booking_request") data = projectBooking(await this.api.create({
-          service_id: draft.service.id, staff_id: draft.slot.staff_id, start_at: draft.slot.start_at,
-          customer: { name: draft.customer.name, phone: draft.customer.phone,
-            contact_channel: context.session.channel?.type ?? "web",
-            line_user_id: context.session.channel?.type === "line" ? context.session.channel.user_id : undefined }, source: "ai"
-        }));
+        if (name === "create_booking_request") {
+          const created = await this.api.create({
+            service_id: draft.service.id, staff_id: draft.slot.staff_id, start_at: draft.slot.start_at,
+            customer: { name: draft.customer.name, phone: draft.customer.phone,
+              contact_channel: context.session.channel?.type ?? "web",
+              line_user_id: context.session.channel?.type === "line" ? context.session.channel.user_id : undefined }, source: "ai"
+          });
+          data = projectBooking({
+            service_id: draft.service.id,
+            staff_id: draft.slot.staff_id,
+            start_at: draft.slot.start_at,
+            end_at: draft.slot.end_at,
+            ...created
+          });
+        }
         else if (name === "request_reschedule") data = projectBooking(await this.api.reschedule(draft.booking.id, draft.customer.phone,
           { staff_id: draft.slot.staff_id, start_at: draft.slot.start_at, reason: "customer via receptionist" }));
         else data = projectBooking(await this.api.cancel(draft.booking.id, draft.customer.phone));

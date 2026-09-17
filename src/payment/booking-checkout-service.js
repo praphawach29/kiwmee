@@ -33,7 +33,11 @@ function formatPaymentPendingResult({ booking, payment, isExisting = false }) {
     verificationDeadline: payment.verification_deadline || null,
     booking: {
       id: booking.id,
-      status: booking.status
+      status: booking.status,
+      ...(booking.service_id ? { service_id: booking.service_id } : {}),
+      ...(booking.staff_id ? { staff_id: booking.staff_id } : {}),
+      ...(booking.start_at ? { start_at: booking.start_at } : {}),
+      ...(booking.end_at ? { end_at: booking.end_at } : {})
     },
     payment: {
       id: payment.id,

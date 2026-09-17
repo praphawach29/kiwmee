@@ -3,6 +3,7 @@ const DEFAULT_REMINDER_HOURS_BEFORE = 24;
 const DEFAULT_NO_SHOW_GRACE_MINUTES = 15;
 const DEFAULT_NO_SHOW_FOLLOWUP_HOURS = 1;
 const DEFAULT_POST_SERVICE_FOLLOWUP_HOURS = 24;
+const DEFAULT_BOOKING_MIN_LEAD_MINUTES = 15;
 
 function getBookingConfig(env = process.env) {
   return {
@@ -27,6 +28,10 @@ function getBookingConfig(env = process.env) {
     postServiceFollowupHours: readPositiveNumber(
       env.POST_SERVICE_FOLLOWUP_HOURS,
       DEFAULT_POST_SERVICE_FOLLOWUP_HOURS
+    ),
+    bookingMinLeadMinutes: readPositiveNumber(
+      env.BOOKING_MIN_LEAD_MINUTES,
+      DEFAULT_BOOKING_MIN_LEAD_MINUTES
     ),
     automationInternalSecret: env.AUTOMATION_INTERNAL_SECRET ?? null
   };
@@ -108,6 +113,7 @@ function getBusinessPaymentPolicy(env = process.env) {
 }
 
 module.exports = {
+  DEFAULT_BOOKING_MIN_LEAD_MINUTES,
   DEFAULT_CANCELLATION_WINDOW_HOURS,
   DEFAULT_NO_SHOW_FOLLOWUP_HOURS,
   DEFAULT_NO_SHOW_GRACE_MINUTES,

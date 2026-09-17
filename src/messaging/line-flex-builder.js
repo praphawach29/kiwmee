@@ -531,7 +531,7 @@ function buildDateSelectionBubble({ service, staff, today, tomorrow, maxDate }) 
  * 5. Build Time Slot Selection Bubble Card
  */
 function buildSlotSelectionBubble({ service, staff, date, slots = [] }) {
-  const displaySlots = slots.slice(0, 9);
+  const displaySlots = (Array.isArray(slots) ? slots : []).slice(0, 9);
   const formattedDate = formatDateOnly(date);
 
   const slotButtons = displaySlots.map((slot) => {

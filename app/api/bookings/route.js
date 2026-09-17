@@ -23,6 +23,9 @@ async function POST(request) {
 
       if (result.mode === "payment_required" && result.payment) {
         return json({
+          service_id: payload.service_id,
+          staff_id: payload.staff_id,
+          start_at: payload.start_at,
           ...result.booking,
           mode: result.mode,
           amount_due: result.amountDue,

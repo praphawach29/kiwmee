@@ -12,6 +12,7 @@
 | `migrations/20261025000400_public_api_rate_limits.sql` | จำกัดจำนวนครั้งของ API หน้าจอง |
 | `migrations/20261025000500_admin.sql` | หน้าแอดมิน: ร้านใหม่ได้เวลาทำการ 7 วันตั้งแต่สร้าง |
 | `migrations/20261025000600_custom_resource_kinds.sql` | ชนิดทรัพยากรตั้งชื่อเองได้ (เช่น "เก้าอี้นวด") นอกจาก staff/court/room/equipment |
+| `migrations/20261025000700_booking_status.sql` | หน้าการจองของร้าน: `set_booking_status` (มาถึงแล้ว / เสร็จแล้ว / ไม่มา / ย้อนกลับ) |
 | `seed.sql` | ร้านตัวอย่าง 2 ร้าน: Bloom Hair & Beauty (เสริมสวย), Gentleman Barber (ตัดผมชาย) |
 | `tests/` | ทดสอบ RLS และความถูกต้องของข้อมูล + ไฟล์จำลองสิ่งที่ Supabase มีให้ (เฉพาะทดสอบในเครื่อง) |
 

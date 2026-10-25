@@ -9,6 +9,7 @@
     "build": "next build",
     "start": "next start",
     "test": "node --test",
+    "test:db": "bash scripts/db-test.sh",
     "automation:run": "node scripts/run-automation.js",
     "test:browser": "playwright test",
     "admin:hash-password": "node scripts/hash-admin-password.js",

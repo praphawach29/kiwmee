@@ -416,7 +416,8 @@ POST /api/b/{slug}/options
 - จำกัดจำนวนครั้งต่อ IP ในฐานข้อมูล (`hit_rate_limit`, migration `…000400`): หน้า 120/นาที, step 240/นาที, จอง 5 ครั้ง/10 นาที
 - LIFF: ตั้ง `NEXT_PUBLIC_LIFF_ID` แล้วหน้าเว็บเติมชื่อจาก LINE และส่ง ID token · เซิร์ฟเวอร์ตรวจกับ LINE ด้วย `LINE_LOGIN_CHANNEL_ID`
   แล้วผูก `customers.line_user_id` (LIFF ตัวเดียวของแพลตฟอร์มใช้ได้ทุกร้าน เพราะ URL มี slug)
-- environment ที่ต้องตั้งบน Vercel: `BOOKING_DB_URL` (Supabase → Connect → Transaction pooler), `BOOKING_DB_CA` (ใบรับรองจาก
+- environment ที่ต้องตั้งบน **Railway** (service `salon-booking-os-v1` ที่ deploy repo นี้ด้วย Dockerfile อยู่แล้ว):
+  `BOOKING_DB_URL` (Supabase → Connect → **Session pooler** เพราะ Railway เป็นเซิร์ฟเวอร์ที่รันตลอด), `BOOKING_DB_CA` (ใบรับรองจาก
   Database → SSL ถ้าไม่ใส่ = เข้ารหัสแต่ไม่ตรวจใบรับรอง), และถ้าใช้ LIFF: `NEXT_PUBLIC_LIFF_ID`, `LINE_LOGIN_CHANNEL_ID`
 - ทดสอบ: `supabase/tests/public-api.test.js` (`npm run test:db`) และ `e2e/booking-v2.spec.cjs` (Playwright, วิธีรันอยู่หัวไฟล์)
 

@@ -1,5 +1,6 @@
 // Connection to the v2 database (Supabase project booking-v2) for server-side code only.
-// BOOKING_DB_URL: the Supabase connection string (transaction pooler, port 6543, for serverless).
+// BOOKING_DB_URL: the Supabase connection string. On Railway (a long-running server) use the
+// Session pooler; on serverless hosts use the Transaction pooler (port 6543).
 // The server connects as the database owner, so RLS does not apply; every query here must be
 // scoped to one shop by the caller.
 

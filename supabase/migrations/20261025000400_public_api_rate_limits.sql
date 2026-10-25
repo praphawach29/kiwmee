@@ -1,6 +1,6 @@
 -- Flexible booking v2, step 4: rate limits for the public booking API (app/api/b/*)
 -- The booking page is open to anyone, so the API counts requests per client in the database
--- (serverless instances do not share memory). Only the server-side API uses this.
+-- (several app instances, or serverless ones, share no memory). Only the server-side API uses this.
 
 create table public.api_rate_limits (
   key_hash text not null,

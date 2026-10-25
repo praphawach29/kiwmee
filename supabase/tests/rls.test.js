@@ -155,7 +155,7 @@ test("create_business makes the caller its owner with default settings and flow"
   });
 });
 
-test("bookings are read-only for members until the booking RPCs exist", { skip }, async () => {
+test("members cannot write bookings directly, only through the booking RPCs", { skip }, async () => {
   await as("authenticated", USERS.ownerA, async () => {
     await refused(
         "insert into public.bookings (business_id, customer_id, offering_id, start_at, end_at) values ($1, gen_random_uuid(), $2, now(), now() + interval '1 hour')",

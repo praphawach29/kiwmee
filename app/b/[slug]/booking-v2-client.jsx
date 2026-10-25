@@ -121,7 +121,9 @@ export default function BookingV2Client({ shop, liffId }) {
 
   const offerings = useMemo(() => new Map(shop.offerings.map((o) => [o.id, o])), [shop.offerings]);
   const resources = useMemo(() => new Map(shop.resources.map((r) => [r.id, r])), [shop.resources]);
-  const resourceWord = RESOURCE_WORD[shop.resources[0]?.kind] ?? "ช่าง";
+  // a kind the shop named itself ("เก้าอี้นวด") is its own word
+  const kind = shop.resources[0]?.kind;
+  const resourceWord = RESOURCE_WORD[kind] ?? kind ?? "ช่าง";
 
   useEffect(() => {
     if (liff.name) setCustomer((c) => (c.name ? c : { ...c, name: liff.name }));

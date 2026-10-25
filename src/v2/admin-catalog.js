@@ -10,7 +10,6 @@
 
 const { AppError, badRequest, forbidden, notFound } = require("../errors");
 
-const KINDS = ["staff", "court", "room", "equipment"];
 const SHOP_KINDS = ["salon", "barber", "spa", "court", "other"];
 const UNITS = ["per_booking", "per_hour", "per_person"];
 const FLOW_STEPS = ["offering", "resource", "date", "time", "duration", "party"];
@@ -96,6 +95,12 @@ function int(value, label, { min = 0, max = 100000, required = true } = {}) {
 function oneOf(value, allowed, label) {
   if (!allowed.includes(value)) throw invalid(`${label}ไม่ถูกต้อง`);
   return value;
+}
+
+// A kind of resource: one of the built-in ones (staff, court, room, equipment) or a name the shop
+// gives its own ("เก้าอี้นวด"). Requirements match resources on this text.
+function kindOf(value, label) {
+  return text(value, label, { max: 40 });
 }
 
 function time(value, label) {
@@ -331,7 +336,7 @@ async function saveShop(client, shop, input = {}) {
 
 /** Create (id null) or change a resource, its weekly schedule and the offerings it does. */
 async function saveResource(client, shop, id, input = {}) {
-  const kind = oneOf(input.kind, KINDS, "ชนิด");
+  const kind = kindOf(input.kind, "ชนิด");
   const name = text(input.name, "ชื่อ");
   const capacity = int(input.capacity ?? 1, "ความจุ", { min: 1, max: 1000 });
   const sortOrder = int(input.sortOrder ?? 0, "ลำดับ", { min: -1000, max: 1000 });
@@ -486,7 +491,7 @@ async function saveOffering(client, shop, id, input = {}) {
   const requirements = list(input.requirements, "ทรัพยากรที่ต้องใช้");
   if (requirements !== undefined) {
     const rows = requirements.map((r) => ({
-      kind: oneOf(r?.kind, KINDS, "ชนิดทรัพยากรที่ต้องใช้"),
+      kind: kindOf(r?.kind, "ชนิดทรัพยากรที่ต้องใช้"),
       customerPicks: bool(r.customerPicks),
       unitsPerBooking: oneOf(r.unitsPerBooking ?? "one", ["one", "party_size"], "จำนวนที่ใช้ต่อการจอง")
     }));

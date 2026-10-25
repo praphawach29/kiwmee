@@ -5,6 +5,8 @@
 
 export const STEP_ORDER = ["offering", "resource", "date", "time", "duration", "party"];
 export const KIND_WORD = { staff: "ช่าง", court: "สนาม", room: "ห้อง", equipment: "อุปกรณ์" };
+// a kind the shop named itself ("เก้าอี้นวด") is its own word
+export const kindWord = (kind) => KIND_WORD[kind] ?? kind;
 export const STEP_WORD = {
   offering: "เลือกบริการ",
   resource: "เลือกช่าง/สนาม",
@@ -28,7 +30,7 @@ function pickInfo(catalog) {
 
 export function resourceWord(catalog) {
   const { kinds } = pickInfo(catalog);
-  return kinds.length ? kinds.map((k) => KIND_WORD[k]).join("/") : "ช่าง";
+  return kinds.length ? kinds.map(kindWord).join("/") : "ช่าง";
 }
 
 /** [{ entry, steps: [{ step, label, optional, note }] }] — one path per way in */
@@ -80,7 +82,7 @@ export function catalogWarnings(flow, catalog) {
     if (!kinds.length && !o.resourceIds.length) out.push(`“${o.name}” ยังไม่ได้ระบุว่าใช้ช่าง/สนามอะไร ลูกค้าจองไม่ได้`);
     for (const kind of kinds) {
       const usable = resources.filter((r) => r.kind === kind && o.resourceIds.includes(r.id));
-      if (!usable.length) out.push(`“${o.name}” ต้องใช้${KIND_WORD[kind]} แต่ยังไม่มี${KIND_WORD[kind]}ที่ทำบริการนี้ ลูกค้าจองไม่ได้`);
+      if (!usable.length) out.push(`“${o.name}” ต้องใช้${kindWord(kind)} แต่ยังไม่มี${kindWord(kind)}ที่ทำบริการนี้ ลูกค้าจองไม่ได้`);
     }
   }
   if (picking.length && !flow.require.includes("resource") && !flow.optional.includes("resource")) {

@@ -227,7 +227,8 @@ test("resources: weekly schedule, offerings they do, and days off", { skip }, as
     catalog = await admin.getCatalog(db, shop);
     assert.equal(catalog.timeOff.length + catalog.closures.length, 0);
 
-    await refused(() => admin.saveResource(db, shop, null, { kind: "robot", name: "x" }), (e) => e.status === 422);
+    await refused(() => admin.saveResource(db, shop, null, { kind: "x".repeat(41), name: "x" }), (e) => e.status === 422);
+    await refused(() => admin.saveResource(db, shop, null, { kind: "  ", name: "x" }), (e) => e.status === 422);
     await refused(() => admin.saveResource(db, shop, null, { kind: "staff", name: " " }), (e) => e.status === 422);
     await refused(() => admin.addClosure(db, shop, { date: day, isFullDay: false, start: "15:00", end: "13:00" }), (e) => e.status === 422);
   });
@@ -291,5 +292,32 @@ test("booking flow: saved with the page's options, impossible flows refused in w
       [{ entry: ["offering"], require: ["offering", "date", "time", "customer"] }, /ใช้ไม่ได้/]
     ];
     for (const [input, message] of bad) assert.throws(() => admin.checkFlow(input), message);
+  });
+});
+
+test("a shop names its own kind of resource, and customers pick and book it", { skip }, async () => {
+  await as(USERS.ownerA, async () => {
+    const shop = await admin.memberShop(db, "bloom-hair", { owner: true });
+    const chair = (await admin.saveResource(db, shop, null, { kind: " เก้าอี้นวด ", name: "เก้าอี้ 1" })).id;
+    const massage = (await admin.saveOffering(db, shop, null, {
+      name: "นวดเท้า",
+      durationMinutes: 60,
+      requirements: [{ kind: "เก้าอี้นวด", customerPicks: true }],
+      resourceIds: [chair],
+      prices: [{ unit: "per_booking", amount: 350 }]
+    })).id;
+    const catalog = await admin.getCatalog(db, shop);
+    assert.equal(catalog.resources.find((r) => r.id === chair).kind, "เก้าอี้นวด", "trimmed");
+    assert.deepEqual(catalog.offerings.find((o) => o.id === massage).requirements.map((r) => r.kind), ["เก้าอี้นวด"]);
+
+    await db.query("reset role");
+    await db.query("select set_config('request.jwt.claims', '', true), set_config('request.jwt.claim.sub', '', true)");
+    let s = await step(db, "bloom-hair", { selected: { offeringId: massage }, changed: "offering" });
+    assert.equal(s.ask, "resource");
+    assert.deepEqual(s.options.map((o) => o.label), ["เก้าอี้ 1"]);
+    s = await step(db, "bloom-hair", { selected: { offeringId: massage, resourceId: chair, date: bangkokDay(3) }, changed: "date" });
+    const b = await book(db, "bloom-hair", { selected: { ...s.selected, time: s.options[0].value }, customer: { name: "ลูกค้านวด", phone: "0822222222" } });
+    assert.deepEqual(b.resources.map((r) => r.name), ["เก้าอี้ 1"]);
+    assert.equal(b.price.total, 350);
   });
 });

@@ -189,6 +189,18 @@
   font-size: 0.92rem;
 }
 
+.ad-kind-new {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ad-kind-new input {
+  flex: 1;
+  min-width: 0;
+}
+
 .ad-nowrap {
   white-space: nowrap;
 }

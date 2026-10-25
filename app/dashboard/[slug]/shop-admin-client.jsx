@@ -7,7 +7,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { api } from "../api.mjs";
-import { KIND_WORD, catalogWarnings, previewPaths, resourceWord } from "./flow-preview.mjs";
+import { catalogWarnings, kindWord, previewPaths, resourceWord } from "./flow-preview.mjs";
 
 // Staff members see every page with the controls switched off
 const ReadOnly = createContext(false);
@@ -458,9 +458,7 @@ function OfferingEditor({ slug, catalog, initial, onSaved, onClose }) {
         ต้องใช้อะไร
         {o.requirements.map((r, i) => (
           <div key={i} className="ad-row ad-wrap">
-            <select value={r.kind} onChange={(e) => setReq(i, { kind: e.target.value })} aria-label="ชนิด">
-              {Object.entries(RESOURCE_KINDS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-            </select>
+            <KindPicker value={r.kind} onChange={(kind) => setReq(i, { kind })} catalog={catalog} />
             <label className="ad-check"><input type="checkbox" checked={r.customerPicks} onChange={(e) => setReq(i, { customerPicks: e.target.checked })} />ลูกค้าเลือกเอง</label>
             {toInt(o.maxPartySize) > 1 && (
               <select value={r.unitsPerBooking} onChange={(e) => setReq(i, { unitsPerBooking: e.target.value })} aria-label="ใช้กี่ที่">
@@ -485,7 +483,7 @@ function OfferingEditor({ slug, catalog, initial, onSaved, onClose }) {
       {kinds.length > 0 && (
         <div className="ad-field">
           ใครหรืออะไรทำบริการนี้ได้
-          {usable.length === 0 && <span className="ad-muted">ยังไม่มี{kinds.map((k) => KIND_WORD[k]).join("/")} — เพิ่มที่แท็บ “ช่าง / สนาม”</span>}
+          {usable.length === 0 && <span className="ad-muted">ยังไม่มี{kinds.map(kindWord).join("/")} — เพิ่มที่แท็บ “ช่าง / สนาม”</span>}
           <div className="ad-checks">
             {usable.map((r) => (
               <label key={r.id}>
@@ -539,6 +537,37 @@ function OfferingEditor({ slug, catalog, initial, onSaved, onClose }) {
 
 // ---------- resources ----------
 
+const NEW_KIND = "__new__";
+
+/** The four built-in kinds, the shop's own ones, and "+ ตั้งชื่อชนิดใหม่…" to type another */
+function KindPicker({ value, onChange, catalog }) {
+  const [typing, setTyping] = useState(false);
+  const known = [...new Set([...Object.keys(RESOURCE_KINDS), ...catalog.resources.map((r) => r.kind)])];
+  if (typing) {
+    return (
+      <span className="ad-kind-new">
+        <input autoFocus required maxLength={40} placeholder="เช่น เก้าอี้นวด" value={value} onChange={(e) => onChange(e.target.value)} aria-label="ชื่อชนิดใหม่" />
+        <button type="button" className="ad-link" onClick={() => { setTyping(false); onChange(known[0]); }}>ยกเลิก</button>
+      </span>
+    );
+  }
+  const options = !value || known.includes(value) ? known : [...known, value];
+  return (
+    <select
+      value={value}
+      aria-label="ชนิด"
+      onChange={(e) => {
+        if (e.target.value !== NEW_KIND) return onChange(e.target.value);
+        setTyping(true);
+        onChange("");
+      }}
+    >
+      {options.map((k) => <option key={k} value={k}>{RESOURCE_KINDS[k] ?? k}</option>)}
+      <option value={NEW_KIND}>+ ตั้งชื่อชนิดใหม่…</option>
+    </select>
+  );
+}
+
 function emptyResource(catalog) {
   return {
     id: null,
@@ -572,7 +601,7 @@ function ResourcesTab({ slug, catalog, onSaved }) {
               <button className="ad-list-item" data-active={editing?.id === r.id} data-off={!r.active} onClick={() => setEditing(structuredClone(r))}>
                 <strong>{r.name}{!r.active && " (ปิดอยู่)"}</strong>
                 <span className="ad-muted">
-                  {RESOURCE_KINDS[r.kind]}{r.capacity > 1 ? ` · ${r.capacity} ที่` : ""} · ทำ {r.offeringIds.length} บริการ
+                  {RESOURCE_KINDS[r.kind] ?? r.kind}{r.capacity > 1 ? ` · ${r.capacity} ที่` : ""} · ทำ {r.offeringIds.length} บริการ
                 </span>
               </button>
             </li>
@@ -629,9 +658,7 @@ function ResourceEditor({ slug, catalog, initial, onSaved, onClose }) {
           <label className="ad-field">ชื่อ<input required value={r.name} onChange={(e) => set({ name: e.target.value })} placeholder="ช่างแนน / สนาม 1" /></label>
           <label className="ad-field">
             ชนิด
-            <select value={r.kind} onChange={(e) => set({ kind: e.target.value })}>
-              {Object.entries(RESOURCE_KINDS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-            </select>
+            <KindPicker value={r.kind} onChange={(kind) => set({ kind })} catalog={catalog} />
           </label>
           <label className="ad-field">ความจุ (คนพร้อมกัน)<input type="number" min={1} value={r.capacity} onChange={(e) => set({ capacity: e.target.value })} /></label>
           <label className="ad-field">ลำดับที่แสดง<input type="number" value={r.sortOrder} onChange={(e) => set({ sortOrder: e.target.value })} /></label>

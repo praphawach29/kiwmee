@@ -1,6 +1,9 @@
 # Flexible Booking — Design (v2)
 
-สถานะ: **ร่างเพื่อรีวิว** · 25 ต.ค. 2569 · ยังไม่มีโค้ดตามเอกสารนี้
+สถานะ: **ขั้นที่ 1 เสร็จ** (ฐานข้อมูล + RLS ใน `supabase/`) · ปรับล่าสุด 25 ต.ค. 2569
+
+**ตัดสินใจแล้ว** (25 ต.ค. 2569): ใช้ Supabase (โปรเจกต์ของเจ้าของที่มีอยู่แล้ว) · ทำต่อใน repo นี้ ·
+กลุ่มลูกค้าแรก **ร้านเสริมสวย และร้านตัดผมชาย** · หน้าแรกให้ลูกค้าเลือกเองว่าจะเริ่มจากวันที่หรือจากบริการ (ข้อ 5)
 
 เป้าหมาย: ให้ร้านแต่ละร้านตั้งเองได้ว่าลูกค้าจองแบบไหน และย้ายไป Supabase เพื่อเปิดเป็น SaaS หลายร้าน
 ตัวอย่างที่ต้องทำได้:
@@ -179,12 +182,16 @@ create table price_rules (
 create table booking_flows (
   id uuid primary key default gen_random_uuid(),
   business_id uuid not null references businesses(id),
-  category text,                           -- null = ค่าเริ่มต้นของร้าน
-  steps text[] not null,                   -- ดูกติกาข้อ 5
-  options jsonb not null default '{}',     -- เช่น {"date_range_days": 14, "show_any_staff": true}
-  unique (business_id, category)
+  category text,                               -- null = ค่าเริ่มต้นของร้าน
+  entry text[] default '{date,offering}',     -- ทางเริ่มที่ลูกค้าเลือกได้ (ตัวเดียว = บังคับ)
+  require text[] default '{offering,date,time}', -- ต้องเลือกครบก่อน "then"
+  optional text[] default '{resource}',        -- เลือกหรือไม่ก็ได้ (เช่น ช่าง: "ใครก็ได้")
+  "then" text[] default '{customer}',          -- หลังเลือกครบ: customer, payment
+  options jsonb not null default '{}',         -- เช่น {"date_range_days": 14, "show_any_staff": true}
+  unique nulls not distinct (business_id, category)
 );
 ```
+ตัวจริงพร้อม check constraint อยู่ที่ `supabase/migrations/20261025000100_catalog.sql`
 
 ### 4.6 การจอง และการกันชน
 
@@ -235,42 +242,79 @@ alter table booking_resources add constraint no_overlap_exclusive
 
 ## 5. ขั้นตอนจองที่ร้านตั้งเองได้
 
-ขั้นที่มีให้เลือก:
+### หน้าแรก: ลูกค้าเลือกว่าจะเริ่มจากไหน
+
+```
+                 ┌──────────── หน้าแรกของร้าน ────────────┐
+                 │                                        │
+        [1] เลือกวันที่ก่อน                   [2] เลือกบริการก่อน
+                 │                                        │
+   ปฏิทิน: วันไหนยังมีคิว               รายการบริการทั้งหมด
+                 │                                        │
+   บริการที่ยังว่างในวันนั้น            ปฏิทิน: วันไหนบริการนี้ว่าง
+   (ที่เต็มเป็นสีเทา + เหตุผล)                         │
+                 │                                        │
+                 └─────────► เลือกเวลา (+ ช่าง) ◄─────────┘
+                                     │
+                         ข้อมูลลูกค้า → (ชำระเงิน) → ยืนยัน
+```
+
+- ทุกทางต้องเลือก**ครบชุดเดียวกัน** (`require`: บริการ + วันที่ + เวลา) ต่างกันแค่ลำดับ
+- ทุกขั้นถามเครื่องคำนวณตัวเดียว (ข้อ 6) ตัวเลือกที่เห็นจึงเป็นของที่จองได้จริงเสมอ
+- **ตัวเลือกที่ไม่ว่างแสดงเป็นสีเทาพร้อมเหตุผล** ("เต็ม", "ร้านปิด", "ช่างหยุด") ไม่ซ่อน ลูกค้าจะไม่สงสัยว่าหายไปไหน
+- ปุ่มลัด **"วันนี้ / พรุ่งนี้"** บนปฏิทิน
+- `entry` มีตัวเดียว = ไม่มีหน้าเลือกทาง เริ่มขั้นนั้นทันที (เช่น ร้านตัดผมที่อยากให้เลือกบริการก่อนเสมอ)
+
+### ลำดับขั้นหลังเลือกทางเริ่ม
+
+ระบบเรียงให้เอง: ขั้นที่ยังไม่เลือกใน `require` + `optional` ตามลำดับนี้ โดยข้ามขั้นที่เลือกแล้ว
+`offering → resource → date → time → duration → party` แล้วต่อด้วย `then`
+
+| เริ่มจาก | ลำดับที่ลูกค้าเห็น (ร้านเสริมสวยตัวอย่าง) |
+|---|---|
+| วันที่ | วันที่ → บริการ → ช่าง → เวลา → ข้อมูลลูกค้า |
+| บริการ | บริการ → ช่าง → วันที่ → เวลา → ข้อมูลลูกค้า |
+
+### ลูกค้าย้อนกลับไปเปลี่ยนตัวเลือก
+
+เมื่อเปลี่ยนขั้นใดขั้นหนึ่ง ระบบถามเครื่องคำนวณใหม่ว่าตัวเลือกที่เลือกไว้ในขั้นอื่นยังเป็นไปได้ไหม
+
+- **ยังได้** → คงไว้ (เช่น เปลี่ยนวัน บริการเดิมยังว่าง → คงบริการ ล้างแค่เวลา)
+- **ไม่ได้แล้ว** → ล้างขั้นนั้น พร้อมบอกเหตุผล: "ทำสีผมไม่ว่างวันที่ 28 กรุณาเลือกใหม่"
+- เวลาถูกล้างเสมอเมื่อเปลี่ยนวัน บริการ หรือช่าง
+
+### ขั้นที่มีให้ตั้ง
 
 | ขั้น | ลูกค้าเลือกอะไร | หมายเหตุ |
 |---|---|---|
 | `offering` | บริการ | |
-| `resource` | ทรัพยากรที่ `customer_picks = true` เช่น ช่าง สนาม | มีตัวเลือก "ใครก็ได้" ถ้าร้านเปิด `show_any_staff` |
-| `date` | วันที่ | แสดงปฏิทิน มีจุดบอกวันที่ยังว่าง |
+| `resource` | ทรัพยากรที่ `customer_picks = true` เช่น ช่าง | มี "ใครก็ได้" ถ้าร้านเปิด `show_any_staff` |
+| `date` | วันที่ | ปฏิทิน มีจุดบอกวันที่ยังว่าง |
 | `time` | เวลาเริ่ม | |
-| `duration` | ระยะเวลา | เฉพาะบริการ `customer_choice` · รวมกับขั้น time ได้ |
+| `duration` | ระยะเวลา | เฉพาะบริการ `customer_choice` |
 | `party` | จำนวนคน | เฉพาะบริการ `max_party_size > 1` |
-| `customer` | ชื่อ เบอร์ (LIFF เติมให้) | ต้องอยู่หลังขั้นที่เลือกเวลาเสมอ |
+| `customer` | ชื่อ เบอร์ (LIFF เติมให้) | อยู่ใน `then` เสมอ |
 | `payment` | มัดจำ/ชำระ | ถ้าบริการต้องชำระก่อน |
 
-กติกาตรวจตอนร้านบันทึก flow (ป้องกันร้านตั้ง flow ที่จองไม่สำเร็จ):
+กติกาที่ฐานข้อมูลตรวจตอนร้านบันทึก (check constraint ใน `booking_flows`):
+`require` ต้องมี `date` และ `time` · ทางเริ่มต้องเป็นขั้นที่ลูกค้าเลือกอยู่แล้ว ·
+`then` ต้องมี `customer` · ขั้นหนึ่งอยู่ได้ทั้ง `require` หรือ `optional` อย่างใดอย่างหนึ่ง ·
+ขั้นที่ไม่เกี่ยวกับบริการที่เลือก (เช่น `duration` กับบริการ fixed) ระบบข้ามให้เอง
 
-1. ต้องมี `date` และ `time` และ `time` อยู่หลัง `date`
-2. ต้องมี `offering` หรือร้านมีบริการเดียวในหมวดนั้น (ระบบเลือกให้)
-3. `customer` อยู่หลังทุกขั้นที่กำหนดเวลา · `payment` อยู่ท้ายสุด
-4. ขั้นที่ไม่เกี่ยวกับบริการที่เลือก (เช่น `duration` กับบริการ fixed) ระบบข้ามให้เอง
-
-### ตัวอย่างการตั้งค่า 3 ร้าน
+### ตัวอย่างการตั้งค่า
 
 ```jsonc
-// ร้านเสริมสวย (แบบที่ repo ทำอยู่)
-{ "steps": ["offering", "resource", "date", "time", "customer"],
-  "options": { "show_any_staff": true, "date_range_days": 30 } }
+// ร้านเสริมสวย (seed: bloom-hair): เริ่มจากวันหรือบริการก็ได้ เลือกช่างหรือ "ใครก็ได้"
+{ "entry": ["date", "offering"], "require": ["offering", "date", "time"], "optional": ["resource"],
+  "then": ["customer"], "options": { "show_any_staff": true, "date_range_days": 30 } }
 
-// สปา: เลือกวันก่อน เห็นเฉพาะบริการที่ยังมีคิววันนั้น
-{ "steps": ["date", "time", "offering", "customer", "payment"],
-  "options": { "date_range_days": 14 } }
+// ร้านตัดผมชาย (seed: gentleman-barber): เริ่มจากบริการเสมอ ระบบเลือกช่างที่ว่างให้
+{ "entry": ["offering"], "require": ["offering", "date", "time"], "optional": [],
+  "then": ["customer"], "options": { "date_range_days": 14 } }
 
-// สนามกีฬา: เลือกสนามก่อน ดูว่าวันไหนว่าง แล้วเลือกเวลา + จำนวนชั่วโมง
-// offering "เช่าสนามฟุตบอล 7 คน": duration_mode customer_choice 60..180 ทีละ 60
-// requirement: kind court, customer_picks true
-{ "steps": ["resource", "date", "time", "duration", "customer", "payment"],
-  "options": { "date_range_days": 7 } }
+// สนามกีฬา (ภายหลัง): เริ่มจากสนาม แล้วเลือกวัน เวลา จำนวนชั่วโมง
+{ "entry": ["resource"], "require": ["offering", "resource", "date", "time", "duration"], "optional": [],
+  "then": ["customer", "payment"], "options": { "date_range_days": 7 } }
 ```
 
 ---
@@ -342,7 +386,7 @@ POST /api/b/{slug}/options
 | `services.duration_minutes`, `services.price` | `offerings (duration_mode fixed)` + `price_rules (per_booking)` |
 | `bookings.staff_id`, `bookings_no_staff_overlap` | `booking_resources` + `no_overlap_exclusive` |
 | `business_id text 'default'` | `businesses` 1 แถว แล้วทุกตารางอ้าง uuid |
-| `STEPS` ตายตัว | `booking_flows` ค่าเริ่มต้น `["offering","resource","date","time","customer"]` |
+| `STEPS` ตายตัว | `booking_flows` ค่าเริ่มต้น: เริ่มจากวันหรือบริการ, ต้องเลือก บริการ+วัน+เวลา, ช่างเลือกหรือไม่ก็ได้ |
 | login แอดมินของตัวเอง (`src/security/*`) | Supabase Auth + `business_members` |
 
 ข้อมูลทดสอบใน `SEED_DATA.sql` ย้ายเป็น seed ของร้านตัวอย่าง 3 ร้าน (เสริมสวย, สปา, สนาม) ใช้ทั้งทดสอบและเดโม
@@ -353,10 +397,10 @@ POST /api/b/{slug}/options
 
 | ขั้น | งาน | เสร็จเมื่อ |
 |---|---|---|
-| 1 | สร้างโปรเจกต์ Supabase · migration: businesses, members, resources, offerings, requirements, price_rules, flows, bookings, booking_resources + RLS ทุกตาราง | `supabase db reset` ผ่าน · ทดสอบ RLS: ร้าน A อ่าน/เขียนข้อมูลร้าน B ไม่ได้ |
-| 2 | เครื่องคำนวณ `getOptions` (ตรรกะล้วน) ย้ายมาจาก `availability-engine.js` | unit test ครบ 3 ร้านตัวอย่าง: ทุก `ask` ทุกลำดับ, ความจุ > 1, buffer, ระยะเวลาให้ลูกค้าเลือก |
+| 1 ✅ | migration ใน `supabase/migrations/`: businesses, members, resources, ตารางเวลา, offerings, requirements, price_rules, flows, customers, bookings, booking_resources + RLS ทุกตาราง · seed ร้านเสริมสวย + ร้านตัดผม | `npm run test:db` 16/16: anon อ่านอะไรไม่ได้, ร้าน A อ่าน/เขียนร้าน B ไม่ได้, staff แก้ catalog ไม่ได้, FK กันอ้างข้ามร้าน, กันจองช่างซ้อน, flow ที่จองไม่จบถูกปฏิเสธ |
+| 2 | เครื่องคำนวณ `getOptions` (ตรรกะล้วน) ย้ายมาจาก `availability-engine.js` | unit test ทั้ง 2 ร้านตัวอย่าง (+ สนามภายหลัง): ทุก `ask` ทุกทางเริ่ม, การย้อนกลับไปเปลี่ยนตัวเลือก, ความจุ > 1, buffer, ระยะเวลาให้ลูกค้าเลือก |
 | 3 | RPC `create_booking` / `reschedule_booking` / `cancel_booking` + hold หมดอายุ | ทดสอบจองพร้อมกัน 2 คนช่องเดียว → สำเร็จ 1 อีกคนได้ `CONFLICT` · คลาสความจุ 12 รับคนที่ 13 ไม่ได้ |
-| 4 | หน้าจองอ่าน flow (เว็บ + LIFF) | จองได้ครบทั้ง 3 flow ตัวอย่าง (Playwright) |
+| 4 | หน้าจองอ่าน flow (เว็บ + LIFF) พร้อมหน้าเลือกทางเริ่ม | จองได้ทั้งสองทางเริ่มของร้านเสริมสวย และ flow ร้านตัดผม (Playwright) |
 | 5 | หน้าแอดมิน: ทรัพยากร, บริการ, ราคา, ขั้นตอนจอง (มีตัวอย่างพรีวิว) | ร้านตั้ง flow สนามเองได้โดยไม่ต้องแก้โค้ด |
 | 6 | ย้ายชำระเงิน, LINE, automation มาใช้ business_id + API ใหม่ | การ์ด LINE ยืนยัน/เตือนนัดใช้ได้กับทั้ง 3 ร้าน |
 | 7 | (ภายหลัง) Jev สำหรับแชท · ราคา peak ซับซ้อน · จองซ้ำทุกสัปดาห์ · waitlist | — |
@@ -365,9 +409,9 @@ POST /api/b/{slug}/options
 
 ## 10. คำถามที่ต้องตอบก่อน/ระหว่างทำ
 
-1. **กลุ่มลูกค้าแรก** (เสริมสวย/สปา หรือ สนามกีฬา) → กำหนดว่าร้านตัวอย่างไหนต้องสมบูรณ์ก่อน
+1. ~~กลุ่มลูกค้าแรก~~ → ร้านเสริมสวย และร้านตัดผมชาย
 2. **หลายสาขา**: นับเป็นหลายร้าน (`businesses`) ใต้บัญชีเดียว หรือเพิ่ม `branches` ในร้าน
 3. **มัดจำ**: ตั้งต่อบริการ หรือต่อร้าน · ถ้าไม่จ่ายใน hold time ปล่อยคิวอัตโนมัติไหม
 4. **นโยบายยกเลิก/เลื่อน**: ล่วงหน้ากี่ชั่วโมง ตั้งต่อบริการไหม
 5. **ลูกค้าต้องมีบัญชีไหม**: เว็บใช้แค่ชื่อ+เบอร์ (OTP ภายหลัง) · LIFF ใช้ LINE
-6. **repo**: ทำต่อใน repo นี้ (เปลี่ยนชื่อภายหลัง) หรือแยก repo ใหม่ ตอนย้ายไป Supabase
+6. ~~repo~~ → ทำต่อใน repo นี้

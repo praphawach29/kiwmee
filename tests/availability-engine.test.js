@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const { getAvailableSlots } = require("../src/availability-engine");
 const { createBooking } = require("../src/booking-service");
 const { FakeRepository, buildSeed } = require("./fake-repository");
+const { addMinutes, toBangkokISOString } = require("../src/time");
 
 function buildSeedForDate(dateStr) {
   const seed = buildSeed();
@@ -326,12 +327,14 @@ test("Test I: Staff break overlap - Candidate excluded", async () => {
 });
 
 test("Test J: Two simultaneous booking attempts - Database prevents overlap", async () => {
-  const repository = new FakeRepository(buildSeedForDate("2026-09-18"));
+  // createBooking checks against the real clock, so the day must stay in the future
+  const day = toBangkokISOString(addMinutes(new Date(), 2 * 24 * 60)).slice(0, 10);
+  const repository = new FakeRepository(buildSeedForDate(day));
   const input = {
     customer: { name: "Customer J1", phone: "0811111111" },
     service_id: "svc-cut",
     staff_id: "staff-ann",
-    start_at: "2026-09-18T15:15:00+07:00"
+    start_at: `${day}T15:15:00+07:00`
   };
 
   const booking1 = await createBooking(repository, input);
@@ -343,7 +346,7 @@ test("Test J: Two simultaneous booking attempts - Database prevents overlap", as
       customer: { name: "Customer J2", phone: "0822222222" },
       service_id: "svc-cut",
       staff_id: "staff-ann",
-      start_at: "2026-09-18T15:15:00+07:00"
+      start_at: `${day}T15:15:00+07:00`
     }),
     /requested slot is not available/
   );

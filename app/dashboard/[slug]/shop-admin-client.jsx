@@ -757,6 +757,8 @@ function HoursTab({ slug, catalog, onSaved }) {
   const save = useSave();
   const setSetting = (key, value) => setForm((f) => ({ ...f, settings: { ...f.settings, [key]: value } }));
   const setDay = (d, patch) => setForm((f) => ({ ...f, hours: f.hours.map((h) => (h.dayOfWeek === d ? { ...h, ...patch } : h)) }));
+  // one day's times on every day; days marked closed stay closed
+  const copyHours = (from) => setForm((f) => ({ ...f, hours: f.hours.map((h) => ({ ...h, open: from.open, close: from.close })) }));
 
   async function submit(event) {
     event.preventDefault();
@@ -791,6 +793,13 @@ function HoursTab({ slug, catalog, onSaved }) {
                       <input type="time" required value={h.open} onChange={(e) => setDay(h.dayOfWeek, { open: e.target.value })} aria-label={`เปิดวัน${DAYS[h.dayOfWeek]}`} />–
                       <input type="time" required value={h.close} onChange={(e) => setDay(h.dayOfWeek, { close: e.target.value })} aria-label={`ปิดวัน${DAYS[h.dayOfWeek]}`} />
                     </span>
+                  )}
+                </td>
+                <td>
+                  {h.isOpen && (
+                    <button type="button" className="ad-link ad-nowrap" onClick={() => copyHours(h)} title={`ใช้เวลา ${h.open}–${h.close} กับทุกวัน`}>
+                      ใช้กับทุกวัน
+                    </button>
                   )}
                 </td>
               </tr>

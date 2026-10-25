@@ -189,6 +189,10 @@
   font-size: 0.92rem;
 }
 
+.ad-nowrap {
+  white-space: nowrap;
+}
+
 .ad-error {
   color: var(--warn);
   margin: 0;

@@ -22,7 +22,7 @@
 .bk-card {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 20px;
   padding: 16px;
   box-shadow: var(--shadow);
   display: grid;
@@ -58,7 +58,8 @@
 }
 
 .bk-chip[data-active="true"] {
-  border-color: var(--accent);
+  border-color: var(--grape);
+  background: var(--selected);
 }
 
 .bk-notice,
@@ -70,14 +71,13 @@
 }
 
 .bk-notice {
-  background: #fff6e0;
-  border: 1px solid #ecd49a;
+  background: var(--warn-bg);
+  color: var(--warn);
 }
 
 .bk-error {
-  background: #fdecea;
-  border: 1px solid #f0b8ae;
-  color: var(--warn);
+  background: var(--danger-bg);
+  color: var(--danger);
 }
 
 .bk-start {
@@ -154,19 +154,26 @@
 }
 
 .bk-option[data-selected="true"] {
-  border-color: var(--accent);
-  background: #e6f3f1;
+  border-color: var(--grape);
+  background: var(--selected);
+}
+
+/* a chosen start time stands out most (docs/BRAND_COLORS.md) */
+.bk-options-time .bk-option[data-selected="true"] {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #fff;
 }
 
 .bk-option:disabled {
   cursor: not-allowed;
-  background: #f1eee8;
-  color: #9a948c;
+  background: var(--bg);
+  color: var(--muted);
 }
 
 .bk-reason {
   font-size: 0.8rem;
-  color: var(--warn);
+  color: var(--danger);
 }
 
 .bk-field {
@@ -189,13 +196,39 @@
 
 .bk-primary {
   font: inherit;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 1.05rem;
+  min-height: 52px;
   padding: 12px 16px;
-  border-radius: 12px;
+  border-radius: 16px;
   border: 0;
-  background: var(--accent);
+  background: var(--grape);
   color: #fff;
   cursor: pointer;
+}
+
+.bk-primary:hover:not(:disabled) {
+  background: var(--grape-deep);
+}
+
+.bk-shell :is(button, a, input):focus-visible {
+  outline: 3px solid var(--grape);
+  outline-offset: 2px;
+}
+
+.bk-powered {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.bk-powered img {
+  height: 16px;
+  width: auto;
 }
 
 .bk-primary:disabled {

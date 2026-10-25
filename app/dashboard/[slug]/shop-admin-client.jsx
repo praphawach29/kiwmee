@@ -101,7 +101,10 @@ export default function ShopAdmin({ slug }) {
   return (
     <main className="ad-shell">
       <header className="ad-header">
-        <a className="ad-link ad-muted" href="/dashboard">← ร้านทั้งหมด</a>
+        <div className="ad-brand">
+          <a href="/dashboard" aria-label="ร้านทั้งหมด"><img src="/brand/kiwmee-logo.svg" alt="kiwmee" /></a>
+          <a className="ad-link" href="/dashboard">← ร้านทั้งหมด</a>
+        </div>
         <h1>{catalog.shop.name}</h1>
         <p className="ad-muted">
           หน้าจองของลูกค้า: <a className="ad-link" href={`/b/${slug}`} target="_blank" rel="noreferrer">/b/{slug}</a>

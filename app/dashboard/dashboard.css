@@ -1,0 +1,401 @@
+/* Shop admin (/dashboard). Uses the tokens in globals.css; works from a phone up. */
+
+.ad-shell {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 20px 16px 64px;
+  display: grid;
+  gap: 16px;
+}
+
+.ad-narrow {
+  max-width: 480px;
+}
+
+.ad-header h1 {
+  margin: 4px 0 0;
+  font-size: 1.5rem;
+}
+
+.ad-muted {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.ad-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 14px;
+  align-content: start;
+  min-width: 0;
+}
+
+.ad-card h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.ad-stack {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+  min-width: 0;
+}
+
+.ad-split {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (min-width: 900px) {
+  .ad-split {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  }
+}
+
+.ad-fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.ad-field {
+  display: grid;
+  gap: 6px;
+  font-size: 0.92rem;
+  color: var(--muted);
+}
+
+.ad-field > input,
+.ad-field > select,
+.ad-field > textarea {
+  width: 100%;
+}
+
+.ad-field > .ad-link {
+  justify-self: start;
+}
+
+.ad-short > input {
+  max-width: 140px;
+}
+
+.ad-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.ad-shell input,
+.ad-shell select,
+.ad-shell textarea {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fff;
+  color: var(--ink);
+  min-width: 0;
+}
+
+.ad-shell input[type="checkbox"],
+.ad-shell input[type="radio"] {
+  padding: 0;
+  margin: 0;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
+.ad-shell input[type="time"] {
+  width: 112px;
+}
+
+.ad-shell :is(input, select, textarea, button, a):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ad-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.ad-wrap {
+  flex-wrap: wrap;
+}
+
+.ad-between {
+  justify-content: space-between;
+}
+
+.ad-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink);
+}
+
+.ad-primary,
+.ad-secondary,
+.ad-danger {
+  border-radius: 10px;
+  padding: 10px 16px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.ad-primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.ad-primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+
+.ad-secondary {
+  background: transparent;
+  color: var(--accent-strong);
+  border: 1px solid var(--accent);
+}
+
+.ad-danger {
+  background: transparent;
+  color: var(--warn);
+  border: 1px solid var(--warn);
+}
+
+.ad-shell button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ad-link {
+  background: none;
+  padding: 0;
+  color: var(--accent-strong);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 0.92rem;
+}
+
+.ad-error {
+  color: var(--warn);
+  margin: 0;
+}
+
+.ad-ok {
+  color: var(--ok);
+  margin: 0;
+}
+
+.ad-notice {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #e8f3f1;
+  color: var(--accent-strong);
+}
+
+.ad-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--line);
+}
+
+.ad-tabs button {
+  background: none;
+  padding: 10px 14px;
+  border-bottom: 3px solid transparent;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ad-tabs button[data-active="true"] {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+.ad-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.ad-list-item {
+  width: 100%;
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.ad-list-item[data-active="true"] {
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.ad-list-item[data-off="true"] strong {
+  color: var(--muted);
+}
+
+.ad-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  color: var(--ink);
+}
+
+.ad-checks label,
+.ad-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+}
+
+.ad-disabled {
+  opacity: 0.5;
+}
+
+.ad-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ad-chip {
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.ad-chip:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.ad-table {
+  border-collapse: collapse;
+  width: 100%;
+  color: var(--ink);
+}
+
+.ad-table td {
+  padding: 6px 8px 6px 0;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.ad-price {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px dashed var(--line);
+}
+
+.ad-price > input[type="number"] {
+  width: 110px;
+}
+
+.ad-days {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.ad-days button {
+  min-width: 30px;
+  padding: 6px 4px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.ad-days button[data-on="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.ad-steps {
+  margin: 0;
+  padding: 12px 12px 12px 34px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.ad-steps li[data-skip="true"] {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.ad-steps li[data-skip="true"] small {
+  text-decoration: none;
+  display: inline-block;
+}
+
+.ad-warnings {
+  margin: 0;
+  padding: 10px 12px 10px 30px;
+  border-radius: 10px;
+  background: #fbefe9;
+  color: var(--warn);
+  display: grid;
+  gap: 4px;
+}
+
+.ad-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fbefe9;
+  color: var(--warn);
+  vertical-align: middle;
+}
+
+.ad-phone {
+  width: 100%;
+  max-width: 390px;
+  height: 640px;
+  margin: 0 auto;
+  border: 8px solid var(--ink);
+  border-radius: 28px;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.ad-phone iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}

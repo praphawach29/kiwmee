@@ -244,6 +244,14 @@ test("court: the customer picks the hours, and longer hires stop where the next 
   assert.equal(nextStep(c, { selected: { resourceId: ids.court1 }, now }).step, "offering");
   assert.equal(nextStep(c, { selected: { resourceId: ids.court1, offeringId: ids.courtHire, date: TUE, time: "10:00" }, now }).step, "duration");
   assert.equal(nextStep(c, { selected: { ...sel, durationMinutes: 120 }, now }).step, "customer");
+  // Choosing the hours after the time keeps the time when it still fits
+  assert.deepEqual(reconcile(c, { selected: { ...sel, durationMinutes: 120 }, changed: "duration", now }), {
+    selected: { ...sel, durationMinutes: 120 },
+    cleared: []
+  });
+  const longer = reconcile(c, { selected: { ...sel, time: "11:00", durationMinutes: 120 }, changed: "duration", now });
+  assert.equal(longer.selected.time, undefined);
+  assert.deepEqual(longer.cleared, [{ step: "time", value: "11:00", reason: null }]);
 });
 
 test("class of 12: places run out by head count, not by the first booking", () => {

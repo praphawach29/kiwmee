@@ -525,15 +525,16 @@ function nextStep(catalog, { selected, now }) {
 
 /**
  * After the customer changes `changed`, keep every other choice that is still possible and clear
- * the rest with a reason ("ทำสีผมไม่ว่างวันที่ 28"). The time is always cleared when anything it
- * depends on changes.
+ * the rest with a reason ("ทำสีผมไม่ว่างวันที่ 28"). The time is always cleared when the offering,
+ * resource or date changes (design §5). Choosing the hours or head count after the time (a court:
+ * time, then hours) keeps the time if it still fits, so the customer does not pick it twice.
  * Returns { selected, cleared: [{ step, value, reason }] }
  */
 function reconcile(catalog, { selected, changed, now }) {
   const ctx = createContext(catalog, { now });
   const sel = normalizeSelected(ctx, selected);
   const cleared = [];
-  if (changed !== "time" && sel.time) {
+  if (["offering", "resource", "date"].includes(changed) && sel.time) {
     cleared.push({ step: "time", value: sel.time, reason: null });
     delete sel.time;
   }
@@ -548,10 +549,13 @@ function reconcile(catalog, { selected, changed, now }) {
       kept[key] = null;
       continue;
     }
-    const { options } = getOptions(catalog, { ask: step, selected: kept, now });
+    const { options, reason } = getOptions(catalog, { ask: step, selected: kept, now });
     const match = options.find((o) => o.value === sel[key]);
     if (match && match.available) {
       kept[key] = sel[key];
+    } else if (step === "time") {
+      // the time list holds only bookable times, so a missing one has no reason of its own
+      cleared.push({ step, value: sel[key], reason: options.length ? null : reason });
     } else {
       cleared.push({ step, value: sel[key], reason: match ? match.reason : REASONS.NOT_OFFERED });
     }

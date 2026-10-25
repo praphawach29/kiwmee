@@ -8,6 +8,9 @@
 | `migrations/20261025000000_tenancy.sql` | ร้าน, สมาชิก (owner/staff), ฟังก์ชันเช็คสิทธิ์ที่ RLS ใช้, `create_business()` |
 | `migrations/20261025000100_catalog.sql` | ทรัพยากร, เวลาทำการ, ตารางช่าง, บริการ, ราคา, ขั้นตอนจอง |
 | `migrations/20261025000200_bookings.sql` | ลูกค้า, การจอง, ทรัพยากรที่การจองถือ (กันจองซ้อน), ประวัติสถานะ |
+| `migrations/20261025000300_booking_rpcs.sql` | RPC จอง / เลื่อน / ยืนยัน / ยกเลิก, hold หมดอายุ, คิดราคา |
+| `migrations/20261025000400_public_api_rate_limits.sql` | จำกัดจำนวนครั้งของ API หน้าจอง |
+| `migrations/20261025000500_admin.sql` | หน้าแอดมิน: ร้านใหม่ได้เวลาทำการ 7 วันตั้งแต่สร้าง |
 | `seed.sql` | ร้านตัวอย่าง 2 ร้าน: Bloom Hair & Beauty (เสริมสวย), Gentleman Barber (ตัดผมชาย) |
 | `tests/` | ทดสอบ RLS และความถูกต้องของข้อมูล + ไฟล์จำลองสิ่งที่ Supabase มีให้ (เฉพาะทดสอบในเครื่อง) |
 
@@ -20,6 +23,19 @@ npx supabase db push            # ลง migration ตามลำดับ
 หรือเปิด SQL Editor แล้วรันทีละไฟล์ใน `migrations/` ตามลำดับชื่อ · `seed.sql` ใช้กับโปรเจกต์ทดสอบเท่านั้น
 
 **ห้ามแก้ฐานข้อมูลด้วยมือโดยไม่มีไฟล์ migration** ทุกการเปลี่ยนต้องเป็นไฟล์ใหม่ใน `migrations/`
+
+## ให้เจ้าของร้านเข้าหน้าแอดมิน (`/dashboard`)
+
+เจ้าของร้านสมัครที่ `/dashboard` (หรือเพิ่มใน Supabase → Authentication → Users) แล้วเปิดร้านใหม่เองได้
+ร้านที่มีอยู่แล้ว (เช่นร้านตัวอย่างจาก seed) ต้องผูกบัญชีเป็นเจ้าของครั้งแรกใน SQL Editor:
+
+```sql
+insert into public.business_members (business_id, user_id, role)
+select b.id, u.id, 'owner' from public.businesses b, auth.users u
+where b.slug = 'bloom-hair' and u.email = 'อีเมลเจ้าของร้าน'
+on conflict (business_id, user_id) do update set role = 'owner';
+```
+พนักงาน (ดูได้อย่างเดียว) ใช้คำสั่งเดียวกันโดยเปลี่ยน `'owner'` เป็น `'staff'`
 
 ## ทดสอบ
 

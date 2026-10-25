@@ -1,6 +1,6 @@
 # Flexible Booking — Design (v2)
 
-สถานะ: **ขั้นที่ 1–4 เสร็จ** (ฐานข้อมูล + RLS ใน `supabase/` · เครื่องคำนวณคิวว่าง `src/v2/options-engine.js` · RPC จอง/เลื่อน/ยกเลิก · หน้าจอง `/b/<slug>`) · ปรับล่าสุด 25 ต.ค. 2569
+สถานะ: **ขั้นที่ 1–5 เสร็จ** (ฐานข้อมูล + RLS ใน `supabase/` · เครื่องคำนวณคิวว่าง `src/v2/options-engine.js` · RPC จอง/เลื่อน/ยกเลิก · หน้าจอง `/b/<slug>` · หน้าแอดมิน `/dashboard`) · ปรับล่าสุด 25 ต.ค. 2569
 
 **ตัดสินใจแล้ว** (25 ต.ค. 2569): ใช้ Supabase โปรเจกต์ `booking-v2` (`ezubgqeqdipwfnmorqkj`) ลง migration ขั้นที่ 1 แล้วผ่าน SQL Editor (ขั้นที่ 3–4 = ไฟล์ `…000300`, `…000400` รันเพิ่มแล้ว/ต้องรันเพิ่ม) ·
 **ห้ามแตะ `rdbzdshvlfxenpsiyjzl`** — เป็นฐานข้อมูลของ v1 ที่บอท LINE ยังใช้งานอยู่ (ชื่อตารางชนกับ v2) · ทำต่อใน repo นี้ ·
@@ -282,7 +282,7 @@ alter table booking_resources add constraint no_overlap_exclusive
 
 - **ยังได้** → คงไว้ (เช่น เปลี่ยนวัน บริการเดิมยังว่าง → คงบริการ ล้างแค่เวลา)
 - **ไม่ได้แล้ว** → ล้างขั้นนั้น พร้อมบอกเหตุผล: "ทำสีผมไม่ว่างวันที่ 28 กรุณาเลือกใหม่"
-- เวลาถูกล้างเสมอเมื่อเปลี่ยนวัน บริการ หรือช่าง
+- เวลาถูกล้างเสมอเมื่อเปลี่ยนวัน บริการ หรือช่าง · เลือกระยะเวลา/จำนวนคน**หลัง**เวลา (สนาม: เวลา → จำนวนชั่วโมง) เวลาเดิมคงไว้ถ้ายังจองได้
 
 ### ขั้นที่มีให้ตั้ง
 
@@ -421,6 +421,28 @@ POST /api/b/{slug}/options
   Database → SSL ถ้าไม่ใส่ = เข้ารหัสแต่ไม่ตรวจใบรับรอง), และถ้าใช้ LIFF: `NEXT_PUBLIC_LIFF_ID`, `LINE_LOGIN_CHANNEL_ID`
 - ทดสอบ: `supabase/tests/public-api.test.js` (`npm run test:db`) และ `e2e/booking-v2.spec.cjs` (Playwright, วิธีรันอยู่หัวไฟล์)
 
+### หน้าแอดมิน (ทำแล้วในขั้นที่ 5)
+
+| ส่วน | ไฟล์ |
+|---|---|
+| `/dashboard` เข้าสู่ระบบ / สมัคร / ลืมรหัสผ่าน (Supabase Auth) · รายชื่อร้าน · เปิดร้านใหม่ | `app/dashboard/page.jsx`, `dashboard-home-client.jsx` |
+| `/dashboard/<slug>` 4 แท็บ: ขั้นตอนจอง (มีพรีวิว), บริการและราคา, ช่าง/สนาม (ตารางงาน วันลา), ร้านและเวลาทำการ (วันหยุดร้าน กติกาการจอง) | `app/dashboard/[slug]/shop-admin-client.jsx`, `flow-preview.mjs` |
+| `GET/POST/DELETE /api/dashboard/session` · `GET/POST /api/dashboard/shops` · `/api/dashboard/shops/<slug>[/resources\|offerings\|closures\|time-off\|flow][/<id>]` | `app/api/dashboard/**` |
+| ล็อกอิน: cookie httpOnly, ต่ออายุ token เอง, ถาม Supabase ว่า token เป็นของใคร (cache 1 นาที) | `src/v2/admin-auth.js` |
+| อ่าน/บันทึกข้อมูลร้าน (ตรวจค่า + ข้อความภาษาไทย) | `src/v2/admin-catalog.js`, `admin-routes.js` |
+
+- **สิทธิ์ใช้ RLS ของขั้นที่ 1 โดยตรง**: เซิร์ฟเวอร์รันทุกคำขอเป็น role `authenticated` พร้อม id ผู้ใช้ (`set local role` +
+  `request.jwt.claims` ใน transaction เดียว) ร้าน A จึงอ่าน/แก้ร้าน B ไม่ได้แม้โค้ดฝั่งเซิร์ฟเวอร์ผิด · พนักงาน (`staff`) ดูได้อย่างเดียว
+- หน้าเว็บล็อกอินกับ Supabase Auth ตรง (rate limit ของ Supabase นับต่อเครื่องเจ้าของร้าน ไม่ใช่ต่อเซิร์ฟเวอร์) แล้วส่ง session ให้ `/api/dashboard/session` เก็บเป็น cookie
+- ลบช่าง/สนาม/บริการที่มีการจองแล้วไม่ได้ ระบบ**ปิดไว้แทน** (ประวัติการจองยังเห็นชื่อ)
+- พรีวิวขั้นตอนจอง: ลำดับขั้นของแต่ละทางเริ่ม (คิดแบบเดียวกับ `nextStep`) + คำเตือนสิ่งที่ทำให้ลูกค้าจองไม่ได้
+  (บริการไม่มีราคา, ไม่มีช่างที่ทำบริการ, บริการให้เลือกระยะเวลาแต่ flow ไม่มีขั้นนั้น) + หน้าจองจริงในกรอบมือถือ · มีแบบสำเร็จรูป 4 แบบ
+- ขั้น `payment` ยังเลือกไม่ได้ (รอขั้นที่ 6) เพราะทุกการจองจะเป็น hold แล้วหมดอายุ
+- environment บน Railway: `SUPABASE_URL` (`https://<ref>.supabase.co`) และ `SUPABASE_PUBLISHABLE_KEY` (Settings → API Keys, เป็นค่าสาธารณะ) ·
+  Supabase → Authentication → URL Configuration: ใส่ `https://<โดเมน>/dashboard` ใน Site URL / Redirect URLs (ลิงก์ยืนยันอีเมลและลืมรหัสผ่าน)
+- ทดสอบ: `supabase/tests/admin.test.js` (`npm run test:db`: สิทธิ์ owner/staff/ข้ามร้าน, ร้านใหม่ตั้งสนามเองแล้วลูกค้าจองได้ราคา 300 + 450, ปิดแทนลบ, ตรวจค่า)
+  และ `tests/v2-admin-auth.test.js` (cookie, ต่ออายุ token, token ปลอม)
+
 ## 7. LINE
 
 - **LIFF**: หน้าจองตัวเดียวกับเว็บ อ่าน flow เดียวกัน เติมชื่อ/LINE ID ให้อัตโนมัติ
@@ -456,7 +478,7 @@ POST /api/b/{slug}/options
 | 2 ✅ | เครื่องคำนวณ `getOptions` (ตรรกะล้วน) ย้ายมาจาก `availability-engine.js` | unit test ทั้ง 2 ร้านตัวอย่าง (+ สนามภายหลัง): ทุก `ask` ทุกทางเริ่ม, การย้อนกลับไปเปลี่ยนตัวเลือก, ความจุ > 1, buffer, ระยะเวลาให้ลูกค้าเลือก |
 | 3 ✅ | RPC `create_booking` / `reschedule_booking` / `cancel_booking` + hold หมดอายุ | ทดสอบจองพร้อมกัน 2 คนช่องเดียว → สำเร็จ 1 อีกคนได้ `CONFLICT` · คลาสความจุ 12 รับคนที่ 13 ไม่ได้ |
 | 4 ✅ | หน้าจองอ่าน flow (เว็บ + LIFF) พร้อมหน้าเลือกทางเริ่ม | จองได้ทั้งสองทางเริ่มของร้านเสริมสวย และ flow ร้านตัดผม (Playwright) |
-| 5 | หน้าแอดมิน: ทรัพยากร, บริการ, ราคา, ขั้นตอนจอง (มีตัวอย่างพรีวิว) | ร้านตั้ง flow สนามเองได้โดยไม่ต้องแก้โค้ด |
+| 5 ✅ | หน้าแอดมิน: ทรัพยากร, บริการ, ราคา, ขั้นตอนจอง (มีตัวอย่างพรีวิว) | ร้านตั้ง flow สนามเองได้โดยไม่ต้องแก้โค้ด (`admin.test.js` + ลองในเบราว์เซอร์) |
 | 6 | ย้ายชำระเงิน, LINE, automation มาใช้ business_id + API ใหม่ | การ์ด LINE ยืนยัน/เตือนนัดใช้ได้กับทั้ง 3 ร้าน |
 | 7 | (ภายหลัง) Jev สำหรับแชท · ราคา peak ซับซ้อน · จองซ้ำทุกสัปดาห์ · waitlist | — |
 

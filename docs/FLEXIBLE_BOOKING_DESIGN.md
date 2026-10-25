@@ -1,8 +1,8 @@
 # Flexible Booking — Design (v2)
 
-สถานะ: **ขั้นที่ 1–3 เสร็จ** (ฐานข้อมูล + RLS ใน `supabase/` · เครื่องคำนวณคิวว่าง `src/v2/options-engine.js` · RPC จอง/เลื่อน/ยกเลิก) · ปรับล่าสุด 25 ต.ค. 2569
+สถานะ: **ขั้นที่ 1–4 เสร็จ** (ฐานข้อมูล + RLS ใน `supabase/` · เครื่องคำนวณคิวว่าง `src/v2/options-engine.js` · RPC จอง/เลื่อน/ยกเลิก · หน้าจอง `/b/<slug>`) · ปรับล่าสุด 25 ต.ค. 2569
 
-**ตัดสินใจแล้ว** (25 ต.ค. 2569): ใช้ Supabase โปรเจกต์ `booking-v2` (`ezubgqeqdipwfnmorqkj`) ลง migration ขั้นที่ 1 แล้วผ่าน SQL Editor (ขั้นที่ 3 = ไฟล์ `…000300` ต้องรันเพิ่ม) ·
+**ตัดสินใจแล้ว** (25 ต.ค. 2569): ใช้ Supabase โปรเจกต์ `booking-v2` (`ezubgqeqdipwfnmorqkj`) ลง migration ขั้นที่ 1 แล้วผ่าน SQL Editor (ขั้นที่ 3–4 = ไฟล์ `…000300`, `…000400` รันเพิ่มแล้ว/ต้องรันเพิ่ม) ·
 **ห้ามแตะ `rdbzdshvlfxenpsiyjzl`** — เป็นฐานข้อมูลของ v1 ที่บอท LINE ยังใช้งานอยู่ (ชื่อตารางชนกับ v2) · ทำต่อใน repo นี้ ·
 กลุ่มลูกค้าแรก **ร้านเสริมสวย และร้านตัดผมชาย** · หน้าแรกให้ลูกค้าเลือกเองว่าจะเริ่มจากวันที่หรือจากบริการ (ข้อ 5)
 
@@ -399,6 +399,27 @@ POST /api/b/{slug}/options
 
 ---
 
+### หน้าจอง (ทำแล้วในขั้นที่ 4)
+
+| ส่วน | ไฟล์ |
+|---|---|
+| หน้าเว็บ `/b/<slug>` (มือถือก่อน, เปิดใน LIFF ได้) | `app/b/[slug]/page.jsx`, `booking-v2-client.jsx`, `booking-v2.css` |
+| `GET /api/b/<slug>` ข้อมูลร้าน บริการ ราคาเริ่มต้น ช่างที่เลือกได้ | `app/api/b/[slug]/route.js` |
+| `POST /api/b/<slug>/step` `{ selected, changed?, ask? }` → `{ selected, cleared, next, ask, options, reason }` | `app/api/b/[slug]/step/route.js` |
+| `POST /api/b/<slug>/bookings` `{ selected, customer, lineIdToken? }` → เรียก `create_booking` | `app/api/b/[slug]/bookings/route.js` |
+| ตรรกะทั้งหมด (ทดสอบกับฐานข้อมูลได้โดยไม่ต้องเปิดเซิร์ฟเวอร์) | `src/v2/public-booking.js`, `catalog-repository.js`, `db.js` |
+
+- เซิร์ฟเวอร์เป็นคนตัดสินว่าขั้นต่อไปคืออะไร หน้าเว็บแค่แสดง · กดชิปด้านบนเพื่อเปลี่ยนขั้นที่เลือกไปแล้ว
+- ตอน**แก้**บริการหรือวัน รายการไม่ถูกจำกัดด้วยช่างที่เลือกไว้ (ไม่งั้นเปลี่ยนจากทำสีไปตัดผมไม่ได้เพราะช่างพลอยทำสีอย่างเดียว) ·
+  ถ้าช่างใช้ไม่ได้กับตัวเลือกใหม่ จะถูกล้างพร้อมบอกเหตุผล
+- จองชน (409) → บอก "เพิ่งถูกจอง" แล้วพากลับไปเลือกเวลา โดยคงตัวเลือกอื่นไว้
+- จำกัดจำนวนครั้งต่อ IP ในฐานข้อมูล (`hit_rate_limit`, migration `…000400`): หน้า 120/นาที, step 240/นาที, จอง 5 ครั้ง/10 นาที
+- LIFF: ตั้ง `NEXT_PUBLIC_LIFF_ID` แล้วหน้าเว็บเติมชื่อจาก LINE และส่ง ID token · เซิร์ฟเวอร์ตรวจกับ LINE ด้วย `LINE_LOGIN_CHANNEL_ID`
+  แล้วผูก `customers.line_user_id` (LIFF ตัวเดียวของแพลตฟอร์มใช้ได้ทุกร้าน เพราะ URL มี slug)
+- environment ที่ต้องตั้งบน Vercel: `BOOKING_DB_URL` (Supabase → Connect → Transaction pooler), `BOOKING_DB_CA` (ใบรับรองจาก
+  Database → SSL ถ้าไม่ใส่ = เข้ารหัสแต่ไม่ตรวจใบรับรอง), และถ้าใช้ LIFF: `NEXT_PUBLIC_LIFF_ID`, `LINE_LOGIN_CHANNEL_ID`
+- ทดสอบ: `supabase/tests/public-api.test.js` (`npm run test:db`) และ `e2e/booking-v2.spec.cjs` (Playwright, วิธีรันอยู่หัวไฟล์)
+
 ## 7. LINE
 
 - **LIFF**: หน้าจองตัวเดียวกับเว็บ อ่าน flow เดียวกัน เติมชื่อ/LINE ID ให้อัตโนมัติ
@@ -433,7 +454,7 @@ POST /api/b/{slug}/options
 | 1 ✅ | migration ใน `supabase/migrations/`: businesses, members, resources, ตารางเวลา, offerings, requirements, price_rules, flows, customers, bookings, booking_resources + RLS ทุกตาราง · seed ร้านเสริมสวย + ร้านตัดผม | `npm run test:db` 16/16: anon อ่านอะไรไม่ได้, ร้าน A อ่าน/เขียนร้าน B ไม่ได้, staff แก้ catalog ไม่ได้, FK กันอ้างข้ามร้าน, กันจองช่างซ้อน, flow ที่จองไม่จบถูกปฏิเสธ |
 | 2 ✅ | เครื่องคำนวณ `getOptions` (ตรรกะล้วน) ย้ายมาจาก `availability-engine.js` | unit test ทั้ง 2 ร้านตัวอย่าง (+ สนามภายหลัง): ทุก `ask` ทุกทางเริ่ม, การย้อนกลับไปเปลี่ยนตัวเลือก, ความจุ > 1, buffer, ระยะเวลาให้ลูกค้าเลือก |
 | 3 ✅ | RPC `create_booking` / `reschedule_booking` / `cancel_booking` + hold หมดอายุ | ทดสอบจองพร้อมกัน 2 คนช่องเดียว → สำเร็จ 1 อีกคนได้ `CONFLICT` · คลาสความจุ 12 รับคนที่ 13 ไม่ได้ |
-| 4 | หน้าจองอ่าน flow (เว็บ + LIFF) พร้อมหน้าเลือกทางเริ่ม | จองได้ทั้งสองทางเริ่มของร้านเสริมสวย และ flow ร้านตัดผม (Playwright) |
+| 4 ✅ | หน้าจองอ่าน flow (เว็บ + LIFF) พร้อมหน้าเลือกทางเริ่ม | จองได้ทั้งสองทางเริ่มของร้านเสริมสวย และ flow ร้านตัดผม (Playwright) |
 | 5 | หน้าแอดมิน: ทรัพยากร, บริการ, ราคา, ขั้นตอนจอง (มีตัวอย่างพรีวิว) | ร้านตั้ง flow สนามเองได้โดยไม่ต้องแก้โค้ด |
 | 6 | ย้ายชำระเงิน, LINE, automation มาใช้ business_id + API ใหม่ | การ์ด LINE ยืนยัน/เตือนนัดใช้ได้กับทั้ง 3 ร้าน |
 | 7 | (ภายหลัง) Jev สำหรับแชท · ราคา peak ซับซ้อน · จองซ้ำทุกสัปดาห์ · waitlist | — |

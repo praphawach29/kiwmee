@@ -229,6 +229,7 @@ export default function BookingV2Client({ shop, liffId }) {
             </p>
           )}
         </section>
+        <PoweredBy />
       </main>
     );
   }
@@ -336,7 +337,17 @@ export default function BookingV2Client({ shop, liffId }) {
           </button>
         </form>
       )}
+      <PoweredBy />
     </main>
+  );
+}
+
+// The shop's page, quietly signed by the platform
+function PoweredBy() {
+  return (
+    <a className="bk-powered" href="/" target="_blank" rel="noreferrer">
+      จองผ่าน <img src="/brand/kiwmee-logo.svg" alt="kiwmee" />
+    </a>
   );
 }
 

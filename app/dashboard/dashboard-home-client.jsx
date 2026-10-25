@@ -50,6 +50,7 @@ export default function DashboardHome({ auth }) {
   return (
     <main className="ad-shell ad-narrow">
       <header className="ad-header">
+        <a href="/" className="ad-brand" aria-label="Kiwmee หน้าแรก"><img src="/brand/kiwmee-logo.svg" alt="kiwmee" /></a>
         <h1>จัดการร้าน</h1>
         {user && (
           <p className="ad-muted">

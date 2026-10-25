@@ -1,0 +1,417 @@
+/* Kiwmee landing page (/). Tokens from globals.css; phone first. */
+
+.lp {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.lp-wrap {
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+.lp h1,
+.lp h2,
+.lp h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.lp h2 {
+  font-size: clamp(1.6rem, 4vw, 2.3rem);
+  line-height: 1.25;
+}
+
+.lp p {
+  margin: 0;
+}
+
+.lp-logo {
+  height: 32px;
+  width: auto;
+  display: block;
+}
+
+/* header */
+.lp-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(247, 245, 255, 0.9);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.lp-header-row {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  height: 64px;
+}
+
+.lp-nav {
+  display: none;
+  gap: 24px;
+  margin-left: auto;
+  color: var(--muted);
+}
+
+.lp-nav a:hover {
+  color: var(--grape-deep);
+}
+
+.lp-header-row > .lp-btn {
+  margin-left: auto;
+}
+
+@media (min-width: 760px) {
+  .lp-nav {
+    display: flex;
+  }
+  .lp-header-row > .lp-btn {
+    margin-left: 0;
+  }
+}
+
+/* buttons */
+.lp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 22px;
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 1rem;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+
+.lp-btn-primary {
+  background: var(--grape);
+  color: #fff;
+}
+
+.lp-btn-primary:hover {
+  background: var(--grape-deep);
+}
+
+.lp-btn-secondary {
+  border: 1.5px solid var(--grape);
+  color: var(--grape-deep);
+  background: #fff;
+}
+
+.lp-btn-secondary:hover {
+  background: var(--selected);
+}
+
+.lp-btn-ghost {
+  min-height: 40px;
+  padding: 0 16px;
+  color: var(--grape-deep);
+  border: 1.5px solid var(--line);
+  background: #fff;
+}
+
+.lp-btn-mint {
+  background: var(--mint);
+  color: var(--ink);
+}
+
+.lp-btn-mint:hover {
+  background: #fff;
+}
+
+.lp :is(a, button):focus-visible {
+  outline: 3px solid var(--grape);
+  outline-offset: 3px;
+}
+
+/* hero */
+.lp-hero {
+  padding: 40px 0 56px;
+}
+
+.lp-hero-grid {
+  display: grid;
+  gap: 40px;
+  align-items: center;
+}
+
+@media (min-width: 900px) {
+  .lp-hero {
+    padding: 72px 0 88px;
+  }
+  .lp-hero-grid {
+    grid-template-columns: 1.1fr 0.9fr;
+  }
+}
+
+.lp-hero-text {
+  display: grid;
+  gap: 20px;
+}
+
+.lp-kicker {
+  color: var(--grape-deep);
+  font-weight: 600;
+}
+
+.lp h1 {
+  font-size: clamp(2.6rem, 8vw, 4.4rem);
+  line-height: 1.1;
+}
+
+.lp-lead {
+  font-size: 1.15rem;
+  line-height: 1.7;
+  color: var(--muted);
+  max-width: 34em;
+}
+
+.lp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+/* phone mock */
+.lp-phone {
+  justify-self: center;
+  width: min(320px, 100%);
+  border: 10px solid var(--ink);
+  border-radius: 40px;
+  background: var(--bg);
+  padding: 24px 18px;
+  display: grid;
+  gap: 16px;
+  box-shadow: 0 24px 60px rgba(106, 76, 255, 0.22);
+}
+
+.lp-phone-head strong {
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.25rem;
+}
+
+.lp-phone-head span,
+.lp-phone-foot span {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.lp-phone-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lp-phone-chips span {
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--selected);
+  color: var(--grape-deep);
+  font-size: 0.85rem;
+}
+
+.lp-phone-card {
+  background: #fff;
+  border-radius: 20px;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.lp-phone-card strong {
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.lp-phone-times {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.lp-phone-times span {
+  text-align: center;
+  padding: 9px 0;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  font-size: 0.95rem;
+}
+
+.lp-phone-times span[data-on="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+  font-weight: 600;
+}
+
+.lp-phone-foot {
+  display: grid;
+  gap: 10px;
+  text-align: center;
+}
+
+.lp-phone-foot b {
+  display: block;
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--grape);
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: 500;
+}
+
+/* sections */
+.lp-section {
+  padding: 56px 0;
+}
+
+.lp-section .lp-wrap {
+  display: grid;
+  gap: 28px;
+}
+
+.lp-section-tint {
+  background: #fff;
+  border-block: 1px solid var(--line-soft);
+}
+
+.lp-sub {
+  color: var(--muted);
+  margin-top: -16px !important;
+}
+
+.lp-features {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+.lp-card {
+  background: #fff;
+  border: 1px solid var(--line-soft);
+  border-radius: 20px;
+  padding: 22px;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.lp-card h3 {
+  font-size: 1.15rem;
+}
+
+.lp-card p,
+.lp-steps p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.lp-icon {
+  width: 44px;
+  height: 44px;
+  padding: 10px;
+  border-radius: 14px;
+  background: var(--selected);
+  color: var(--grape-deep);
+}
+
+.lp-business {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.lp-business li {
+  display: grid;
+  gap: 6px;
+  padding: 18px;
+  border-radius: 18px;
+  background: var(--bg);
+}
+
+.lp-business strong {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 1.1rem;
+}
+
+.lp-business span {
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+.lp-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.lp-steps li {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.lp-step-no {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--mint);
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+/* call to action */
+.lp-cta {
+  background: var(--grape);
+  color: #fff;
+  padding: 48px 0;
+}
+
+.lp-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px 32px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.lp-cta p {
+  opacity: 0.9;
+  margin-top: 6px;
+}
+
+.lp-footer {
+  background: var(--ink);
+  color: #C9C3E8;
+  padding: 28px 0;
+  font-size: 0.9rem;
+}
+
+.lp-footer-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+}

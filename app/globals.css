@@ -1,15 +1,34 @@
 :root {
   color-scheme: light;
-  --bg: #f7f4ef;
-  --surface: #fffdf8;
-  --ink: #202124;
-  --muted: #68645f;
-  --line: #ded7cb;
-  --accent: #0f766e;
-  --accent-strong: #0b5f58;
-  --warn: #a34122;
-  --ok: #1c7c47;
-  --shadow: 0 16px 44px rgba(32, 33, 36, 0.08);
+
+  /* Kiwmee brand (docs/BRAND_COLORS.md) */
+  --grape: #6A4CFF;
+  --grape-deep: #4F33E0;
+  --grape-night: #3A22B8;
+  --grape-light: #9B87FF;
+  --mint: #3DDC97;
+  --mint-deep: #0B7A50;
+  --mint-tint: #E3FAF0;
+  --selected: #ECE8FF;
+  --line-soft: #E8E4F8;
+  --danger: #B42318;
+  --danger-bg: #FEF3F2;
+  --warn-bg: #FFF4E5;
+  --font-display: var(--font-mitr), "Mitr", sans-serif;
+  --font-body: var(--font-anuphan), "Anuphan", sans-serif;
+  --radius: 14px;
+
+  /* names the pages already use, now in the brand colours */
+  --bg: #F7F5FF;
+  --surface: #FFFFFF;
+  --ink: #1B1640;
+  --muted: #5F5A7A;
+  --line: #DCD6F5;
+  --accent: var(--grape);
+  --accent-strong: var(--grape-deep);
+  --warn: #B54708;
+  --ok: var(--mint-deep);
+  --shadow: 0 8px 24px rgba(27, 22, 64, 0.08);
 }
 
 * {
@@ -20,7 +39,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
-  font-family: Arial, "Noto Sans Thai", sans-serif;
+  font-family: var(--font-body);
 }
 
 a {
@@ -37,6 +56,13 @@ textarea {
 
 button {
   border: 0;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
 }
 
 .app-shell {

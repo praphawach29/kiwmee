@@ -1,8 +1,8 @@
 # Flexible Booking — Design (v2)
 
-สถานะ: **ขั้นที่ 1–2 เสร็จ** (ฐานข้อมูล + RLS ใน `supabase/` · เครื่องคำนวณคิวว่าง `src/v2/options-engine.js`) · ปรับล่าสุด 25 ต.ค. 2569
+สถานะ: **ขั้นที่ 1–3 เสร็จ** (ฐานข้อมูล + RLS ใน `supabase/` · เครื่องคำนวณคิวว่าง `src/v2/options-engine.js` · RPC จอง/เลื่อน/ยกเลิก) · ปรับล่าสุด 25 ต.ค. 2569
 
-**ตัดสินใจแล้ว** (25 ต.ค. 2569): ใช้ Supabase โปรเจกต์ `booking-v2` (`ezubgqeqdipwfnmorqkj`) ลง migration ขั้นที่ 1 แล้วผ่าน SQL Editor ·
+**ตัดสินใจแล้ว** (25 ต.ค. 2569): ใช้ Supabase โปรเจกต์ `booking-v2` (`ezubgqeqdipwfnmorqkj`) ลง migration ขั้นที่ 1 แล้วผ่าน SQL Editor (ขั้นที่ 3 = ไฟล์ `…000300` ต้องรันเพิ่ม) ·
 **ห้ามแตะ `rdbzdshvlfxenpsiyjzl`** — เป็นฐานข้อมูลของ v1 ที่บอท LINE ยังใช้งานอยู่ (ชื่อตารางชนกับ v2) · ทำต่อใน repo นี้ ·
 กลุ่มลูกค้าแรก **ร้านเสริมสวย และร้านตัดผมชาย** · หน้าแรกให้ลูกค้าเลือกเองว่าจะเริ่มจากวันที่หรือจากบริการ (ข้อ 5)
 
@@ -59,7 +59,7 @@
 |---|---|
 | ข้อมูล | Postgres ของ Supabase · migration ทุกไฟล์อยู่ใน `supabase/migrations/` (ห้ามแก้ DB มือโดยไม่มี migration) |
 | แอดมินร้าน | Supabase Auth (อีเมล/รหัสผ่าน หรือ LINE Login ภายหลัง) + ตาราง `business_members` |
-| ลูกค้าจองผ่านเว็บ | ไม่ต้องล็อกอิน เรียก RPC ที่เปิดให้ `anon` เฉพาะที่จำเป็น (อ่านตัวเลือก, สร้างการจองแบบ hold) |
+| ลูกค้าจองผ่านเว็บ | ไม่ต้องล็อกอิน หน้าเว็บเรียก API route ของเรา (มี rate limit) ซึ่งเรียก RPC ด้วย service role · **`anon` เรียก RPC จองตรงไม่ได้** (เปลี่ยนจากร่างแรก: กันคนยิง hold เต็มปฏิทิน) |
 | ลูกค้าจองผ่าน LIFF | ส่ง LINE ID token มา ตรวจฝั่งเซิร์ฟเวอร์ (Next.js API route) แล้วผูก `customers.line_user_id` |
 | งานเบื้องหลัง (เตือนนัด, หมดเวลา hold, no-show) | pg_cron → API route หรือ Edge Function ด้วย service role |
 
@@ -375,11 +375,27 @@ POST /api/b/{slug}/options
 - เหตุผลเพิ่มจากชุดเดิม 2 ตัว: `OUTSIDE_BOOKING_WINDOW` (ก่อนวันนี้/เกิน `max_advance_days`), `NOT_OFFERED` (ช่างที่เลือกไม่ทำบริการนี้)
 - ยังไม่มี: คิดราคา (ทำพร้อม `create_booking` ขั้นที่ 3) และ API route `/api/b/{slug}/options` (ทำพร้อมหน้าจองขั้นที่ 4)
 
-### ตอนกดยืนยัน
+### ตอนกดยืนยัน (ทำแล้วในขั้นที่ 3: `supabase/migrations/20261025000300_booking_rpcs.sql`)
 
 `create_booking` (RPC `security definer`) **คำนวณซ้ำฝั่งฐานข้อมูล** ไม่เชื่อค่าจากหน้าเว็บ:
 ตรวจขั้นที่ flow บังคับครบ → เลือกทรัพยากรที่ว่าง (กรณี "ใครก็ได้") → คิดราคา → insert `bookings` + `booking_resources`
 ถ้า constraint หรือการตรวจความจุไม่ผ่าน ตอบ `CONFLICT` (หน้าจอแสดง "ช่วงเวลานี้เพิ่งถูกจอง" แบบที่ repo มีอยู่แล้ว)
+
+| RPC | ทำอะไร |
+|---|---|
+| `create_booking(business_id, offering_id, start_at, customer jsonb, resource_id?, duration?, party?, hold?, source?, notes?)` | ตรวจช่องนั้นซ้ำทั้งหมด เลือกทรัพยากร (กรณี "ใครก็ได้" เอาตัวแรกที่ว่างตาม `sort_order`) คิดราคา หา/สร้างลูกค้า (LINE ID แล้วเบอร์) · `hold = true` → `held` ถึง `hold_minutes` |
+| `reschedule_booking(booking_id, start_at, resource_id?, duration?)` | ไม่นับตัวเองเป็นคิวชน · **คงช่างที่ลูกค้าเลือกไว้** ถ้าไม่ระบุใหม่ (ร้านที่ระบบเลือกช่างให้ ย้ายไปช่างที่ว่างได้) |
+| `confirm_booking(booking_id)` | `held` → `confirmed` (จ่ายเงินแล้ว) · hold หมดเวลาแล้วตอบ `HOLD_EXPIRED` |
+| `cancel_booking(booking_id, reason?)` | ปล่อยคิวทันที เรียกซ้ำได้ไม่ error |
+| `expire_holds(business_id?)` | ปล่อย hold ที่หมดเวลา · RPC ข้างบนเรียกเองทุกครั้ง และเครื่องคำนวณคิวว่างไม่นับ hold ที่หมดเวลา จึงยังไม่ต้องใช้ pg_cron |
+
+- error มีรหัสใน `message`: `BK409` = เพิ่งถูกจอง (`FULLY_BOOKED`, `HOLD_EXPIRED`) · `BK422` = จองแบบนี้ไม่ได้
+  (`BUSINESS_CLOSED`, `STAFF_OFF`, `NOT_OFFERED`, `NO_WORKING_WINDOW`, `PAST_WORKING_HOURS`, `OUTSIDE_BOOKING_WINDOW`,
+  `INVALID_TIME`, `INVALID_DURATION`, `INVALID_PARTY_SIZE`, `CUSTOMER_NAME_REQUIRED`, `NOT_CHANGEABLE`) · `BK404` = ไม่พบ
+- เรียกได้: สมาชิกร้าน (เฉพาะร้านตัวเอง) และ service role · `source = 'admin'` ข้าม lead time และช่องเวลา 15 นาที
+- ประวัติสถานะเขียนด้วย trigger ทุกเส้นทาง (เหตุผลยกเลิก/หมดเวลา hold อยู่ใน `reason`)
+- ราคา `booking_price`: กฎที่เจาะจงกว่าชนะ · `per_hour` คิดทีละนาที (16:00–18:00 ข้ามราคา 17:00 = 300 + 450)
+- ทดสอบใน `supabase/tests/booking-rpc.test.js` (`npm run test:db`): จองพร้อมกัน 2 คน, คลาส 12 คน, hold หมดเวลา, เลื่อน, ยกเลิก, ราคา, เหตุผลทุกแบบ
 
 ---
 
@@ -416,7 +432,7 @@ POST /api/b/{slug}/options
 |---|---|---|
 | 1 ✅ | migration ใน `supabase/migrations/`: businesses, members, resources, ตารางเวลา, offerings, requirements, price_rules, flows, customers, bookings, booking_resources + RLS ทุกตาราง · seed ร้านเสริมสวย + ร้านตัดผม | `npm run test:db` 16/16: anon อ่านอะไรไม่ได้, ร้าน A อ่าน/เขียนร้าน B ไม่ได้, staff แก้ catalog ไม่ได้, FK กันอ้างข้ามร้าน, กันจองช่างซ้อน, flow ที่จองไม่จบถูกปฏิเสธ |
 | 2 ✅ | เครื่องคำนวณ `getOptions` (ตรรกะล้วน) ย้ายมาจาก `availability-engine.js` | unit test ทั้ง 2 ร้านตัวอย่าง (+ สนามภายหลัง): ทุก `ask` ทุกทางเริ่ม, การย้อนกลับไปเปลี่ยนตัวเลือก, ความจุ > 1, buffer, ระยะเวลาให้ลูกค้าเลือก |
-| 3 | RPC `create_booking` / `reschedule_booking` / `cancel_booking` + hold หมดอายุ | ทดสอบจองพร้อมกัน 2 คนช่องเดียว → สำเร็จ 1 อีกคนได้ `CONFLICT` · คลาสความจุ 12 รับคนที่ 13 ไม่ได้ |
+| 3 ✅ | RPC `create_booking` / `reschedule_booking` / `cancel_booking` + hold หมดอายุ | ทดสอบจองพร้อมกัน 2 คนช่องเดียว → สำเร็จ 1 อีกคนได้ `CONFLICT` · คลาสความจุ 12 รับคนที่ 13 ไม่ได้ |
 | 4 | หน้าจองอ่าน flow (เว็บ + LIFF) พร้อมหน้าเลือกทางเริ่ม | จองได้ทั้งสองทางเริ่มของร้านเสริมสวย และ flow ร้านตัดผม (Playwright) |
 | 5 | หน้าแอดมิน: ทรัพยากร, บริการ, ราคา, ขั้นตอนจอง (มีตัวอย่างพรีวิว) | ร้านตั้ง flow สนามเองได้โดยไม่ต้องแก้โค้ด |
 | 6 | ย้ายชำระเงิน, LINE, automation มาใช้ business_id + API ใหม่ | การ์ด LINE ยืนยัน/เตือนนัดใช้ได้กับทั้ง 3 ร้าน |

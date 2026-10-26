@@ -16,7 +16,9 @@ async function loadCatalog(db, shop) {
   const q = async (sql) => (await db.query(sql, [id])).rows;
   const [settings, flows, hours, closures, resources, schedules, timeOff, offerings, requirements, offeringResources, prices, busy] =
     await Promise.all([
-      q("select min_lead_minutes, slot_interval_minutes, max_advance_days, hold_minutes from public.business_booking_settings where business_id = $1"),
+      q(`select min_lead_minutes, slot_interval_minutes, max_advance_days, hold_minutes,
+                customer_can_cancel, customer_can_reschedule, customer_change_cutoff_hours
+           from public.business_booking_settings where business_id = $1`),
       q("select entry, require, optional, \"then\", options from public.booking_flows where business_id = $1 and category is null"),
       q("select day_of_week, is_open, open_time, close_time from public.business_hours where business_id = $1"),
       q("select date::text as date, is_full_day, start_time, end_time from public.business_closures where business_id = $1 and date >= current_date - 1"),

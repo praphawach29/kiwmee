@@ -228,6 +228,7 @@ export default function BookingV2Client({ shop, liffId }) {
               {new Intl.DateTimeFormat("th-TH", { timeZone: shop.timezone, hour: "2-digit", minute: "2-digit" }).format(new Date(booking.holdExpiresAt))} น.
             </p>
           )}
+          {booking.manageToken && <ManageLink shop={shop} token={booking.manageToken} />}
         </section>
         <PoweredBy />
       </main>
@@ -339,6 +340,34 @@ export default function BookingV2Client({ shop, liffId }) {
       )}
       <PoweredBy />
     </main>
+  );
+}
+
+// The customer's own link to see, move or cancel this booking later (/b/<slug>/manage/<token>)
+function ManageLink({ shop, token }) {
+  const [copied, setCopied] = useState(false);
+  const path = `/b/${shop.slug}/manage/${token}`;
+  const { cancel, reschedule, cutoffHours } = shop.selfService ?? {};
+  const can = cancel && reschedule ? "เลื่อนหรือยกเลิก" : cancel ? "ยกเลิก" : reschedule ? "เลื่อน" : null;
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(new URL(path, window.location.origin).toString());
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <div className="bk-link-box">
+      <p>
+        {can ? `${can}นัดเองได้จากลิงก์นี้` : "ดูการจองนี้ได้จากลิงก์นี้"}
+        {can && cutoffHours > 0 ? ` (ถึง ${cutoffHours} ชม. ก่อนนัด)` : ""} · เก็บลิงก์ไว้ เพราะลิงก์นี้เป็นของคุณคนเดียว
+      </p>
+      <a className="bk-secondary" href={path} data-testid="manage-link">ดูการจองของฉัน</a>
+      <button type="button" className="bk-text-button" onClick={copy}>{copied ? "คัดลอกลิงก์แล้ว" : "คัดลอกลิงก์"}</button>
+    </div>
   );
 }
 

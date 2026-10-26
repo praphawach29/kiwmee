@@ -37,6 +37,15 @@ function bangkokTuesday() {
 }
 const DAY = bangkokTuesday();
 
+// A Tuesday 1–7 days ago
+function pastTuesday() {
+  const d = new Date(Date.now() + 7 * 3600 * 1000);
+  d.setUTCDate(d.getUTCDate() - 1);
+  while (d.getUTCDay() !== 2) d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+const PAST = pastTuesday();
+
 async function as(user, fn) {
   await db.query("begin");
   try {
@@ -132,6 +141,39 @@ test("move, mark arrival and finish, and cancel", { skip }, async () => {
   });
 });
 
+test("a visit is recorded afterwards: completed by default, no-shows hold no one, checks still apply", { skip }, async () => {
+  await as(USERS.staffA, async () => {
+    const shop = await admin.memberShop(db, "bloom-hair");
+    const done = await bookings.createBooking(db, shop, { offeringId: CUT, resourceId: NAN, date: PAST, time: "10:00", customer: { name: "ลืมบันทึก", phone: "0812223333" } });
+    assert.equal(done.status, "completed");
+    const missed = await bookings.createBooking(db, shop, { offeringId: CUT, resourceId: BEE, date: PAST, time: "10:00", customer: { name: "ไม่มา" }, status: "no_show" });
+    assert.equal(missed.status, "no_show");
+
+    const list = await bookings.listBookings(db, shop, { from: PAST });
+    const row = list.find((b) => b.id === done.id);
+    assert.deepEqual([row.start, row.end, row.status, row.source, row.price, row.statusReason], ["10:00", "11:00", "completed", "admin", 450, "บันทึกย้อนหลัง"]);
+    const held = (await db.query("select active from public.booking_resources where booking_id = $1", [missed.id])).rows;
+    assert.deepEqual(held, [{ active: false }], "a no-show does not hold ช่างบี");
+    const history = (await db.query("select from_status, to_status, reason from public.booking_status_history where booking_id = $1", [done.id])).rows;
+    assert.deepEqual(history, [{ from_status: null, to_status: "completed", reason: "บันทึกย้อนหลัง" }]);
+
+    // ช่างแนน was busy then; the shop was closed at night; a future time is an ordinary booking
+    await refused(() => bookings.createBooking(db, shop, { offeringId: CUT, resourceId: NAN, date: PAST, time: "10:30", customer: { name: "ซ้อน" } }), (e) => e.status === 409);
+    await refused(() => bookings.createBooking(db, shop, { offeringId: CUT, date: PAST, time: "21:00", customer: { name: "ดึก" } }), (e) => e.status === 422);
+    await refused(() => bookings.createBooking(db, shop, { offeringId: CUT, date: PAST, time: "12:00", customer: { name: "x" }, status: "cancelled" }), (e) => e.status === 400);
+    const later = await bookings.createBooking(db, shop, { offeringId: CUT, resourceId: NAN, date: DAY, time: "12:00", customer: { name: "ล่วงหน้า" }, status: "completed" });
+    assert.equal(later.status, "confirmed", "status only applies to a time that has passed");
+
+    // more than a year back is refused, and the RPC itself refuses a future time
+    const longAgo = new Date(Date.now() - 400 * 86400000).toISOString().slice(0, 10);
+    await refused(() => bookings.createBooking(db, shop, { offeringId: CUT, date: longAgo, time: "12:00", customer: { name: "เก่า" } }), (e) => e.status === 422 && e.details.reason === "OUTSIDE_BOOKING_WINDOW");
+    await refused(
+      () => db.query(`select public.record_past_booking($1, $2, now() + interval '1 day', '{"name":"x"}'::jsonb)`, [SHOP_A, CUT]),
+      (e) => e.code === "BK422" && e.message === "NOT_IN_PAST"
+    );
+  });
+});
+
 test("another shop's owner sees none of it and cannot touch it", { skip }, async () => {
   let id;
   await db.query("begin");
@@ -151,6 +193,10 @@ test("another shop's owner sees none of it and cannot touch it", { skip }, async
     const fake = { id: SHOP_A, timezone: "Asia/Bangkok" };
     assert.deepEqual(await bookings.listBookings(db, fake, { from: DAY }), []);
     await refused(() => db.query("select public.cancel_booking($1)", [id]), (e) => e.code === "42501");
+    await refused(
+      () => db.query(`select public.record_past_booking($1, $2, now() - interval '1 day', '{"name":"x"}'::jsonb)`, [SHOP_A, CUT]),
+      (e) => e.code === "42501"
+    );
   } finally {
     await db.query("rollback");
   }

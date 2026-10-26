@@ -38,6 +38,11 @@ function today() {
   return d.toISOString().slice(0, 10);
 }
 
+// "YYYY-MM-DDTHH:MM" now, in the shop's time (Bangkok), to tell a past start from a future one
+function nowLocal() {
+  return new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 16);
+}
+
 /** busy/error/done around one save; `run` returns true when it worked */
 function useSave() {
   const [state, setState] = useState({ busy: false, error: "", done: "" });
@@ -259,11 +264,13 @@ function BookingsTab({ slug, catalog }) {
                     {b.customer.phone && <a className="ad-link" href={`tel:${b.customer.phone}`}>{b.customer.phone}</a>}
                     {b.customer.phone ? " · " : ""}
                     {SOURCE[b.source] ?? b.source}
+                    {b.statusReason === "บันทึกย้อนหลัง" ? " (ย้อนหลัง)" : ""}
                     {b.status === "held" && b.holdExpiresAt
                       ? ` · รอถึง ${new Date(b.holdExpiresAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}`
                       : ""}
                   </div>
                   {b.notes && <p className="ad-booking-notes">{b.notes}</p>}
+                  {b.statusReason && ["cancelled", "no_show"].includes(b.status) && <p className="ad-booking-notes">{b.statusReason}</p>}
                 </div>
                 <div className="ad-booking-actions">
                   {open && b.status !== "held" && (
@@ -306,6 +313,12 @@ function BookingsTab({ slug, catalog }) {
   );
 }
 
+const PAST_STATUS = [
+  ["completed", "ใช้บริการแล้ว"],
+  ["checked_in", "กำลังใช้บริการ"],
+  ["no_show", "ไม่มา"]
+];
+
 function durationsOf(offering) {
   if (offering?.durationMode !== "customer_choice") return [];
   const out = [];
@@ -328,7 +341,8 @@ function BookingForm({ slug, catalog, booking, defaultDate, onClose, onSaved }) 
       partySize: booking?.partySize ?? 1,
       name: "",
       phone: "",
-      notes: ""
+      notes: "",
+      status: "completed"
     };
   });
   const [free, setFree] = useState(null);
@@ -337,6 +351,8 @@ function BookingForm({ slug, catalog, booking, defaultDate, onClose, onSaved }) 
   const offering = catalog.offerings.find((o) => o.id === f.offeringId);
   const resources = catalog.resources.filter((r) => r.active && offering?.resourceIds.includes(r.id));
   const durations = durationsOf(offering);
+  // a new booking whose start has passed records a visit afterwards
+  const past = !booking && Boolean(f.date && f.time) && `${f.date}T${f.time}` < nowLocal();
 
   function chooseOffering(id) {
     set({ offeringId: id, resourceId: "", time: "", durationMinutes: durationsOf(catalog.offerings.find((o) => o.id === id))[0] ?? "" });
@@ -376,7 +392,8 @@ function BookingForm({ slug, catalog, booking, defaultDate, onClose, onSaved }) 
             offeringId: f.offeringId,
             partySize: Number(f.partySize) || 1,
             customer: { name: f.name, phone: f.phone },
-            notes: f.notes
+            notes: f.notes,
+            ...(past ? { status: f.status } : {})
           })
     );
     if (ok) onSaved(f.date);
@@ -430,7 +447,7 @@ function BookingForm({ slug, catalog, booking, defaultDate, onClose, onSaved }) 
         {free === null ? (
           <span className="ad-muted">กำลังดู…</span>
         ) : free.times.length === 0 ? (
-          <span className="ad-muted">ไม่มีช่วงที่ว่างในวันนั้น</span>
+          <span className="ad-muted">{!booking && f.date < today() ? "วันที่ผ่านมาแล้ว — พิมพ์เวลาเริ่มเองเพื่อบันทึกย้อนหลัง" : "ไม่มีช่วงที่ว่างในวันนั้น"}</span>
         ) : (
           <div className="ad-chips">
             {free.times.map((t) => (
@@ -439,6 +456,16 @@ function BookingForm({ slug, catalog, booking, defaultDate, onClose, onSaved }) 
           </div>
         )}
       </div>
+      {past && (
+        <div className="ad-field">
+          เวลานี้ผ่านไปแล้ว — บันทึกย้อนหลังเป็น
+          <div className="ad-chips">
+            {PAST_STATUS.map(([value, label]) => (
+              <button key={value} type="button" className="ad-chip" data-on={f.status === value} onClick={() => set({ status: value })}>{label}</button>
+            ))}
+          </div>
+        </div>
+      )}
       {!booking && (
         <div className="ad-grid">
           <label className="ad-field">ชื่อลูกค้า<input required value={f.name} onChange={(e) => set({ name: e.target.value })} autoComplete="off" /></label>
@@ -448,7 +475,7 @@ function BookingForm({ slug, catalog, booking, defaultDate, onClose, onSaved }) 
       )}
       <Status save={save} />
       <div className="ad-row">
-        <button className="ad-primary" disabled={save.busy}>{booking ? "เลื่อนนัด" : "บันทึกการจอง"}</button>
+        <button className="ad-primary" disabled={save.busy}>{booking ? "เลื่อนนัด" : past ? "บันทึกย้อนหลัง" : "บันทึกการจอง"}</button>
         <button type="button" className="ad-secondary" onClick={onClose}>ปิด</button>
       </div>
     </form>
@@ -1119,7 +1146,7 @@ function HoursTab({ slug, catalog, onSaved }) {
 
   async function submit(event) {
     event.preventDefault();
-    const settings = Object.fromEntries(Object.entries(form.settings).map(([k, v]) => [k, toInt(v)]));
+    const settings = Object.fromEntries(Object.entries(form.settings).map(([k, v]) => [k, typeof v === "boolean" ? v : toInt(v)]));
     if (await save.run(() => api("PUT", shopPath(slug), { ...form, settings }))) onSaved();
   }
 
@@ -1168,6 +1195,16 @@ function HoursTab({ slug, catalog, onSaved }) {
           <label className="ad-field">จองล่วงหน้าอย่างน้อย (นาที)<input type="number" min={0} required value={form.settings.minLeadMinutes} onChange={(e) => setSetting("minLeadMinutes", e.target.value)} /></label>
           <label className="ad-field">เวลาเริ่มทุก ๆ (นาที)<input type="number" min={5} required value={form.settings.slotIntervalMinutes} onChange={(e) => setSetting("slotIntervalMinutes", e.target.value)} /></label>
           <label className="ad-field">เปิดให้จองล่วงหน้า (วัน)<input type="number" min={1} max={365} required value={form.settings.maxAdvanceDays} onChange={(e) => setSetting("maxAdvanceDays", e.target.value)} /></label>
+        </div>
+        <h2>ลูกค้าเปลี่ยนการจองเอง</h2>
+        <p className="ad-muted">หลังจอง ลูกค้าได้ลิงก์ของการจองนั้น ใช้ดู เลื่อน หรือยกเลิกเองได้ตามที่ร้านอนุญาต</p>
+        <div className="ad-grid">
+          <label className="ad-check"><input type="checkbox" checked={form.settings.customerCanReschedule} onChange={(e) => setSetting("customerCanReschedule", e.target.checked)} />ให้ลูกค้าเลื่อนนัดเอง</label>
+          <label className="ad-check"><input type="checkbox" checked={form.settings.customerCanCancel} onChange={(e) => setSetting("customerCanCancel", e.target.checked)} />ให้ลูกค้ายกเลิกเอง</label>
+          <label className="ad-field">
+            ทำได้ถึงก่อนนัด (ชั่วโมง)
+            <input type="number" min={0} max={720} required value={form.settings.customerChangeCutoffHours} onChange={(e) => setSetting("customerChangeCutoffHours", e.target.value)} />
+          </label>
         </div>
         <Status save={save} />
         <button className="ad-primary" disabled={save.busy}>บันทึก</button>

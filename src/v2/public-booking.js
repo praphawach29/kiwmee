@@ -9,6 +9,7 @@ const crypto = require("node:crypto");
 const { AppError, badRequest, notFound } = require("../errors");
 const { findShop, loadCatalog } = require("./catalog-repository");
 const { getOptions, nextStep, reconcile, localToMs } = require("./options-engine");
+const { issueToken } = require("./manage-booking");
 
 const ASKABLE = ["offering", "resource", "date", "time", "duration", "party"];
 const SELECTED_KEYS = ["offeringId", "resourceId", "date", "time", "durationMinutes", "partySize"];
@@ -72,6 +73,12 @@ async function shopInfo(db, slug) {
       entry: catalog.flow.entry,
       then: catalog.flow.then,
       showAnyStaff: Boolean(catalog.flow.options?.show_any_staff)
+    },
+    // what the customer may do later from the link they get after booking
+    selfService: {
+      cancel: catalog.settings?.customer_can_cancel ?? true,
+      reschedule: catalog.settings?.customer_can_reschedule ?? true,
+      cutoffHours: catalog.settings?.customer_change_cutoff_hours ?? 2
     },
     offerings: [...catalog.offerings].sort(bySort).map((o) => ({
       id: o.id,
@@ -150,9 +157,11 @@ async function book(db, slug, body = {}, { now = new Date(), verifyLineToken = v
 
   const startAt = new Date(localToMs(selected.date, selected.time, shop.timezone)).toISOString();
   const hold = (catalog.flow.then || []).includes("payment");
+  // the customer's link to see, cancel or move this booking (/b/<slug>/manage/<token>)
+  const link = issueToken();
   try {
     const { rows } = await db.query(
-      "select public.create_booking($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9) as booking",
+      "select public.booking_attach_manage_token(public.create_booking($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9), $10) as booking",
       [
         shop.id,
         selected.offeringId,
@@ -162,7 +171,8 @@ async function book(db, slug, body = {}, { now = new Date(), verifyLineToken = v
         selected.durationMinutes ?? null,
         selected.partySize ?? 1,
         hold,
-        line ? "liff" : "web"
+        line ? "liff" : "web",
+        link.hash
       ]
     );
     const b = rows[0].booking;
@@ -175,6 +185,7 @@ async function book(db, slug, body = {}, { now = new Date(), verifyLineToken = v
       endAt: b.end_at,
       holdExpiresAt: b.hold_expires_at,
       price: b.price,
+      manageToken: link.token,
       resources: ids.map((id) => ({ id, name: names.find((n) => n.id === id)?.name ?? null }))
     };
   } catch (error) {

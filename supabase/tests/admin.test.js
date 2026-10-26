@@ -242,7 +242,24 @@ test("opening hours and booking rules are saved and checked", { skip }, async ()
     const c = await admin.getCatalog(db, shop);
     assert.equal(c.shop.name, "Bloom Hair", "the page reads the new name after a reload");
     assert.deepEqual(c.hours[1], { dayOfWeek: 1, isOpen: false, open: "09:30", close: "18:00" });
-    assert.deepEqual(c.settings, { minLeadMinutes: 60, slotIntervalMinutes: 30, maxAdvanceDays: 60, holdMinutes: 10 });
+    assert.deepEqual(c.settings, {
+      minLeadMinutes: 60,
+      slotIntervalMinutes: 30,
+      maxAdvanceDays: 60,
+      holdMinutes: 10,
+      customerCanCancel: true,
+      customerCanReschedule: true,
+      customerChangeCutoffHours: 2
+    });
+
+    // what customers may change themselves from their booking link
+    await admin.saveShop(db, shop, {
+      name: "Bloom Hair",
+      settings: { ...c.settings, customerCanCancel: false, customerChangeCutoffHours: 24 }
+    });
+    const after = (await admin.getCatalog(db, shop)).settings;
+    assert.deepEqual([after.customerCanCancel, after.customerCanReschedule, after.customerChangeCutoffHours], [false, true, 24]);
+    await refused(() => admin.saveShop(db, shop, { name: "x", settings: { ...c.settings, customerChangeCutoffHours: 1000 } }), (e) => e.status === 422);
 
     await refused(() => admin.saveShop(db, shop, { name: "x", hours: hours.slice(0, 6) }), (e) => e.status === 422);
     await refused(() => admin.saveShop(db, shop, { name: "x", hours: hours.map((h) => ({ ...h, close: "09:00" })) }), (e) => e.status === 422);

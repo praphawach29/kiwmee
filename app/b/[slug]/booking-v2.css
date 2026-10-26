@@ -258,3 +258,109 @@
   margin: 0;
   text-align: right;
 }
+
+/* the customer's own booking (/b/<slug>/manage/<token>) and the link to it after booking */
+.bk-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.bk-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.bk-secondary,
+.bk-danger {
+  font: inherit;
+  min-height: 48px;
+  padding: 10px 16px;
+  border-radius: 16px;
+  cursor: pointer;
+}
+
+.bk-secondary {
+  background: var(--surface);
+  color: var(--grape-deep);
+  border: 1px solid var(--line);
+}
+
+.bk-secondary:hover:not(:disabled) {
+  background: var(--selected);
+}
+
+.bk-danger {
+  background: var(--danger);
+  color: #fff;
+  border: 0;
+}
+
+.bk-secondary:disabled,
+.bk-danger:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.bk-text-button {
+  font: inherit;
+  background: none;
+  border: 0;
+  padding: 4px;
+  color: var(--grape-deep);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.bk-center {
+  justify-self: center;
+}
+
+.bk-status {
+  flex: none;
+  font-size: 0.85rem;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--selected);
+  color: var(--grape-deep);
+}
+
+.bk-status:is([data-status="confirmed"], [data-status="checked_in"], [data-status="completed"]) {
+  background: var(--mint-tint);
+  color: var(--mint-deep);
+}
+
+.bk-status:is([data-status="cancelled"], [data-status="no_show"], [data-status="expired"]) {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.bk-field textarea {
+  font: inherit;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #fff;
+  resize: vertical;
+}
+
+.bk-link-box {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--selected);
+}
+
+.bk-link-box p {
+  margin: 0;
+}
+
+a.bk-secondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}

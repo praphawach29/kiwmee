@@ -1,5 +1,6 @@
 // The shop's bookings page (app/dashboard/[slug], "การจอง"): see the day's bookings, take a phone
-// or walk-in booking, move, cancel, and mark arrivals, finished visits and no-shows.
+// or walk-in booking, record one afterwards, move, cancel, and mark arrivals, finished visits and
+// no-shows.
 //
 // Like admin-catalog.js, every function takes a client already running as the signed-in user, so
 // RLS limits reads to the user's shops and the booking RPCs check membership again. Staff members
@@ -13,6 +14,7 @@ const DAY_MS = 24 * 3600 * 1000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const THAI_PHONE = /^0\d{8,9}$/;
 const STATUSES = ["checked_in", "completed", "no_show", "confirmed"];
+const PAST_STATUSES = ["completed", "checked_in", "no_show"];
 
 // What the booking RPCs answer (BK409 / BK422 / BK404 with a reason code), for the shop to read
 const REASON_TEXT = {
@@ -28,6 +30,7 @@ const REASON_TEXT = {
   INVALID_DURATION: "ระยะเวลาไม่ถูกต้องสำหรับบริการนี้",
   INVALID_PARTY_SIZE: "จำนวนคนเกินที่บริการนี้รับได้",
   CUSTOMER_NAME_REQUIRED: "กรุณากรอกชื่อลูกค้า",
+  NOT_IN_PAST: "เวลานี้ยังไม่ถึง บันทึกเป็นการจองปกติแทน",
   NOT_CHANGEABLE: "การจองนี้เปลี่ยนสถานะแบบนี้ไม่ได้แล้ว",
   NOT_FOUND: "ไม่พบการจองนี้"
 };
@@ -87,6 +90,8 @@ async function listBookings(client, shop, { from, days = 1 } = {}) {
     `select b.id, b.status, b.start_at, b.end_at, b.party_size, b.source, b.notes, b.hold_expires_at,
             (b.price_snapshot->>'total')::float8 as price, b.offering_id, o.name as offering_name,
             c.name as customer_name, c.phone as customer_phone, c.line_user_id is not null as from_line,
+            (select h.reason from public.booking_status_history h where h.booking_id = b.id
+              order by h.created_at desc, (h.to_status = b.status) desc limit 1) as status_reason,
             coalesce((select json_agg(json_build_object('id', r.id, 'name', r.name, 'kind', r.kind) order by r.sort_order, r.name)
                         from public.booking_resources br join public.resources r on r.id = br.resource_id
                        where br.booking_id = b.id), '[]'::json) as resources
@@ -111,6 +116,7 @@ async function listBookings(client, shop, { from, days = 1 } = {}) {
       partySize: b.party_size,
       source: b.source,
       notes: b.notes,
+      statusReason: b.status_reason,
       holdExpiresAt: b.hold_expires_at,
       price: b.price,
       offering: { id: b.offering_id, name: b.offering_name },
@@ -136,8 +142,12 @@ async function freeTimes(client, shop, query = {}, now = new Date()) {
   return { times: result.options.map((o) => o.value), reason: result.reason };
 }
 
-/** A booking the shop takes itself (phone call, walk-in): no lead time, any start minute. */
-async function createBooking(client, shop, input = {}) {
+/**
+ * A booking the shop takes itself (phone call, walk-in): no lead time, any start minute.
+ * A start time that has already passed records the visit afterwards, as `status` (completed by
+ * default, or checked_in / no_show), up to a year back.
+ */
+async function createBooking(client, shop, input = {}, now = new Date()) {
   const name = typeof input.customer?.name === "string" ? input.customer.name.trim().slice(0, 100) : "";
   const phone = typeof input.customer?.phone === "string" ? input.customer.phone.replace(/[\s-]/g, "") : "";
   if (!name) throw invalid("กรุณากรอกชื่อลูกค้า");
@@ -145,13 +155,30 @@ async function createBooking(client, shop, input = {}) {
   const offeringId = optionalId(input.offeringId, "บริการ");
   if (!offeringId) throw invalid("เลือกบริการ");
   const notes = typeof input.notes === "string" && input.notes.trim() ? input.notes.trim().slice(0, 500) : null;
+  const start = startAt(shop, input.date, input.time);
+  if (new Date(start) < now) {
+    const status = input.status ?? "completed";
+    if (!PAST_STATUSES.includes(status)) throw badRequest("สถานะไม่ถูกต้อง");
+    const past = await rpc(client, "select public.record_past_booking($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9) as booking", [
+      shop.id,
+      offeringId,
+      start,
+      JSON.stringify({ name, phone: phone || null }),
+      status,
+      optionalId(input.resourceId, "ช่าง/สนาม"),
+      optionalInt(input.durationMinutes, "ระยะเวลา"),
+      optionalInt(input.partySize, "จำนวนคน", 1000) ?? 1,
+      notes
+    ]);
+    return { id: past.booking.id, status };
+  }
   const row = await rpc(
     client,
     "select public.create_booking($1, $2, $3, $4::jsonb, $5, $6, $7, false, 'admin', $8) as booking",
     [
       shop.id,
       offeringId,
-      startAt(shop, input.date, input.time),
+      start,
       JSON.stringify({ name, phone: phone || null }),
       optionalId(input.resourceId, "ช่าง/สนาม"),
       optionalInt(input.durationMinutes, "ระยะเวลา"),
@@ -159,7 +186,7 @@ async function createBooking(client, shop, input = {}) {
       notes
     ]
   );
-  return { id: row.booking.id };
+  return { id: row.booking.id, status: row.booking.status };
 }
 
 async function rescheduleBooking(client, shop, id, input = {}) {

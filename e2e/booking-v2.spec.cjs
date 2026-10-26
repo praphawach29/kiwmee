@@ -115,3 +115,45 @@ test("two customers on one slot: the second is told it was just taken and picks 
   await fillAndConfirm(b, "ลูกค้า B");
   await expect(b.getByTestId("booking-done")).toContainText("จองสำเร็จ");
 });
+
+test("the customer opens their link, moves the booking, then cancels it", async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto("/b/bloom-hair");
+  await page.getByRole("button", { name: /เลือกบริการก่อน/ }).click();
+  await page.getByRole("button", { name: /ทรีตเมนต์/ }).click();
+  await page.getByRole("button", { name: "ช่างบี" }).click();
+  await enabled(page, "date").nth(4).click();
+  await enabled(page, "time").first().click();
+  await fillAndConfirm(page, "ลูกค้าเลื่อนเอง");
+  await expect(page.getByTestId("booking-done")).toContainText("เลื่อนหรือยกเลิกนัดเองได้");
+
+  await page.getByTestId("manage-link").click();
+  await expect(page).toHaveURL(/\/b\/bloom-hair\/manage\/[A-Za-z0-9_-]{32}$/);
+  await page.waitForLoadState("networkidle"); // the buttons work once the page has hydrated
+  const card = page.getByTestId("manage-booking");
+  await expect(card).toContainText("ทรีตเมนต์บำรุงผม");
+  await expect(card).toContainText("ช่างบี");
+  await expect(card).toContainText("ยืนยันแล้ว");
+
+  await page.getByRole("button", { name: "เลื่อนนัด" }).click();
+  await enabled(page, "date").nth(2).click();
+  const time = enabled(page, "time").nth(1);
+  const value = await time.getAttribute("data-value");
+  await time.click();
+  await page.getByRole("button", { name: `ยืนยันเลื่อนเป็น ${value} น.` }).click();
+  await expect(page.getByRole("status")).toContainText(`เวลา ${value} น. แล้ว`);
+  await expect(card).toContainText(`${value}–`);
+  await expect(card).toContainText("ช่างบี", { timeout: 1000 });
+
+  await page.getByRole("button", { name: "ยกเลิกการจอง" }).click();
+  await page.getByLabel(/เหตุผล/).fill("ติดธุระ");
+  await page.getByRole("button", { name: "ยืนยันยกเลิก" }).click();
+  await expect(card).toContainText("ยกเลิกแล้ว");
+  await expect(page.getByRole("button", { name: "เลื่อนนัด" })).toHaveCount(0);
+  expect(errors).toEqual([]);
+
+  // a made-up link finds nothing
+  const missing = await page.goto("/b/bloom-hair/manage/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+  expect(missing.status()).toBe(404);
+});

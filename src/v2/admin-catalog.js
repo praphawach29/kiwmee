@@ -182,7 +182,9 @@ async function memberShop(client, slug, { owner = false } = {}) {
 async function getCatalog(client, shop) {
   const queries = [
     "select name, kind from public.businesses where id = $1",
-    "select min_lead_minutes, slot_interval_minutes, max_advance_days, hold_minutes from public.business_booking_settings where business_id = $1",
+    `select min_lead_minutes, slot_interval_minutes, max_advance_days, hold_minutes,
+            customer_can_cancel, customer_can_reschedule, customer_change_cutoff_hours
+       from public.business_booking_settings where business_id = $1`,
     "select day_of_week, is_open, open_time, close_time from public.business_hours where business_id = $1",
     `select id, date::text as date, is_full_day, start_time, end_time, reason from public.business_closures
         where business_id = $1 and date >= current_date - 1 order by date, start_time nulls first`,
@@ -205,7 +207,15 @@ async function getCatalog(client, shop) {
   for (const sql of queries) results.push((await client.query(sql, [shop.id])).rows);
   const [[current], settings, hours, closures, resources, schedules, timeOff, offerings, requirements, links, prices, flows] = results;
 
-  const s = settings[0] ?? { min_lead_minutes: 15, slot_interval_minutes: 15, max_advance_days: 30, hold_minutes: 10 };
+  const s = settings[0] ?? {
+    min_lead_minutes: 15,
+    slot_interval_minutes: 15,
+    max_advance_days: 30,
+    hold_minutes: 10,
+    customer_can_cancel: true,
+    customer_can_reschedule: true,
+    customer_change_cutoff_hours: 2
+  };
   const flow = flows[0] ?? { entry: ["date", "offering"], require: ["offering", "date", "time"], optional: ["resource"], then: ["customer"], options: {} };
   // A shop with no hours saved yet is open 10–19 every day (as the options engine assumes)
   const dayHours = (d) => hours.find((h) => h.day_of_week === d) ?? (hours.length ? null : { is_open: true, open_time: "10:00", close_time: "19:00" });
@@ -216,7 +226,10 @@ async function getCatalog(client, shop) {
       minLeadMinutes: s.min_lead_minutes,
       slotIntervalMinutes: s.slot_interval_minutes,
       maxAdvanceDays: s.max_advance_days,
-      holdMinutes: s.hold_minutes
+      holdMinutes: s.hold_minutes,
+      customerCanCancel: s.customer_can_cancel,
+      customerCanReschedule: s.customer_can_reschedule,
+      customerChangeCutoffHours: s.customer_change_cutoff_hours
     },
     hours: [0, 1, 2, 3, 4, 5, 6].map((d) => {
       const h = dayHours(d);
@@ -299,14 +312,20 @@ async function saveShop(client, shop, input = {}) {
       int(s.minLeadMinutes, "จองล่วงหน้าอย่างน้อย (นาที)", { min: 0, max: 10080 }),
       int(s.slotIntervalMinutes, "ช่วงเวลาเริ่ม (นาที)", { min: 5, max: 240 }),
       int(s.maxAdvanceDays, "เปิดให้จองล่วงหน้า (วัน)", { min: 1, max: 365 }),
-      int(s.holdMinutes ?? 10, "เวลากันคิวรอชำระเงิน (นาที)", { min: 1, max: 1440 })
+      int(s.holdMinutes ?? 10, "เวลากันคิวรอชำระเงิน (นาที)", { min: 1, max: 1440 }),
+      s.customerCanCancel !== false,
+      s.customerCanReschedule !== false,
+      int(s.customerChangeCutoffHours ?? 2, "ลูกค้าเปลี่ยนเองได้ถึงก่อนนัด (ชั่วโมง)", { min: 0, max: 720 })
     ];
     await client.query(
-      `insert into public.business_booking_settings (business_id, min_lead_minutes, slot_interval_minutes, max_advance_days, hold_minutes)
-       values ($1, $2, $3, $4, $5)
+      `insert into public.business_booking_settings (business_id, min_lead_minutes, slot_interval_minutes, max_advance_days, hold_minutes,
+                                                     customer_can_cancel, customer_can_reschedule, customer_change_cutoff_hours)
+       values ($1, $2, $3, $4, $5, $6, $7, $8)
        on conflict (business_id) do update set min_lead_minutes = excluded.min_lead_minutes,
          slot_interval_minutes = excluded.slot_interval_minutes, max_advance_days = excluded.max_advance_days,
-         hold_minutes = excluded.hold_minutes`,
+         hold_minutes = excluded.hold_minutes, customer_can_cancel = excluded.customer_can_cancel,
+         customer_can_reschedule = excluded.customer_can_reschedule,
+         customer_change_cutoff_hours = excluded.customer_change_cutoff_hours`,
       [shop.id, ...values]
     );
   }

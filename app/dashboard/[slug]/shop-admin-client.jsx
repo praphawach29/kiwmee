@@ -22,6 +22,7 @@ const RESOURCE_KINDS = { staff: "ช่าง / พนักงาน", court: "
 const UNITS = { per_booking: "ต่อครั้ง", per_hour: "ต่อชั่วโมง", per_person: "ต่อคน" };
 const TABS = [
   ["bookings", "การจอง"],
+  ["bills", "บิลและรายรับ"],
   ["flow", "ขั้นตอนจอง"],
   ["offerings", "บริการและราคา"],
   ["resources", "ช่าง / สนาม"],
@@ -126,6 +127,7 @@ export default function ShopAdmin({ slug }) {
       </nav>
       <ReadOnly.Provider value={readOnly}>
         {tab === "bookings" && <BookingsTab slug={slug} catalog={catalog} />}
+        {tab === "bills" && <BillsTab slug={slug} catalog={catalog} />}
         {tab === "flow" && <FlowTab slug={slug} catalog={catalog} version={version} onSaved={reload} />}
         {tab === "offerings" && <OfferingsTab slug={slug} catalog={catalog} onSaved={reload} />}
         {tab === "resources" && <ResourcesTab slug={slug} catalog={catalog} onSaved={reload} />}
@@ -164,6 +166,7 @@ function BookingsTab({ slug, catalog }) {
   const [list, setList] = useState(null);
   const [error, setError] = useState("");
   const [form, setForm] = useState(null); // { booking? } while the form is open
+  const [checkout, setCheckout] = useState(null); // the booking whose bill is being closed
   const [showOff, setShowOff] = useState(false);
   const save = useSave();
 
@@ -243,6 +246,8 @@ function BookingsTab({ slug, catalog }) {
           {shown.map((b) => {
             const [label, tone] = STATUS[b.status] ?? [b.status, "off"];
             const open = ["held", "pending", "confirmed"].includes(b.status);
+            const paid = b.bill?.status === "closed";
+            const billable = !paid && ["pending", "confirmed", "checked_in", "completed"].includes(b.status);
             return (
               <li key={b.id} className="ad-booking" data-tone={tone}>
                 <div className="ad-booking-time">
@@ -253,6 +258,7 @@ function BookingsTab({ slug, catalog }) {
                   <div className="ad-row ad-wrap">
                     <strong className="ad-booking-name">{b.customer.name}</strong>
                     <span className="ad-status" data-tone={tone}>{label}</span>
+                    {paid && <span className="ad-status" data-tone="ok">ชำระแล้ว {money(b.bill.paid)}</span>}
                   </div>
                   <div className="ad-muted">
                     {b.offering.name}
@@ -276,8 +282,11 @@ function BookingsTab({ slug, catalog }) {
                   {open && b.status !== "held" && (
                     <button type="button" className="ad-primary" disabled={save.busy} onClick={() => act(b, "status", { status: "checked_in" }, `${b.customer.name} มาถึงแล้ว`)}>มาถึงแล้ว</button>
                   )}
+                  {billable && (
+                    <button type="button" className={["checked_in", "completed"].includes(b.status) ? "ad-primary" : "ad-secondary"} disabled={save.busy} onClick={() => setCheckout(b)}>ปิดบิล</button>
+                  )}
                   {b.status === "checked_in" && (
-                    <button type="button" className="ad-primary" disabled={save.busy} onClick={() => act(b, "status", { status: "completed" }, "บันทึกว่าเสร็จแล้ว")}>เสร็จแล้ว</button>
+                    <button type="button" className="ad-secondary" disabled={save.busy} onClick={() => act(b, "status", { status: "completed" }, "บันทึกว่าเสร็จแล้ว")}>เสร็จแล้ว</button>
                   )}
                   {open && <button type="button" className="ad-secondary" disabled={save.busy} onClick={() => setForm({ booking: b })}>เลื่อน</button>}
                   {open && <button type="button" className="ad-link" disabled={save.busy} onClick={() => cancel(b)}>ยกเลิก</button>}
@@ -285,7 +294,7 @@ function BookingsTab({ slug, catalog }) {
                   {b.status === "checked_in" && (
                     <button type="button" className="ad-link" disabled={save.busy} onClick={() => act(b, "status", { status: "confirmed" }, "ย้อนกลับแล้ว")}>ย้อนกลับ</button>
                   )}
-                  {b.status === "completed" && (
+                  {b.status === "completed" && !paid && (
                     <button type="button" className="ad-link" disabled={save.busy} onClick={() => act(b, "status", { status: "checked_in" }, "ย้อนกลับแล้ว")}>ย้อนกลับ</button>
                   )}
                 </div>
@@ -294,6 +303,18 @@ function BookingsTab({ slug, catalog }) {
           })}
         </ul>
       </section>
+      {checkout && (
+        <CheckoutForm
+          key={checkout.id}
+          slug={slug}
+          booking={checkout}
+          onClose={() => setCheckout(null)}
+          onSaved={() => {
+            setCheckout(null);
+            load();
+          }}
+        />
+      )}
       {form && (
         <BookingForm
           key={form.booking?.id ?? "new"}
@@ -309,6 +330,264 @@ function BookingsTab({ slug, catalog }) {
           }}
         />
       )}
+    </div>
+  );
+}
+
+// ---------- bills (members, staff included; refunds owner-only) ----------
+
+const METHODS = { cash: "เงินสด", transfer: "โอน", card: "บัตร", online: "ออนไลน์" };
+const round2 = (n) => Math.round(Number(n || 0) * 100) / 100;
+
+/** How the customer paid: one or more lines that must add up to `due` */
+function PaymentLines({ lines, setLines, due }) {
+  const paid = round2(lines.reduce((t, l) => t + (Number(l.amount) || 0), 0));
+  const left = round2(due - paid);
+  const setLine = (i, patch) => setLines(lines.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+  return (
+    <div className="ad-field">
+      ชำระโดย
+      {lines.map((l, i) => (
+        <div key={i} className="ad-row ad-wrap">
+          <select value={l.method} onChange={(e) => setLine(i, { method: e.target.value })} aria-label={`ช่องทางที่ ${i + 1}`}>
+            {Object.entries(METHODS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+          <input type="number" min={0} step="0.01" inputMode="decimal" className="ad-short" value={l.amount} onChange={(e) => setLine(i, { amount: e.target.value })} aria-label={`ยอดช่องทางที่ ${i + 1}`} />
+          {lines.length > 1 && <button type="button" className="ad-link" onClick={() => setLines(lines.filter((_, j) => j !== i))}>ลบ</button>}
+        </div>
+      ))}
+      <div className="ad-row ad-wrap">
+        {lines.length < 4 && (
+          <button type="button" className="ad-link" onClick={() => setLines([...lines, { method: "transfer", amount: left > 0 ? String(left) : "" }])}>+ แยกจ่ายหลายช่องทาง</button>
+        )}
+        <span className={left === 0 ? "ad-ok" : "ad-error"} role="status">
+          {left === 0 ? "ยอดครบ" : left > 0 ? `ขาดอีก ${money(left)}` : `เกิน ${money(-left)}`}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+const toPayments = (lines) => lines.map((l) => ({ method: l.method, amount: Number(l.amount) || 0 }));
+
+/** Close a booking's bill after the visit: the amount (editable) and how it was paid */
+function CheckoutForm({ slug, booking, onClose, onSaved }) {
+  const [subtotal, setSubtotal] = useState(String(booking.price ?? 0));
+  const [lines, setLines] = useState([{ method: "cash", amount: String(booking.price ?? 0) }]);
+  const [note, setNote] = useState("");
+  const save = useSave();
+  const due = round2(subtotal);
+
+  function changeSubtotal(value) {
+    setSubtotal(value);
+    // one payment line follows the amount until the shop splits it
+    if (lines.length === 1) setLines([{ ...lines[0], amount: value }]);
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    const ok = await save.run(
+      () => api("POST", shopPath(slug, `/bookings/${booking.id}/checkout`), { subtotal: due, payments: toPayments(lines), note }),
+      "ปิดบิลแล้ว"
+    );
+    if (ok) onSaved();
+  }
+
+  return (
+    <form className="ad-card" onSubmit={submit}>
+      <div className="ad-row ad-between">
+        <h2>ปิดบิล · {booking.customer.name}</h2>
+        <button type="button" className="ad-link" onClick={onClose}>ปิด</button>
+      </div>
+      <p className="ad-muted">{booking.offering.name} · {booking.start}–{booking.end}{booking.resources.length ? ` · ${booking.resources.map((r) => r.name).join(", ")}` : ""}</p>
+      <div className="ad-grid">
+        <label className="ad-field">
+          ยอดรวม (บาท) — แก้ได้ถ้าลูกค้าเพิ่มหรือเปลี่ยนบริการ
+          <input type="number" min={0} step="0.01" inputMode="decimal" required value={subtotal} onChange={(e) => changeSubtotal(e.target.value)} />
+        </label>
+        <label className="ad-field">โน้ต (ไม่บังคับ)<input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} /></label>
+      </div>
+      <PaymentLines lines={lines} setLines={setLines} due={due} />
+      <Status save={save} />
+      <div className="ad-row">
+        <button className="ad-primary" disabled={save.busy}>รับเงิน {money(due)} และปิดบิล</button>
+        <button type="button" className="ad-secondary" onClick={onClose}>ยกเลิก</button>
+      </div>
+    </form>
+  );
+}
+
+/** A sale with no booking: a walk-in, or a shop that takes no bookings */
+function SaleForm({ slug, onClose, onSaved }) {
+  const [f, setF] = useState({ title: "", customerName: "", amount: "", note: "" });
+  const [lines, setLines] = useState([{ method: "cash", amount: "" }]);
+  const save = useSave();
+  const due = round2(f.amount);
+
+  function changeAmount(value) {
+    setF({ ...f, amount: value });
+    if (lines.length === 1) setLines([{ ...lines[0], amount: value }]);
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    const ok = await save.run(() => api("POST", shopPath(slug, "/bills"), { ...f, amount: due, payments: toPayments(lines) }), "บันทึกการขายแล้ว");
+    if (ok) onSaved();
+  }
+
+  return (
+    <form className="ad-card" onSubmit={submit}>
+      <div className="ad-row ad-between">
+        <h2>ขายหน้าร้าน</h2>
+        <button type="button" className="ad-link" onClick={onClose}>ปิด</button>
+      </div>
+      <div className="ad-grid">
+        <label className="ad-field">รายการ<input value={f.title} placeholder="ขายหน้าร้าน" maxLength={100} onChange={(e) => setF({ ...f, title: e.target.value })} /></label>
+        <label className="ad-field">ยอด (บาท)<input type="number" min={0} step="0.01" inputMode="decimal" required value={f.amount} onChange={(e) => changeAmount(e.target.value)} /></label>
+        <label className="ad-field">ชื่อลูกค้า (ไม่บังคับ)<input value={f.customerName} maxLength={100} onChange={(e) => setF({ ...f, customerName: e.target.value })} autoComplete="off" /></label>
+        <label className="ad-field">โน้ต (ไม่บังคับ)<input value={f.note} maxLength={300} onChange={(e) => setF({ ...f, note: e.target.value })} /></label>
+      </div>
+      <PaymentLines lines={lines} setLines={setLines} due={due} />
+      <Status save={save} />
+      <div className="ad-row">
+        <button className="ad-primary" disabled={save.busy}>บันทึกการขาย {money(due)}</button>
+        <button type="button" className="ad-secondary" onClick={onClose}>ยกเลิก</button>
+      </div>
+    </form>
+  );
+}
+
+/** Refund part or all of a closed bill (owners only) */
+function RefundForm({ slug, bill, onClose, onSaved }) {
+  const left = round2(bill.paid - bill.refunded);
+  const [f, setF] = useState({ amount: String(left), method: "cash", reason: "" });
+  const save = useSave();
+
+  async function submit(event) {
+    event.preventDefault();
+    const ok = await save.run(() => api("POST", shopPath(slug, `/bills/${bill.id}/refund`), { ...f, amount: round2(f.amount) }), "คืนเงินแล้ว");
+    if (ok) onSaved();
+  }
+
+  return (
+    <form className="ad-card" onSubmit={submit}>
+      <div className="ad-row ad-between">
+        <h2>คืนเงิน · {bill.title}</h2>
+        <button type="button" className="ad-link" onClick={onClose}>ปิด</button>
+      </div>
+      <p className="ad-muted">คืนได้ไม่เกิน {money(left)}</p>
+      <div className="ad-grid">
+        <label className="ad-field">ยอดที่คืน (บาท)<input type="number" min={0.01} max={left} step="0.01" inputMode="decimal" required value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} /></label>
+        <label className="ad-field">
+          คืนทาง
+          <select value={f.method} onChange={(e) => setF({ ...f, method: e.target.value })}>
+            {Object.entries(METHODS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        </label>
+        <label className="ad-field">เหตุผล (ไม่บังคับ)<input value={f.reason} maxLength={200} onChange={(e) => setF({ ...f, reason: e.target.value })} /></label>
+      </div>
+      <Status save={save} />
+      <div className="ad-row">
+        <button className="ad-danger" disabled={save.busy}>คืนเงิน {money(round2(f.amount))}</button>
+        <button type="button" className="ad-secondary" onClick={onClose}>ยกเลิก</button>
+      </div>
+    </form>
+  );
+}
+
+const paymentText = (payments) =>
+  payments
+    .filter((p) => p.kind !== "refund")
+    .map((p) => `${METHODS[p.method] ?? p.method} ${money(p.amount)}`)
+    .join(" + ");
+
+function BillsTab({ slug, catalog }) {
+  const [day, setDay] = useState(today);
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+  const [form, setForm] = useState(null); // { sale: true } or { refund: bill }
+  const owner = catalog.shop.role === "owner";
+
+  const load = useCallback(async () => {
+    try {
+      setData(await api("GET", shopPath(slug, `/bills?from=${day}`)));
+      setError("");
+    } catch (e) {
+      if (e.status === 401) window.location.href = "/dashboard";
+      setError(e.message);
+    }
+  }, [slug, day]);
+
+  useEffect(() => {
+    setData(null);
+    load();
+  }, [load]);
+
+  function saved() {
+    setForm(null);
+    if (day !== today()) setDay(today());
+    else load();
+  }
+
+  const sum = data?.summary;
+  return (
+    <div className="ad-stack">
+      <section className="ad-card">
+        <div className="ad-row ad-wrap ad-between">
+          <div className="ad-row ad-wrap">
+            <button type="button" className="ad-secondary ad-icon-btn" onClick={() => setDay(addDays(day, -1))} aria-label="วันก่อนหน้า">‹</button>
+            <input type="date" value={day} onChange={(e) => e.target.value && setDay(e.target.value)} aria-label="วันที่" />
+            <button type="button" className="ad-secondary ad-icon-btn" onClick={() => setDay(addDays(day, 1))} aria-label="วันถัดไป">›</button>
+            {day !== today() && <button type="button" className="ad-link" onClick={() => setDay(today())}>วันนี้</button>}
+          </div>
+          <button type="button" className="ad-primary" onClick={() => setForm({ sale: true })}>+ ขายหน้าร้าน</button>
+        </div>
+        <h2>รายรับ {longDate(day)}{day === today() ? " (วันนี้)" : ""}</h2>
+        {sum && (
+          <dl className="ad-totals">
+            <div data-main="true"><dt>รับสุทธิ</dt><dd>{money(sum.net)}</dd></div>
+            {Object.entries(METHODS).map(([k, v]) => (sum.byMethod[k] ? <div key={k}><dt>{v}</dt><dd>{money(sum.byMethod[k])}</dd></div> : null))}
+            {sum.refunds > 0 && <div><dt>คืนเงิน</dt><dd>−{money(sum.refunds)}</dd></div>}
+            <div><dt>จำนวนบิล</dt><dd>{sum.closedBills}</dd></div>
+          </dl>
+        )}
+        {error && <p className="ad-error">{error}</p>}
+        {!data && !error && <p className="ad-muted">กำลังโหลด…</p>}
+        {data && data.bills.length === 0 && <p className="ad-empty">ยังไม่มีบิลในวันนี้ · ปิดบิลจากแท็บ "การจอง" หรือกด "ขายหน้าร้าน"</p>}
+        <ul className="ad-bookings">
+          {(data?.bills ?? []).map((b) => (
+            <li key={b.id} className="ad-booking">
+              <div className="ad-booking-time"><strong>{b.time}</strong></div>
+              <div className="ad-booking-main">
+                <div className="ad-row ad-wrap">
+                  <strong className="ad-booking-name">{b.title}</strong>
+                  {b.status !== "closed" && <span className="ad-status" data-tone="warn">ยังไม่ปิด</span>}
+                  {!b.bookingId && <span className="ad-status" data-tone="info">ขายหน้าร้าน</span>}
+                </div>
+                <div className="ad-muted">
+                  {b.customerName ? `${b.customerName} · ` : ""}
+                  {money(b.total)}
+                  {paymentText(b.payments) ? ` · ${paymentText(b.payments)}` : ""}
+                </div>
+                {b.refunded > 0 && (
+                  <p className="ad-booking-notes">
+                    คืนเงิน {money(b.refunded)}
+                    {b.payments.filter((p) => p.kind === "refund" && p.note).map((p) => ` · ${p.note}`).join("")}
+                  </p>
+                )}
+                {b.note && <p className="ad-booking-notes">{b.note}</p>}
+              </div>
+              <div className="ad-booking-actions">
+                {owner && b.status === "closed" && b.paid - b.refunded > 0 && (
+                  <button type="button" className="ad-link" onClick={() => setForm({ refund: b })}>คืนเงิน</button>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
+      {form?.sale && <SaleForm slug={slug} onClose={() => setForm(null)} onSaved={saved} />}
+      {form?.refund && <RefundForm key={form.refund.id} slug={slug} bill={form.refund} onClose={() => setForm(null)} onSaved={() => { setForm(null); load(); }} />}
     </div>
   );
 }

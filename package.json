@@ -1,5 +1,5 @@
 {
-  "name": "salon-booking-os-v1",
+  "name": "kiwmee",
   "version": "0.1.0",
   "private": true,
   "description": "Salon Booking OS v1 Phase 1 backend core: database rules, availability engine, and booking transactions.",

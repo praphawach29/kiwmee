@@ -565,3 +565,34 @@
 .ad-status[data-tone="warn"] { background: var(--warn-bg); color: var(--warn); }
 .ad-status[data-tone="done"] { background: var(--bg); color: var(--muted); }
 .ad-status[data-tone="off"] { background: var(--danger-bg); color: var(--danger); }
+
+/* bills tab: the day's takings */
+.ad-totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.ad-totals div {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: var(--surface);
+}
+
+.ad-totals div[data-main="true"] {
+  background: var(--mint-tint);
+  border-color: transparent;
+}
+
+.ad-totals dt {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.ad-totals dd {
+  margin: 2px 0 0;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+}

@@ -15,6 +15,7 @@
 | `migrations/20261025000700_booking_status.sql` | หน้าการจองของร้าน: `set_booking_status` (มาถึงแล้ว / เสร็จแล้ว / ไม่มา / ย้อนกลับ) |
 | `migrations/20261025000800_record_past_booking.sql` | ร้านบันทึกการจองย้อนหลัง (`record_past_booking`, ย้อนได้ 1 ปี) · `booking_plan` ได้พารามิเตอร์ `p_allow_past` |
 | `migrations/20261025000900_customer_self_service.sql` | ลูกค้ายกเลิก/เลื่อนเองจากลิงก์ (`customer_cancel_booking`, `customer_reschedule_booking`) · กติกาของร้าน 3 ค่าใน `business_booking_settings` · `bookings.manage_token_hash` |
+| `migrations/20261025001000_bills.sql` | บิลและการรับเงิน (แยกจากการจอง): `open_bill`, `close_bill`, `refund_bill` (เจ้าของเท่านั้น), `void_bill` · `set_booking_status` ย้อนการจองที่ปิดบิลแล้วไม่ได้ |
 | `seed.sql` | ร้านตัวอย่าง 2 ร้าน: Bloom Hair & Beauty (เสริมสวย), Gentleman Barber (ตัดผมชาย) |
 | `tests/` | ทดสอบ RLS และความถูกต้องของข้อมูล + ไฟล์จำลองสิ่งที่ Supabase มีให้ (เฉพาะทดสอบในเครื่อง) |
 

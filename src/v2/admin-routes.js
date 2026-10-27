@@ -26,4 +26,15 @@ function shopRoute(action, { owner = true, body = true, read = false } = {}) {
     });
 }
 
-module.exports = { shopRoute };
+/** The same for app/api/dashboard/brands/*: action(client, body, params), no shop in the URL. */
+function brandRoute(action, { read = false, created = false } = {}) {
+  return (request, context) =>
+    adminRoute(request, async (user) => {
+      const params = await getParams(context);
+      const input = read ? undefined : await boundedJson(request);
+      const result = await asUser(getBookingPool(), user, (client) => action(client, input, params));
+      return json(result ?? { ok: true }, created ? 201 : 200);
+    });
+}
+
+module.exports = { shopRoute, brandRoute };

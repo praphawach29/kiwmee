@@ -21,10 +21,12 @@ Next.js 15 + Supabase · deploy บน Railway service `salon-booking-os-v1` →
 | #11 | **ร้านบันทึกการจองย้อนหลัง** (`record_past_booking`, `…000800`) + **ลูกค้ายกเลิก/เลื่อนเองจากลิงก์** `/b/<slug>/manage/<token>` พร้อมกติกาของร้าน (`…000900`) |
 | #12–#13 | เอกสารออกแบบ LINE / แบรนด์ / บิล / คะแนน / ระดับสมาชิก / แพ็กเกจ (`docs/LOYALTY_DESIGN.md`) |
 | #14 | `CLAUDE.md` + เอกสารนี้ |
+| #16 | **6c แบรนด์/สาขา**: หน้า `/dashboard` แสดงแบรนด์ → สาขา · เพิ่มสาขา (คัดลอกบริการ/ราคา/flow/เวลาทำการ ± ช่าง) · ย้ายร้านที่เปิดแยกไว้เข้าแบรนด์ · จำกัดสาขาตามแพ็กเกจ (ฟรี/เริ่มต้น 1, โปร/สมาชิก หลายสาขา) · migration `…001100` |
 | #15 | **6d บิล**: ปุ่ม "ปิดบิล" ในแท็บการจอง (แก้ยอดได้, แยกจ่ายหลายช่องทาง) · แท็บ "บิลและรายรับ" (รายรับรายวันแยกช่องทาง, ขายหน้าร้าน, คืนเงินเฉพาะเจ้าของ) · migration `…001000` |
 
 **Migration ล่าสุดที่รันบน booking-v2 แล้ว: `20261025001000_bills.sql`** (เจ้าของยืนยัน 27 ต.ค. 2569)
-ไฟล์ถัดไปตั้งชื่อ `20261025001100_…`
+**`20261025001100_brands.sql` (PR #16) ต้องให้เจ้าของรันก่อน merge** — เช็กว่ารันแล้วหรือยัง · ไฟล์ถัดไปตั้งชื่อ `20261025001200_…`
+แพ็กเกจของแบรนด์ตั้งด้วย SQL (ยังไม่มีระบบเก็บเงิน): `supabase/README.md` → "ตั้งแพ็กเกจของแบรนด์"
 
 ตัวอย่างหน้าจอบัตรสมาชิก (ยังไม่ใช่โค้ดจริง): https://claude.ai/artifact/Whda2NEfEyUgwDL62cWfKz
 — หน้า "ของฉัน" ใน LINE, บัตร 5 ระดับ, หน้าตั้งค่าบัตรของร้าน (เปิดได้เฉพาะเจ้าของ)
@@ -69,7 +71,7 @@ Next.js 15 + Supabase · deploy บน Railway service `salon-booking-os-v1` →
 | 6d ✅ | บิล (PR #15) — มัดจำมีในตารางแล้วแต่ยังไม่มีหน้าจอ (ทำใน 6f) | — |
 | 6a | LIFF ล็อกอิน LINE ในหน้าจอง · การ์ดยืนยัน + เตือนนัด (ปุ่มเปิดลิงก์จัดการการจอง) | เจ้าของสร้าง LINE Login channel + LIFF app + Messaging API channel (provider เดียวกัน) |
 | 6b | หน้า "ของฉัน" `/me` ใน LIFF: นัดที่จะถึง + ประวัติ ข้ามร้าน | 6a |
-| **6c ← ทำต่อได้เลย** | แบรนด์/สาขา: `brands`, `brand_members`, ย้ายร้านเดิม, ปุ่มเพิ่มสาขา, `brand_plans` | — |
+| 6c ✅ | แบรนด์/สาขา (PR #16) | — |
 | 6e | คะแนน: กติกา, ได้ตอนปิดบิล, ดึงคืนตอนคืนเงิน, หมดอายุ + เตือน, QR สมาชิก | 6b, 6c, 6d |
 | 6e+ | ระดับสมาชิก + บัตรตามระดับ + รางวัลแบบคูปอง | 6e |
 | 6f | ลูกค้าเลือกรางวัลตอนจอง (hold/redeem/release) · ย้ายระบบชำระเงิน/ตรวจสลิปของ v1 | 6e |
@@ -102,7 +104,7 @@ D=/var/lib/postgresql/kiwmee-test
 mkdir -p $D && chown postgres $D && chmod 700 $D
 [ -f $D/PG_VERSION ] || su postgres -c "/usr/lib/postgresql/16/bin/initdb -D $D -U postgres --auth=trust -E UTF8"
 su postgres -c "/usr/lib/postgresql/16/bin/pg_ctl -D $D -o '-p 54329 -k /tmp' -l $D/log start"
-SUPABASE_TEST_DB_URL=postgres://postgres@127.0.0.1:54329/booking_test npm run test:db   # ล่าสุด 58/58
+SUPABASE_TEST_DB_URL=postgres://postgres@127.0.0.1:54329/booking_test npm run test:db   # ล่าสุด 63/63
 ```
 - อย่าเก็บ data dir ไว้ใน scratchpad (`/tmp/claude-0/...`) — สิทธิ์โฟลเดอร์ถูกรีเซ็ตแล้ว Postgres เปิดไม่ได้
 - เครื่องรีสตาร์ตแล้ว server หยุด ต้องสั่ง `pg_ctl … start` ใหม่
@@ -119,7 +121,9 @@ PILOT_BASE_URL=http://127.0.0.1:3100 PW_EXECUTABLE=$(ls -d /opt/pw-browsers/chro
 
 **แอดมิน `/dashboard`** ต้องใช้ Supabase Auth จริง ล็อกอินในเครื่อง cloud ไม่ได้ → ดูหน้าจอจริงได้โดยเปิด `next dev` แล้วใช้ Playwright
 `page.route("**/api/dashboard/shops/**")` ตอบด้วยฟังก์ชันจริงใน `src/v2/admin-*.js` ที่รันกับ DB ทดสอบในฐานะเจ้าของร้าน
-(`admin.actAs(db, user)` ใน transaction) — วิธีที่ใช้ตรวจหน้าบิลใน PR #15
+(`admin.actAs(db, user)` ใน transaction) — วิธีที่ใช้ตรวจหน้าบิล (PR #15) และหน้าแบรนด์ (PR #16)
+**ต้องเข้าคิวทีละคำขอ** (หน้าเว็บยิงหลายคำขอพร้อมกัน แต่ pg client เดียวมี transaction ได้ทีละอัน) · หน้า `/dashboard` ต้องตั้ง
+`SUPABASE_URL`/`SUPABASE_PUBLISHABLE_KEY` ปลอมตอน `next dev` และตอบ `/api/dashboard/session` ด้วย `{ data: { user } }`
 
 **Git**: branch ของ session มักถูก squash merge ไปแล้ว · ห้าม force push (ถูกปฏิเสธ) →
 `git checkout -B <branch> origin/main` แล้ว `git merge -s ours origin/<branch>` ก่อน push
@@ -131,4 +135,4 @@ PILOT_BASE_URL=http://127.0.0.1:3100 PW_EXECUTABLE=$(ls -d /opt/pw-browsers/chro
 ## 6. ข้อความเริ่ม session ใหม่ (คัดลอกไปใช้ได้)
 
 > อ่าน `CLAUDE.md` และ `docs/HANDOFF.md` แล้วเตรียมเครื่องตาม §5 (npm ci, npm test, เปิด Postgres แล้ว test:db, next build)
-> รายงานสั้น ๆ ว่ารันได้ไหม แล้วรอคำสั่ง · งานถัดไปที่วางไว้คือ 6c แบรนด์/สาขา (หรือ 6a ถ้า LINE channel พร้อม)
+> รายงานสั้น ๆ ว่ารันได้ไหม แล้วรอคำสั่ง · งานถัดไป: 6a LINE — ถามเจ้าของว่าสร้าง LINE Login channel + LIFF + Messaging API (provider เดียวกัน) แล้วหรือยัง

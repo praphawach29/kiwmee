@@ -104,6 +104,11 @@ create table public.loyalty_rewards (          -- ของที่แลกไ
   offering_ids uuid[],                          -- kind = free_offering: บริการที่ฟรีได้ (ข้ามสาขาได้)
   max_free_minutes int,                         -- free_offering แบบรายชั่วโมง: ฟรีสูงสุดกี่นาที (สนาม 60)
   business_ids uuid[],                          -- null = ทุกสาขาที่ can_redeem · มีค่า = เฉพาะสาขาเหล่านี้
+  image_path text,                              -- รูปปกรางวัล (Supabase Storage) แสดงเป็นการ์ดคูปอง
+  description text,
+  stock int check (stock >= 0),                 -- จำนวนสิทธิ์ทั้งหมด ("จำนวน 1,000 สิทธิ์") · null = ไม่จำกัด
+  per_member_limit int check (per_member_limit > 0),   -- แลกได้กี่ครั้งต่อคน · null = ไม่จำกัด
+  starts_at timestamptz, ends_at timestamptz,   -- ช่วงแคมเปญ ("1 แถม 1" ถึงสิ้นเดือน)
   active boolean not null default true
 );
 ```
@@ -111,6 +116,8 @@ create table public.loyalty_rewards (          -- ของที่แลกไ
 - **คิดคะแนนจากยอดที่จ่ายจริง** (หลังหักส่วนลดจากคะแนน) ปัดลง: 250 บาท, ทุก 100 ได้ 10 → 20 คะแนน
 - `per_visit` = บัตรสะสมตรา: มาครบ 10 ครั้ง (`earn_points` 1, รางวัล `points_cost` 10)
 - เปลี่ยนกติกาแล้ว**ไม่คิดย้อนหลัง** คะแนนที่ได้ไปแล้วคงเดิม
+- รางวัลแสดงเป็น**การ์ดคูปองมีรูป** (แบบ Privage): ชื่อ, จำนวนสิทธิ์ที่เหลือ, ใช้กี่คะแนน, ป้าย "แลกได้" / "คะแนนไม่พอ" / "หมดแล้ว" ·
+  สิทธิ์ที่เหลือนับจากรายการ redeem + hold (ล็อกต่อรางวัล กันแลกเกินจำนวน)
 
 ---
 
@@ -146,7 +153,7 @@ alter table public.loyalty_rewards add column min_tier_rank int not null default
 ┌──────────────────────────────────────┐
 │ [โลโก้แบรนด์]               GOLD ✦   │  ← สี/ลายตาม card_style ของระดับ
 │                                      │
-│ คุณสมใจ ใจดี                          │
+│ คุณสมใจ ใจดี · เลขสมาชิก K-000123     │
 │ 1,250 คะแนน · หมดอายุ 120 คะแนน 31 ธ.ค.│
 │ ▓▓▓▓▓▓▓░░░ อีก 2,300 บาท ถึง Platinum │  ← แถบความคืบหน้าไประดับถัดไป
 │                         [QR สมาชิก]  │  ← ร้านสแกนตอนปิดบิล (QR เปลี่ยนทุก 60 วินาที)

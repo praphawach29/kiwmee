@@ -7,6 +7,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { api } from "../api.mjs";
+import MerchantSidebar from "../merchant-sidebar.jsx";
 import { catalogWarnings, kindWord, previewPaths, resourceWord } from "./flow-preview.mjs";
 
 // Staff members see every page with the controls switched off
@@ -105,9 +106,26 @@ export default function ShopAdmin({ slug }) {
   }
 
   const readOnly = catalog.shop.role !== "owner";
+  const activeLabel = TABS.find(([key]) => key === tab)?.[1];
+  const navItem = (id, icon) => ({ id, icon, label: TABS.find(([key]) => key === id)[1] });
   return (
-    <main className="ad-shell">
-      <header className="ad-header">
+    <div className="merchant-layout">
+      <MerchantSidebar
+        groups={[
+          { label: "ภาพรวม", items: [{ id: "shops", icon: "⌂", label: "ร้านทั้งหมด", href: "/dashboard" }] },
+          { label: "จัดการประจำวัน", items: [navItem("bookings", "▦"), navItem("bills", "▤")] },
+          { label: "ตั้งค่าร้าน", collapsible: true, items: [navItem("flow", "⇄"), navItem("offerings", "◈"), navItem("resources", "♧"), navItem("hours", "◷")] },
+        ]}
+        active={tab} onSelect={show} name={catalog.shop.name} role={readOnly ? "พนักงาน · ดูการตั้งค่าได้อย่างเดียว" : "เจ้าของร้าน"}
+      />
+      <div className="merchant-main">
+        <header className="merchant-topbar">
+          <div className="merchant-breadcrumb"><a href="/dashboard">ร้านทั้งหมด</a><span>/</span><b>{catalog.shop.name}</b><span>/</span>{activeLabel}</div>
+          <a className="merchant-booking-link" href={`/b/${slug}`} target="_blank" rel="noreferrer">เปิดหน้าจองลูกค้า ↗</a>
+        </header>
+        <main className="ad-shell merchant-content">
+          <div className="merchant-page-heading"><div><p>{catalog.shop.name}</p><h1>{activeLabel}</h1></div><span className="ad-status" data-tone="info">{readOnly ? "พนักงาน" : "เจ้าของร้าน"}</span></div>
+      <header className="ad-header merchant-mobile-header">
         <div className="ad-brand">
           <a href="/dashboard" aria-label="ร้านทั้งหมด"><img src="/brand/kiwmee-logo.svg" alt="kiwmee" /></a>
           <a className="ad-link" href="/dashboard">← ร้านทั้งหมด</a>
@@ -133,7 +151,9 @@ export default function ShopAdmin({ slug }) {
         {tab === "resources" && <ResourcesTab slug={slug} catalog={catalog} onSaved={reload} />}
         {tab === "hours" && <HoursTab slug={slug} catalog={catalog} onSaved={reload} />}
       </ReadOnly.Provider>
-    </main>
+        </main>
+      </div>
+    </div>
   );
 }
 

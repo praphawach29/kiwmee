@@ -5,6 +5,7 @@
 // rules allow. The server checks the rules again on every change (src/v2/manage-booking.js).
 
 import { useState } from "react";
+import CustomerFrame from "../../customer-frame.jsx";
 
 const STATUS = {
   held: "รอชำระเงิน",
@@ -113,7 +114,7 @@ export default function ManageBookingClient({ token, initial }) {
   const blocked = [view.cancel, view.reschedule].find((p) => !p.allowed && p.reason !== "NOT_CHANGEABLE");
 
   return (
-    <main className="bk-shell" aria-busy={busy}>
+    <CustomerFrame shop={shop} managing><main className="bk-shell" aria-busy={busy}>
       <header className="bk-header">
         <h1>{shop.name}</h1>
         <p className="bk-muted">การจองของ {booking.customerName}</p>
@@ -261,6 +262,6 @@ export default function ManageBookingClient({ token, initial }) {
       <a className="bk-powered" href="/" target="_blank" rel="noreferrer">
         จองผ่าน <img src="/brand/kiwmee-logo.svg" alt="kiwmee" />
       </a>
-    </main>
+    </main></CustomerFrame>
   );
 }

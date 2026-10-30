@@ -596,3 +596,65 @@
   font-family: var(--font-display);
   font-size: 1.2rem;
 }
+
+/* Merchant desktop workspace only: /super also imports this stylesheet. */
+.merchant-layout .merchant-sidebar,
+.merchant-layout .merchant-topbar,
+.merchant-layout .merchant-page-heading { display: none; }
+.merchant-layout .merchant-main { min-width: 0; }
+.merchant-home .merchant-content { max-width: 480px; }
+
+@media (min-width: 1100px) {
+  .merchant-layout { display: grid; grid-template-columns: 256px minmax(0, 1fr); min-height: 100dvh; background: var(--bg); }
+  .merchant-layout .merchant-sidebar { display: flex; flex-direction: column; gap: 4px; position: sticky; top: 0; height: 100dvh; overflow-y: auto; padding: 20px 12px 16px; background: #f8f9fa; border-right: 1px solid var(--line-soft); }
+  .merchant-layout .merchant-logo { display: flex; align-items: center; gap: 10px; padding: 0 10px 8px; color: var(--ink); text-decoration: none; }
+  .merchant-layout .merchant-logo img { display: block; width: 128px; height: 40px; object-fit: contain; }
+  .merchant-layout .merchant-logo > span { background: var(--selected); color: var(--grape-deep); border-radius: 5px; padding: 2px 6px; font-size: 11px; white-space: nowrap; }
+  .merchant-layout .merchant-sidebar-caption { padding: 0 10px 10px; margin: 0; font-size: 12px; color: var(--muted); }
+  .merchant-layout .merchant-group-label { margin: 18px 10px 6px; color: var(--muted); font-size: 12px; font-weight: 600; }
+  .merchant-layout .merchant-nav { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; margin: 2px 0; padding: 10px 12px; border: 0; border-radius: 9px; background: transparent; color: var(--ink); font: inherit; font-size: 14px; text-align: left; text-decoration: none; cursor: pointer; }
+  .merchant-layout .merchant-nav:hover { background: var(--selected); }
+  .merchant-layout .merchant-nav.is-active { background: var(--accent); color: #fff; font-weight: 500; }
+  .merchant-layout .merchant-nav-icon { flex: none; width: 20px; text-align: center; font-size: 18px; }
+  .merchant-layout .merchant-settings { margin-top: 18px; }
+  .merchant-layout .merchant-settings summary { display: flex; justify-content: space-between; padding: 10px 12px; color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer; list-style: none; }
+  .merchant-layout .merchant-settings summary::-webkit-details-marker { display: none; }
+  .merchant-layout .merchant-settings:not([open]) summary span { transform: rotate(-90deg); }
+  .merchant-layout .merchant-subnav { margin-left: 12px; padding-left: 8px; border-left: 2px solid var(--line-soft); }
+  .merchant-layout .merchant-subnav .merchant-nav { font-size: 13px; padding-left: 8px; }
+  .merchant-layout .merchant-sidebar-footer { margin-top: auto; padding-top: 20px; }
+  .merchant-layout .merchant-identity { display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--line-soft); padding: 16px 10px 8px; }
+  .merchant-layout .merchant-avatar { display: grid; place-items: center; flex: none; width: 34px; height: 34px; border-radius: 50%; background: var(--selected); color: var(--grape-deep); font-weight: 600; }
+  .merchant-layout .merchant-identity > div { min-width: 0; }
+  .merchant-layout .merchant-identity b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 500; }
+  .merchant-layout .merchant-identity div > span { display: block; font-size: 11px; color: var(--muted); }
+  .merchant-layout .merchant-topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 68px; padding: 14px 28px; background: var(--surface); border-bottom: 1px solid var(--line-soft); }
+  .merchant-layout .merchant-breadcrumb { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; color: var(--muted); font-size: 13px; min-width: 0; overflow-wrap: anywhere; }
+  .merchant-layout .merchant-breadcrumb a { color: var(--muted); }
+  .merchant-layout .merchant-breadcrumb b { color: var(--ink); font-weight: 500; }
+  .merchant-layout .merchant-booking-link { flex: none; border: 1px solid var(--line); border-radius: 999px; padding: 7px 12px; color: var(--grape-deep); font-size: 12px; text-decoration: none; }
+  .merchant-layout .merchant-account { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--muted); }
+  .merchant-layout .merchant-content { max-width: 1440px; width: 100%; margin: 0 auto; padding: 28px 32px 48px; gap: 20px; align-content: start; }
+  .merchant-layout .merchant-page-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .merchant-layout .merchant-page-heading h1 { margin: 4px 0; font-size: 24px; font-weight: 500; }
+  .merchant-layout .merchant-page-heading p { margin: 0; font-size: 13px; color: var(--muted); }
+  .merchant-layout .merchant-mobile-header,
+  .merchant-layout .ad-tabs { display: none; }
+  .merchant-layout .ad-card { padding: 24px; border-color: var(--line-soft); box-shadow: 0 2px 8px rgba(27, 22, 64, .025); gap: 18px; }
+  .merchant-layout .ad-stack { gap: 20px; }
+  .merchant-layout .ad-list-item { padding: 16px; border-color: var(--line-soft); }
+  .merchant-layout .ad-list-item:hover { background: var(--bg); border-color: var(--line); }
+  .merchant-layout .ad-totals { gap: 12px; }
+  .merchant-layout .ad-totals div { padding: 16px; }
+  .merchant-layout .ad-totals dd { font-size: 24px; }
+  .merchant-layout .merchant-create { scroll-margin-top: 24px; }
+  .merchant-layout .merchant-create > .ad-field { max-width: 560px; }
+  .merchant-layout .merchant-create > .ad-primary { justify-self: start; }
+  .merchant-layout :is(a, button, summary):focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+}
+
+@media (min-width: 1100px) and (max-width: 1399px) {
+  .merchant-layout .ad-split { grid-template-columns: minmax(0, 1fr); }
+  .merchant-layout .ad-booking { grid-template-columns: 72px minmax(0, 1fr); }
+  .merchant-layout .ad-booking-actions { grid-column: 1 / -1; max-width: none; justify-content: flex-start; }
+}

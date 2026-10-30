@@ -6,6 +6,7 @@
 // The server decides what comes next (POST /api/b/{slug}/step); this page only shows it.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import CustomerFrame from "./customer-frame.jsx";
 
 const RESOURCE_WORD = { staff: "ช่าง", court: "สนาม", room: "ห้อง", equipment: "อุปกรณ์" };
 const STEP_TITLE = {
@@ -196,7 +197,7 @@ export default function BookingV2Client({ shop, liffId }) {
 
   if (booking) {
     return (
-      <main className="bk-shell">
+      <CustomerFrame shop={shop} completed><main className="bk-shell">
         <header className="bk-header">
           <h1>{shop.name}</h1>
         </header>
@@ -231,7 +232,7 @@ export default function BookingV2Client({ shop, liffId }) {
           {booking.manageToken && <ManageLink shop={shop} token={booking.manageToken} />}
         </section>
         <PoweredBy />
-      </main>
+      </main></CustomerFrame>
     );
   }
 
@@ -241,7 +242,7 @@ export default function BookingV2Client({ shop, liffId }) {
   const atCustomer = next && !ask && !atStart;
 
   return (
-    <main className="bk-shell" aria-busy={busy}>
+    <CustomerFrame shop={shop}><main className="bk-shell" aria-busy={busy}>
       <header className="bk-header">
         <h1>{shop.name}</h1>
         <p className="bk-muted">จองคิวออนไลน์</p>
@@ -339,7 +340,7 @@ export default function BookingV2Client({ shop, liffId }) {
         </form>
       )}
       <PoweredBy />
-    </main>
+    </main></CustomerFrame>
   );
 }
 

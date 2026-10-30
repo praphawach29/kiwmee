@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api, supabaseAuth } from "./api.mjs";
+import MerchantSidebar from "./merchant-sidebar.jsx";
 
 const SHOP_KINDS = { salon: "ร้านเสริมสวย", barber: "ร้านตัดผมชาย", spa: "สปา / นวด", court: "สนามกีฬา", other: "อื่น ๆ" };
 const ROLE = { owner: "เจ้าของ", staff: "พนักงาน" };
@@ -47,9 +48,21 @@ export default function DashboardHome({ auth }) {
     setUser(null);
   }
 
+  const workspace = Boolean(auth && user && !recoveryToken);
   return (
-    <main className="ad-shell ad-narrow">
-      <header className="ad-header">
+    <div className={workspace ? "merchant-layout merchant-home" : "merchant-auth"}>
+      {workspace && <MerchantSidebar
+        groups={[
+          { label: "ภาพรวม", items: [{ id: "shops", label: "แบรนด์และสาขา", icon: "⌂", href: "#merchant-shops" }] },
+          { label: "จัดการร้าน", items: [{ id: "create", label: "เปิดร้าน / แบรนด์ใหม่", icon: "+", href: "#merchant-create" }] },
+        ]}
+        active="shops" name={user.email} role="บัญชีจัดการร้าน" onSignOut={signOut}
+      />}
+      <div className="merchant-main">
+        {workspace && <header className="merchant-topbar"><div className="merchant-breadcrumb">พื้นที่จัดการร้าน<span>/</span><b>แบรนด์และสาขา</b></div><span className="merchant-account">{user.email}</span></header>}
+        <main className={"ad-shell " + (workspace ? "merchant-content" : "ad-narrow")}>
+          {workspace && <div className="merchant-page-heading"><div><p>พื้นที่จัดการร้านของคุณ</p><h1>แบรนด์และสาขา</h1><p>เลือกร้านเพื่อจัดการการจอง บิล และการตั้งค่า</p></div></div>}
+      <header className={"ad-header" + (workspace ? " merchant-mobile-header" : "")}>
         <a href="/" className="ad-brand" aria-label="Kiwmee หน้าแรก"><img src="/brand/kiwmee-logo.svg" alt="kiwmee" /></a>
         <h1>จัดการร้าน</h1>
         {user && (
@@ -73,7 +86,9 @@ export default function DashboardHome({ auth }) {
       ) : (
         <SignIn auth={auth} onSession={keepSession} onNotice={setNotice} />
       )}
-    </main>
+        </main>
+      </div>
+    </div>
   );
 }
 
@@ -195,11 +210,11 @@ function Shops() {
   if (!brands) return <p className={error ? "ad-error" : "ad-muted"}>{error || "กำลังโหลด…"}</p>;
   const hasShops = brands.some((b) => b.shops.length > 0);
   return (
-    <>
+    <div id="merchant-shops" className="merchant-shops ad-stack">
       {brands.map((b) => (
         <BrandCard key={b.id} brand={b} brands={brands} onChanged={load} />
       ))}
-      <form className="ad-card" onSubmit={create}>
+      <form id="merchant-create" className="ad-card merchant-create" onSubmit={create}>
         <h2>{hasShops ? "เปิดแบรนด์ใหม่" : "เริ่มจากเปิดร้านของคุณ"}</h2>
         {hasShops && <p className="ad-muted">ร้านที่ไม่เกี่ยวกับแบรนด์เดิม · ถ้าเป็นสาขาของแบรนด์เดิม ใช้ "เพิ่มสาขา" ด้านบน</p>}
         <label className="ad-field">
@@ -216,7 +231,7 @@ function Shops() {
         {error && <p className="ad-error">{error}</p>}
         <button className="ad-primary" disabled={busy}>เปิดร้าน</button>
       </form>
-    </>
+    </div>
   );
 }
 

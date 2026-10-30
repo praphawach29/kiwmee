@@ -152,6 +152,17 @@ test("an admin booking may skip the grid", { skip }, async () => {
   });
 });
 
+test("each booking keeps the name typed for it, even when the phone number is shared", { skip }, async () => {
+  await as("service_role", null, async () => {
+    const first = await book({ start: at(DAY, "11:00"), resource: NAN, customer: JSON.stringify({ name: "คุณแม่", phone: "0811111111" }) });
+    const second = await book({ start: at(DAY, "14:00"), resource: NAN, customer: JSON.stringify({ name: "น้องลูก", phone: "0811111111" }) });
+    const names = (await db.query("select id, customer_id, customer_name from public.bookings where id = any($1)", [[first.id, second.id]])).rows;
+    assert.equal(names.find((r) => r.id === first.id).customer_name, "คุณแม่");
+    assert.equal(names.find((r) => r.id === second.id).customer_name, "น้องลูก");
+    assert.equal(names[0].customer_id, names[1].customer_id, "still one customer record per phone number");
+  });
+});
+
 test("\"anyone\" takes the first free barber, then the other, then the slot is full", { skip }, async () => {
   await as("service_role", null, async () => {
     const first = await book({ shop: BARBER, offering: MEN_CUT, start: at(DAY, "10:00") });

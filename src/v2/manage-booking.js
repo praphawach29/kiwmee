@@ -41,7 +41,7 @@ async function requireShop(db, slug) {
 async function loadBooking(db, shop, token) {
   const { rows } = await db.query(
     `select b.id, b.status, b.start_at, b.end_at, b.party_size, b.hold_expires_at, b.offering_id,
-            (b.price_snapshot->>'total')::float8 as price, o.name as offering_name, o.duration_mode, c.name as customer_name,
+            (b.price_snapshot->>'total')::float8 as price, o.name as offering_name, o.duration_mode, coalesce(b.customer_name, c.name) as customer_name,
             coalesce((select json_agg(json_build_object('id', r.id, 'name', r.name, 'kind', r.kind,
                                                         'picked', exists (select 1 from public.offering_requirements q
                                                                            where q.offering_id = b.offering_id and q.kind = r.kind and q.customer_picks))

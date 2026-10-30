@@ -3,7 +3,7 @@
 ปรับล่าสุด: 28 ต.ค. 2569 · อ่านคู่กับ `CLAUDE.md` (กติกาการทำงาน)
 
 **Kiwmee** = ระบบจองคิวหลายร้านผ่านเว็บ/LINE ที่กำลังต่อยอดเป็น**ระบบสมาชิก + คะแนนสะสม** ในผลิตภัณฑ์เดียว
-Next.js 15 + Supabase · deploy บน Railway service `salon-booking-os-v1` → `https://bookingos.up.railway.app` ทุกครั้งที่ merge เข้า `main`
+Next.js 15 + Supabase · deploy บน Railway service `salon-booking-os-v1` → `https://kiwmee.up.railway.app` ทุกครั้งที่ merge เข้า `main`
 
 **Repo เปลี่ยนชื่อเป็น `praphawach29/kiwmee`** (เดิม `salon-booking-os-v1`, GitHub redirect ลิงก์เก่าให้) · ชื่อ service บน Railway และโดเมนยังเป็นชื่อเดิม ·
 ถ้า Railway ไม่ deploy หลัง merge ให้เชื่อม repo ใหม่ที่ Railway → service → Settings → Source
@@ -26,9 +26,10 @@ Next.js 15 + Supabase · deploy บน Railway service `salon-booking-os-v1` →
 | #14 | `CLAUDE.md` + เอกสารนี้ |
 | #16 | **6c แบรนด์/สาขา**: หน้า `/dashboard` แสดงแบรนด์ → สาขา · เพิ่มสาขา (คัดลอกบริการ/ราคา/flow/เวลาทำการ ± ช่าง) · ย้ายร้านที่เปิดแยกไว้เข้าแบรนด์ · จำกัดสาขาตามแพ็กเกจ (ฟรี/เริ่มต้น 1, โปร/สมาชิก หลายสาขา) · migration `…001100` |
 | #15 | **6d บิล**: ปุ่ม "ปิดบิล" ในแท็บการจอง (แก้ยอดได้, แยกจ่ายหลายช่องทาง) · แท็บ "บิลและรายรับ" (รายรับรายวันแยกช่องทาง, ขายหน้าร้าน, คืนเงินเฉพาะเจ้าของ) · migration `…001000` |
+| (super admin) | **`/super`**: ผู้ดูแลแพลตฟอร์มตั้งค่า LINE (LIFF ID, Channel ID, access token, channel secret) เอง · ความลับเข้ารหัสในแอป (`SETTINGS_ENCRYPTION_KEY`) · `platform_admins` + `platform_settings` · migration `…001300` · ดู `supabase/README.md` |
 
-**Migration ล่าสุดที่รันบน booking-v2 แล้ว: `20261025001100_brands.sql`** (เจ้าของยืนยัน 27 ต.ค. 2569)
-ไฟล์ถัดไปตั้งชื่อ `20261025001200_…`
+**Migration ล่าสุดที่รันบน booking-v2 แล้ว: `20261025001200_booking_customer_name.sql`** (เจ้าของยืนยัน 30 ต.ค. 2569) · `…001300_platform_settings.sql` รอเจ้าของรันก่อน merge
+ไฟล์ถัดไปตั้งชื่อ `20261025001400_…`
 แพ็กเกจของแบรนด์ตั้งด้วย SQL (ยังไม่มีระบบเก็บเงิน): `supabase/README.md` → "ตั้งแพ็กเกจของแบรนด์"
 
 ตัวอย่างหน้าจอบัตรสมาชิก (ยังไม่ใช่โค้ดจริง): https://claude.ai/artifact/Whda2NEfEyUgwDL62cWfKz

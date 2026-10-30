@@ -11,6 +11,7 @@ const { AppError, badRequest, notFound } = require("../errors");
 const { findShop, loadCatalog } = require("./catalog-repository");
 const { getOptions, nextStep, reconcile, localToMs } = require("./options-engine");
 const { issueToken } = require("./manage-booking");
+const { getSetting } = require("./platform-settings");
 
 const ASKABLE = ["offering", "resource", "date", "time", "duration", "party"];
 const SELECTED_KEYS = ["offeringId", "resourceId", "date", "time", "durationMinutes", "partySize"];
@@ -135,7 +136,7 @@ const THAI_PHONE = /^0\d{8,9}$/;
  * body = { selected, customer: { name, phone }, lineIdToken? }
  * verifyLineToken(idToken) → { sub, name } | null, injected so tests need no network.
  */
-async function book(db, slug, body = {}, { now = new Date(), verifyLineToken = verifyLineIdToken } = {}) {
+async function book(db, slug, body = {}, { now = new Date(), verifyLineToken = (token) => verifyLineIdToken(token, db) } = {}) {
   const shop = await requireShop(db, slug);
   const catalog = await loadCatalog(db, shop);
   const selected = cleanSelected(body.selected);
@@ -202,8 +203,8 @@ function bookingError(error) {
 }
 
 // LIFF: the page sends the LINE ID token; LINE confirms it and tells us who it is
-async function verifyLineIdToken(idToken) {
-  const clientId = process.env.LINE_LOGIN_CHANNEL_ID;
+async function verifyLineIdToken(idToken, db) {
+  const clientId = await getSetting(db, "line.login_channel_id"); // saved from /super, else LINE_LOGIN_CHANNEL_ID
   if (!clientId) return null;
   const response = await fetch("https://api.line.me/oauth2/v2.1/verify", {
     method: "POST",

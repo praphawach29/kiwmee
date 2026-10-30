@@ -37,4 +37,14 @@ function brandRoute(action, { read = false, created = false } = {}) {
     });
 }
 
-module.exports = { shopRoute, brandRoute };
+/** The same for app/api/super/*: signed in (the action checks platform_admins itself), action(client, body). */
+function superRoute(action, { read = false } = {}) {
+  return (request) =>
+    adminRoute(request, async (user) => {
+      const input = read ? undefined : await boundedJson(request);
+      const result = await asUser(getBookingPool(), user, (client) => action(client, input));
+      return json(result ?? { ok: true });
+    });
+}
+
+module.exports = { shopRoute, brandRoute, superRoute };

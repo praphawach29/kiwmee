@@ -128,11 +128,11 @@ test("booking: confirmed with the stylist and price; incomplete or bad details a
     const row = (await db.query("select c.name, c.phone, b.source from public.bookings b join public.customers c on c.id = b.customer_id where b.id = $1", [b.id])).rows[0];
     assert.deepEqual(row, { name: "คุณเอ", phone: "0812345678", source: "web" });
 
-    await refused(() => book(db, "bloom-hair", { selected, customer: { name: "คุณบี", phone: "0899999999" } }), (e) => e.status === 409 && e.message === "FULLY_BOOKED");
+    await refused(() => book(db, "bloom-hair", { selected, customer: { name: "คุณบี", phone: "0899999999" } }), (e) => e.status === 409 && e.details?.reason === "FULLY_BOOKED" && /[฀-๿]/.test(e.message));
     await refused(() => book(db, "bloom-hair", { selected: { offeringId: CUT }, customer: { name: "x", phone: "0899999999" } }), (e) => e.code === "INCOMPLETE");
     await refused(() => book(db, "bloom-hair", { selected: { ...selected, time: "12:00" }, customer: { name: "", phone: "0899999999" } }), (e) => e.code === "INVALID_CUSTOMER");
     await refused(() => book(db, "bloom-hair", { selected: { ...selected, time: "12:00" }, customer: { name: "x", phone: "12345" } }), (e) => e.code === "INVALID_CUSTOMER");
-    await refused(() => book(db, "bloom-hair", { selected: { ...selected, time: "19:30" }, customer: { name: "x", phone: "0899999999" } }), (e) => e.status === 422 && e.message === "NO_WORKING_WINDOW");
+    await refused(() => book(db, "bloom-hair", { selected: { ...selected, time: "19:30" }, customer: { name: "x", phone: "0899999999" } }), (e) => e.status === 422 && e.details?.reason === "NO_WORKING_WINDOW" && /[฀-๿]/.test(e.message));
   });
 });
 

@@ -6,26 +6,12 @@
 const crypto = require("node:crypto");
 const { AppError, badRequest, notFound } = require("../errors");
 const { findShop, loadCatalog } = require("./catalog-repository");
+const { REASON_TEXT } = require("./reason-text");
 const { getOptions, localToMs, msToLocal } = require("./options-engine");
 
 const TOKEN = /^[A-Za-z0-9_-]{32}$/;
 const OPEN = ["held", "pending", "confirmed"];
 
-const REASON_TEXT = {
-  NOT_FOUND: "ไม่พบการจองนี้ ลิงก์อาจไม่ถูกต้อง",
-  CUSTOMER_CHANGE_OFF: "ร้านนี้ไม่เปิดให้เปลี่ยนการจองเองทางออนไลน์ กรุณาติดต่อร้าน",
-  TOO_LATE_TO_CHANGE: "ใกล้เวลานัดเกินกว่าจะเปลี่ยนเองได้แล้ว กรุณาติดต่อร้าน",
-  NOT_CHANGEABLE: "การจองนี้เปลี่ยนไม่ได้แล้ว",
-  HOLD_EXPIRED: "การจองนี้หมดเวลารอชำระเงินแล้ว",
-  FULLY_BOOKED: "เวลานี้เพิ่งถูกจองไป กรุณาเลือกเวลาอื่น",
-  BUSINESS_CLOSED: "ร้านปิดในวันหรือเวลานั้น",
-  STAFF_OFF: "ช่างที่คุณเลือกไม่อยู่ในเวลานั้น",
-  NO_WORKING_WINDOW: "เวลานี้อยู่นอกเวลาทำการ",
-  PAST_WORKING_HOURS: "เลยเวลาที่รับจองแล้ว",
-  OUTSIDE_BOOKING_WINDOW: "วันนี้ยังไม่เปิดให้จอง หรือผ่านไปแล้ว",
-  INVALID_TIME: "เวลาเริ่มไม่ตรงกับช่วงเวลาของร้าน",
-  NOT_OFFERED: "บริการนี้ไม่มีในเวลานั้น"
-};
 
 function rpcError(error) {
   const status = { BK409: 409, BK422: 422, BK404: 404 }[error?.code];

@@ -6,6 +6,7 @@
 //   book      — create the booking through the create_booking RPC (which checks everything again)
 
 const crypto = require("node:crypto");
+const { REASON_TEXT } = require("./reason-text");
 const { AppError, badRequest, notFound } = require("../errors");
 const { findShop, loadCatalog } = require("./catalog-repository");
 const { getOptions, nextStep, reconcile, localToMs } = require("./options-engine");
@@ -195,10 +196,9 @@ async function book(db, slug, body = {}, { now = new Date(), verifyLineToken = v
 
 // create_booking reports why in the message, with BK409 / BK422 / BK404 as the code
 function bookingError(error) {
-  if (error?.code === "BK409") return new AppError("CONFLICT", error.message, 409);
-  if (error?.code === "BK422") return new AppError("UNAVAILABLE", error.message, 422);
-  if (error?.code === "BK404") return new AppError("NOT_FOUND", error.message, 404);
-  return error;
+  const kind = { BK409: ["CONFLICT", 409], BK422: ["UNAVAILABLE", 422], BK404: ["NOT_FOUND", 404] }[error?.code];
+  if (!kind) return error;
+  return new AppError(kind[0], REASON_TEXT[error.message] ?? error.message, kind[1], { reason: error.message });
 }
 
 // LIFF: the page sends the LINE ID token; LINE confirms it and tells us who it is
@@ -228,4 +228,4 @@ async function rateLimit(db, clientKey, bucket, max, windowSeconds) {
   if (!rows[0].ok) throw new AppError("RATE_LIMITED", "ส่งคำขอถี่เกินไป กรุณารอสักครู่", 429);
 }
 
-module.exports = { shopInfo, step, book, rateLimit, clientKey, cleanSelected, verifyLineIdToken };
+module.exports = { shopInfo, step, book, rateLimit, clientKey, cleanSelected, verifyLineIdToken, bookingError };

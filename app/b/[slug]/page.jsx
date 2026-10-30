@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import publicBooking from "../../../src/v2/public-booking.js";
 import v2db from "../../../src/v2/db.js";
+import platformSettings from "../../../src/v2/platform-settings.js";
 import BookingV2Client from "./booking-v2-client.jsx";
 import "./booking-v2.css";
 
@@ -25,5 +26,5 @@ export default async function ShopBookingPage({ params }) {
   const { slug } = await params;
   const shop = await loadShop(slug);
   if (!shop) notFound();
-  return <BookingV2Client shop={shop} liffId={process.env.NEXT_PUBLIC_LIFF_ID || null} />;
+  return <BookingV2Client shop={shop} liffId={(await platformSettings.getSetting(v2db.getBookingPool(), "line.liff_id")) || null} />;
 }

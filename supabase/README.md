@@ -52,6 +52,21 @@ update public.brand_plans set plan = 'pro', valid_until = '2027-12-31'
 where brand_id = (select brand_id from public.businesses where slug = 'ชื่อลิงก์ของร้าน');
 ```
 
+## ผู้ดูแลแพลตฟอร์ม (`/super`) และค่า LINE
+
+หน้า `/super` ใช้ตั้งค่า LINE (LIFF ID, Channel ID, Channel access token, Channel secret) โดยไม่ต้องแก้โค้ดหรือ redeploy
+เปิดได้เฉพาะบัญชีที่อยู่ใน `platform_admins` (ล็อกอินด้วยบัญชีเดียวกับ `/dashboard`) ตั้งผู้ดูแลครั้งแรกใน SQL Editor:
+
+```sql
+insert into public.platform_admins (user_id)
+select id from auth.users where email = 'อีเมลของผู้ดูแล'
+on conflict do nothing;
+```
+
+- ค่าที่เป็นความลับ (token, secret) ถูกเข้ารหัส AES-256-GCM ในแอปก่อนเก็บลงฐานข้อมูล และไม่ถูกส่งกลับมาที่หน้าจออีก (เห็นแค่ 4 ตัวท้าย)
+- ต้องตั้ง `SETTINGS_ENCRYPTION_KEY` (สุ่มอย่างน้อย 32 ตัวอักษร) บน Railway · ถ้ากุญแจหาย ค่าลับที่เก็บไว้จะถอดไม่ได้ ต้องกรอกใหม่ · อย่าเปลี่ยนกุญแจโดยไม่กรอกค่าลับใหม่
+- ลำดับที่ระบบใช้: ค่าที่ตั้งใน `/super` → ตัวแปร env เดิม (`NEXT_PUBLIC_LIFF_ID`, `LINE_LOGIN_CHANNEL_ID`, `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET`) → ไม่มี
+
 ## ทดสอบ
 
 ต้องมี Postgres 15+ ในเครื่อง (มี `btree_gist`) สคริปต์สร้างฐานข้อมูลใหม่ทุกครั้งจาก migration + seed

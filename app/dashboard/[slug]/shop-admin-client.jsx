@@ -2,15 +2,16 @@
 
 // /dashboard/<slug>: the owner sets up the shop without code (design step 5) — resources (stylists,
 // courts, rooms), offerings with their prices, opening hours and days off, and the booking flow with
-// a preview of what customers will see. Staff members see the same pages read-only.
+// a preview of what customers will see. Staff use daily booking and bill operations only.
 // Every save goes to /api/dashboard/shops/<slug>/…, which writes as the signed-in user (RLS).
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { api } from "../api.mjs";
 import MerchantSidebar from "../merchant-sidebar.jsx";
+import { shopNavigation, shopTabs, resolveShopTab } from "../merchant-navigation.mjs";
 import { catalogWarnings, kindWord, previewPaths, resourceWord } from "./flow-preview.mjs";
 
-// Staff members see every page with the controls switched off
+// Defense in depth for owner-only settings controls; APIs/RLS enforce permissions.
 const ReadOnly = createContext(false);
 function Locked({ children }) {
   return <fieldset className="ad-fieldset" disabled={useContext(ReadOnly)}>{children}</fieldset>;
@@ -21,14 +22,7 @@ const DAY_SHORT = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
 const SHOP_KINDS = { salon: "ร้านเสริมสวย", barber: "ร้านตัดผมชาย", spa: "สปา / นวด", court: "สนามกีฬา", other: "อื่น ๆ" };
 const RESOURCE_KINDS = { staff: "ช่าง / พนักงาน", court: "สนาม", room: "ห้อง", equipment: "อุปกรณ์" };
 const UNITS = { per_booking: "ต่อครั้ง", per_hour: "ต่อชั่วโมง", per_person: "ต่อคน" };
-const TABS = [
-  ["bookings", "การจอง"],
-  ["bills", "บิลและรายรับ"],
-  ["flow", "ขั้นตอนจอง"],
-  ["offerings", "บริการและราคา"],
-  ["resources", "ช่าง / สนาม"],
-  ["hours", "ร้านและเวลาทำการ"]
-];
+
 
 const money = (n) => `${Number(n).toLocaleString("th-TH")} บาท`;
 const minutes = (m) => (m % 60 ? (m > 60 ? `${Math.floor(m / 60)} ชม. ${m % 60} นาที` : `${m} นาที`) : `${m / 60} ชม.`);
@@ -72,7 +66,9 @@ function Status({ save }) {
 export default function ShopAdmin({ slug }) {
   const [catalog, setCatalog] = useState(null);
   const [error, setError] = useState("");
-  const [tab, setTab] = useState("bookings");
+  const [requestedTab, setRequestedTab] = useState("");
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState("");
   const [version, setVersion] = useState(0);
 
   const reload = useCallback(async () => {
@@ -87,13 +83,41 @@ export default function ShopAdmin({ slug }) {
 
   useEffect(() => {
     reload();
-    const fromHash = window.location.hash.slice(1);
-    if (TABS.some(([k]) => k === fromHash)) setTab(fromHash);
   }, [reload]);
 
+  useEffect(() => {
+    const syncHash = () => setRequestedTab(window.location.hash.slice(1));
+    syncHash();
+    window.addEventListener("hashchange", syncHash);
+    return () => window.removeEventListener("hashchange", syncHash);
+  }, []);
+
+  const role = catalog?.shop.role;
+  const tab = resolveShopTab(role, requestedTab);
+  useEffect(() => {
+    if (catalog && tab && requestedTab !== tab) {
+      window.history.replaceState(null, "", `#${tab}`);
+      setRequestedTab(tab);
+    }
+  }, [catalog, tab, requestedTab]);
+
   function show(key) {
-    setTab(key);
-    window.history.replaceState(null, "", `#${key}`);
+    const allowed = resolveShopTab(role, key);
+    if (!allowed) return;
+    setRequestedTab(allowed);
+    window.history.replaceState(null, "", `#${allowed}`);
+  }
+
+  async function signOut() {
+    setSigningOut(true);
+    setSignOutError("");
+    try {
+      await api("DELETE", "/api/dashboard/session");
+      window.location.href = "/dashboard";
+    } catch (e) {
+      setSignOutError(`ออกจากระบบไม่สำเร็จ: ${e.message}`);
+      setSigningOut(false);
+    }
   }
 
   if (!catalog) {
@@ -106,17 +130,15 @@ export default function ShopAdmin({ slug }) {
   }
 
   const readOnly = catalog.shop.role !== "owner";
-  const activeLabel = TABS.find(([key]) => key === tab)?.[1];
-  const navItem = (id, icon) => ({ id, icon, label: TABS.find(([key]) => key === id)[1] });
+  const tabs = shopTabs(role);
+  const activeLabel = tabs.find((item) => item.id === tab)?.label || "ไม่มีสิทธิ์เข้าถึง";
+  const roleLabel = role === "owner" ? "เจ้าของร้าน" : role === "staff" ? "พนักงาน" : "ไม่พบสิทธิ์จัดการร้าน";
   return (
     <div className="merchant-layout">
       <MerchantSidebar
-        groups={[
-          { label: "ภาพรวม", items: [{ id: "shops", icon: "⌂", label: "ร้านทั้งหมด", href: "/dashboard" }] },
-          { label: "จัดการประจำวัน", items: [navItem("bookings", "▦"), navItem("bills", "▤")] },
-          { label: "ตั้งค่าร้าน", collapsible: true, items: [navItem("flow", "⇄"), navItem("offerings", "◈"), navItem("resources", "♧"), navItem("hours", "◷")] },
-        ]}
-        active={tab} onSelect={show} name={catalog.shop.name} role={readOnly ? "พนักงาน · ดูการตั้งค่าได้อย่างเดียว" : "เจ้าของร้าน"}
+        groups={shopNavigation(role)}
+        active={tab} onSelect={show} name={catalog.shop.name} role={roleLabel}
+        onSignOut={signOut} signingOut={signingOut}
       />
       <div className="merchant-main">
         <header className="merchant-topbar">
@@ -124,21 +146,24 @@ export default function ShopAdmin({ slug }) {
           <a className="merchant-booking-link" href={`/b/${slug}`} target="_blank" rel="noreferrer">เปิดหน้าจองลูกค้า ↗</a>
         </header>
         <main className="ad-shell merchant-content">
-          <div className="merchant-page-heading"><div><p>{catalog.shop.name}</p><h1>{activeLabel}</h1></div><span className="ad-status" data-tone="info">{readOnly ? "พนักงาน" : "เจ้าของร้าน"}</span></div>
+          <div className="merchant-page-heading"><div><p>{catalog.shop.name}</p><h1>{activeLabel}</h1></div><span className="ad-status" data-tone="info">{roleLabel}</span></div>
       <header className="ad-header merchant-mobile-header">
         <div className="ad-brand">
           <a href="/dashboard" aria-label="ร้านทั้งหมด"><img src="/brand/kiwmee-logo.svg" alt="kiwmee" /></a>
           <a className="ad-link" href="/dashboard">← ร้านทั้งหมด</a>
         </div>
         <h1>{catalog.shop.name}</h1>
+        <button type="button" className="ad-link" disabled={signingOut} onClick={signOut}>{signingOut ? "กำลังออกจากระบบ…" : "ออกจากระบบ"}</button>
         <p className="ad-muted">
           หน้าจองของลูกค้า: <a className="ad-link" href={`/b/${slug}`} target="_blank" rel="noreferrer">/b/{slug}</a>
         </p>
       </header>
-      {readOnly && <p className="ad-notice">คุณเป็นพนักงานของร้านนี้ ดูได้อย่างเดียว เฉพาะเจ้าของร้านแก้ไขได้</p>}
-      <nav className="ad-tabs" role="tablist">
-        {TABS.map(([key, label]) => (
-          <button key={key} role="tab" aria-selected={tab === key} data-active={tab === key} onClick={() => show(key)}>
+      {signOutError && <p className="ad-error" role="alert">{signOutError}</p>}
+      {role === "staff" && <p className="ad-notice">พนักงานจัดการการจอง ขายหน้าร้าน และปิดบิลได้ · การตั้งค่าร้านและคืนเงินเฉพาะเจ้าของร้าน</p>}
+      {!tab && <p className="ad-error" role="alert">คุณไม่มีสิทธิ์เข้าถึงเมนูจัดการร้านนี้ กรุณาติดต่อเจ้าของร้าน</p>}
+      <nav className="ad-tabs" role="tablist" aria-label="เมนูจัดการร้าน">
+        {tabs.map(({ id: key, label }) => (
+          <button type="button" key={key} role="tab" aria-selected={tab === key} data-active={tab === key} onClick={() => show(key)}>
             {label}
           </button>
         ))}

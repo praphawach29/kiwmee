@@ -1,5 +1,5 @@
 // Desktop composition only; existing booking flows remain the source of navigation/actions.
-export default function CustomerFrame({ shop, managing = false, completed = false, children }) {
+export default function CustomerFrame({ shop, managing = false, completed = false, actions = [], children }) {
   return (
     <div className="customer-workspace">
       <aside className="customer-side" aria-label="ข้อมูลหน้าจอง">
@@ -7,6 +7,7 @@ export default function CustomerFrame({ shop, managing = false, completed = fals
         <span className="customer-caption">สำหรับลูกค้า</span>
         <div className="customer-shop"><span className="customer-shop-mark" aria-hidden="true">{shop.name?.[0]}</span><strong>{shop.name}</strong><span>จองคิวออนไลน์</span></div>
         <div className="customer-menu-label">การจอง</div>
+        {actions.length > 0 && <nav className="customer-task-nav" aria-label="จัดการนัดหมาย">{actions.map((action) => action.href ? <a key={action.label} className="customer-new-booking" href={action.href}>{action.label}</a> : <button key={action.label} type="button" className="customer-task-button" onClick={action.onClick} disabled={action.disabled}>{action.label}</button>)}</nav>}
         <div className="customer-current" aria-current="page">{managing ? "จัดการการจอง" : completed ? "รายละเอียดการจอง" : "จองคิวกับร้าน"}</div>
         {managing ? <a className="customer-new-booking" href={`/b/${shop.slug}`}>จองคิวใหม่</a> : <ol className="customer-journey" aria-label="ขั้นตอนการจอง"><li>เลือกบริการและวันเวลา</li><li>กรอกข้อมูลผู้จอง</li><li>ยืนยันการจอง</li></ol>}
         <div className="customer-side-note"><strong>{managing ? "ดูแลนัดหมายของคุณ" : "เลือกคิวที่เหมาะกับคุณ"}</strong><p>{managing ? "การเลื่อนและยกเลิกเป็นไปตามกติกาของร้าน โปรดเก็บลิงก์การจองนี้เป็นส่วนตัว" : "ตัวเลือกวันและเวลาจะแสดงตามคิวว่างของร้าน ตรวจสอบรายละเอียดก่อนยืนยัน"}</p></div>

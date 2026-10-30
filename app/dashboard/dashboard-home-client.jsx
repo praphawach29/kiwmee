@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, supabaseAuth } from "./api.mjs";
 import MerchantSidebar from "./merchant-sidebar.jsx";
+import { homeTabFromHash } from "./merchant-navigation.mjs";
 
 const SHOP_KINDS = { salon: "ร้านเสริมสวย", barber: "ร้านตัดผมชาย", spa: "สปา / นวด", court: "สนามกีฬา", other: "อื่น ๆ" };
 const ROLE = { owner: "เจ้าของ", staff: "พนักงาน" };
@@ -14,6 +15,19 @@ export default function DashboardHome({ auth }) {
   const [user, setUser] = useState(undefined);
   const [recoveryToken, setRecoveryToken] = useState(null);
   const [notice, setNotice] = useState("");
+  const [active, setActive] = useState("shops");
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState("");
+
+  useEffect(() => {
+    const syncHash = () => {
+      const selected = homeTabFromHash(window.location.hash);
+      if (selected) setActive(selected);
+    };
+    syncHash();
+    window.addEventListener("hashchange", syncHash);
+    return () => window.removeEventListener("hashchange", syncHash);
+  }, []);
 
   const keepSession = useCallback(async (accessToken, refreshToken) => {
     const data = await api("POST", "/api/dashboard/session", { accessToken, refreshToken });
@@ -44,8 +58,16 @@ export default function DashboardHome({ auth }) {
   }, [keepSession]);
 
   async function signOut() {
-    await api("DELETE", "/api/dashboard/session").catch(() => {});
-    setUser(null);
+    setSigningOut(true);
+    setSignOutError("");
+    try {
+      await api("DELETE", "/api/dashboard/session");
+      setUser(null);
+    } catch (e) {
+      setSignOutError(`ออกจากระบบไม่สำเร็จ: ${e.message}`);
+    } finally {
+      setSigningOut(false);
+    }
   }
 
   const workspace = Boolean(auth && user && !recoveryToken);
@@ -56,10 +78,10 @@ export default function DashboardHome({ auth }) {
           { label: "ภาพรวม", items: [{ id: "shops", label: "แบรนด์และสาขา", icon: "⌂", href: "#merchant-shops" }] },
           { label: "จัดการร้าน", items: [{ id: "create", label: "เปิดร้าน / แบรนด์ใหม่", icon: "+", href: "#merchant-create" }] },
         ]}
-        active="shops" name={user.email} role="บัญชีจัดการร้าน" onSignOut={signOut}
+        active={active} name={user.email} role="บัญชีจัดการร้าน" onSignOut={signOut} signingOut={signingOut}
       />}
       <div className="merchant-main">
-        {workspace && <header className="merchant-topbar"><div className="merchant-breadcrumb">พื้นที่จัดการร้าน<span>/</span><b>แบรนด์และสาขา</b></div><span className="merchant-account">{user.email}</span></header>}
+        {workspace && <header className="merchant-topbar"><div className="merchant-breadcrumb">พื้นที่จัดการร้าน<span>/</span><b>{active === "create" ? "เปิดร้าน / แบรนด์ใหม่" : "แบรนด์และสาขา"}</b></div><span className="merchant-account">{user.email}</span></header>}
         <main className={"ad-shell " + (workspace ? "merchant-content" : "ad-narrow")}>
           {workspace && <div className="merchant-page-heading"><div><p>พื้นที่จัดการร้านของคุณ</p><h1>แบรนด์และสาขา</h1><p>เลือกร้านเพื่อจัดการการจอง บิล และการตั้งค่า</p></div></div>}
       <header className={"ad-header" + (workspace ? " merchant-mobile-header" : "")}>
@@ -67,11 +89,12 @@ export default function DashboardHome({ auth }) {
         <h1>จัดการร้าน</h1>
         {user && (
           <p className="ad-muted">
-            {user.email} · <button className="ad-link" onClick={signOut}>ออกจากระบบ</button>
+            {user.email} · <button type="button" className="ad-link" disabled={signingOut} onClick={signOut}>{signingOut ? "กำลังออกจากระบบ…" : "ออกจากระบบ"}</button>
           </p>
         )}
       </header>
       {notice && <p className="ad-notice">{notice}</p>}
+      {signOutError && <p className="ad-error" role="alert">{signOutError}</p>}
       {!auth ? (
         <section className="ad-card">
           <h2>ยังไม่ได้ตั้งค่าระบบล็อกอิน</h2>

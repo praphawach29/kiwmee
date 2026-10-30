@@ -90,7 +90,7 @@ async function listBookings(client, shop, { from, days = 1 } = {}) {
   const { rows } = await client.query(
     `select b.id, b.status, b.start_at, b.end_at, b.party_size, b.source, b.notes, b.hold_expires_at,
             (b.price_snapshot->>'total')::float8 as price, b.offering_id, o.name as offering_name,
-            c.name as customer_name, c.phone as customer_phone, c.line_user_id is not null as from_line,
+            coalesce(b.customer_name, c.name) as customer_name, c.phone as customer_phone, c.line_user_id is not null as from_line,
             (select h.reason from public.booking_status_history h where h.booking_id = b.id
               order by h.created_at desc, (h.to_status = b.status) desc limit 1) as status_reason,
             (select json_build_object('id', bl.id, 'status', bl.status, 'total', bl.total,
@@ -103,7 +103,7 @@ async function listBookings(client, shop, { from, days = 1 } = {}) {
        join public.offerings o on o.id = b.offering_id
        join public.customers c on c.id = b.customer_id
       where b.business_id = $1 and b.start_at >= $2 and b.start_at < $3
-      order by b.start_at, c.name`,
+      order by b.start_at, coalesce(b.customer_name, c.name)`,
     [shop.id, new Date(fromMs).toISOString(), new Date(fromMs + n * DAY_MS).toISOString()]
   );
   return rows.map((b) => {

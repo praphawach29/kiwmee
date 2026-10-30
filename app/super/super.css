@@ -84,6 +84,46 @@
 .super-main-cell b { font-weight: 500; display: block; }
 .super-main-cell small { color: #6b6880; }
 
+/* Read-only catalog: scoped so merchant screens remain unchanged. */
+.super-catalog h2, .super-detail h2 { margin: 0; font: 500 20px Mitr, Anuphan, sans-serif; color: #1B1640; }
+.super-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin: 18px 0 12px; }
+.super-filters .super-field { flex: 1 1 160px; margin: 0; color: #5F5A7A; font-size: 13px; min-width: 0; }
+.super-filters .super-search { flex: 2 1 260px; }
+.super-filters input, .super-filters select { width: 100%; min-height: 44px; font: inherit; background: #fff; color: #1B1640; border: 1px solid #DCD6F5; border-radius: 10px; padding: 8px 10px; }
+.super-filters select:focus-visible, .super-filters input:focus-visible { outline: 2px solid #6A4CFF; outline-offset: 2px; }
+.super-filters button { min-height: 44px; }
+.super-catalog-table { width: 100%; min-width: 480px; border-collapse: collapse; text-align: left; }
+.super-catalog-table th { background: #F7F5FF; color: #5F5A7A; font-weight: 500; font-size: 13px; }
+.super-catalog-table th, .super-catalog-table td { padding: 12px 16px; border-bottom: 1px solid #E8E4F8; overflow-wrap: anywhere; }
+.super-catalog-table th:first-child { width: 48%; }
+.super-catalog-table small { display: block; color: #5F5A7A; margin-top: 4px; }
+.super-catalog .super-pill2.info { color: #4F33E0; }
+.super-record-link { display: inline; background: none; border: 0; padding: 6px 0; text-align: left; color: #4F33E0; font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; }
+.super-empty { padding: 32px 12px; text-align: center; background: #F7F5FF; color: #5F5A7A; border-radius: 10px; }
+.super-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.super-detail { position: fixed; inset: 0 0 0 auto; margin: 0; width: min(560px, 100%); max-width: 100vw; height: 100dvh; max-height: 100dvh; border: 0; border-left: 1px solid #DCD6F5; padding: 24px; background: #fff; color: #1B1640; box-sizing: border-box; overflow: auto; overscroll-behavior: contain; box-shadow: -8px 0 32px #1B164026; }
+.super-detail::backdrop { background: #1B164066; }
+.super-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.super-detail-head > div { min-width: 0; overflow-wrap: anywhere; }
+.super-detail-head button { flex: none; min-height: 44px; }
+.super-detail-fields { margin: 24px 0; }
+.super-detail-fields > div { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(0, 2fr); gap: 16px; padding: 12px 0; border-bottom: 1px solid #E8E4F8; }
+.super-detail-fields dt { color: #5F5A7A; }
+.super-detail-fields dd { margin: 0; overflow-wrap: anywhere; }
+.super-detail button:focus-visible, .super-detail a:focus-visible { outline: 3px solid #6A4CFF; outline-offset: 3px; }
+.super-detail button { font-family: inherit; }
+.super-detail .super-btn { text-decoration: none; min-height: 44px; display: inline-flex; align-items: center; }
+.super-booking-actions { border-top: 1px solid #E8E4F8; padding-top: 12px; }
+.super-booking-actions p { overflow-wrap: anywhere; }
+.super-branch-list { padding: 0; list-style: none; }
+.super-branch-list li { padding: 10px 0; border-bottom: 1px solid #E8E4F8; }
+.super-branch-list small { display: block; color: #5F5A7A; overflow-wrap: anywhere; }
+@media (max-width: 480px) {
+  .super-detail { padding: 20px 16px; }
+  .super-detail-fields > div { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .super-filters .super-field, .super-filters .super-search { flex-basis: 100%; }
+}
+
 /* Keep the desktop rail permanent; expose every section on touch screens. */
 .super-layout { height: 100dvh; background: #f6f5fb; }
 .super-layout *, .super-layout *::before, .super-layout *::after { box-sizing: border-box; }

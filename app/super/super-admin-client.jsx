@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../dashboard/api.mjs";
+import CatalogSection from "./catalog-section";
 
 const SOURCE = { database: "ตั้งไว้ที่นี่", environment: "ใช้ค่าจากเซิร์ฟเวอร์ (env)", none: "ยังไม่ได้ตั้ง" };
 const configured = (setting) => ["database", "environment"].includes(setting?.source);
@@ -29,6 +30,7 @@ export default function SuperAdmin() {
   const [user, setUser] = useState(undefined);
   const [data, setData] = useState(null);
   const [catalog, setCatalog] = useState(null);
+  const [brandFilter, setBrandFilter] = useState("");
   const [error, setError] = useState("");
   const [page, setPage] = useState("dash");
   const [openGroup, setOpenGroup] = useState("settings");
@@ -53,6 +55,7 @@ export default function SuperAdmin() {
   }, []);
 
   const loadCatalog = useCallback(async () => {
+    setCatalog(null);
     try { setCatalog(await api("GET", "/api/super/catalog")); }
     catch (e) {
       setCatalog({ error: e.message });
@@ -187,8 +190,7 @@ export default function SuperAdmin() {
           {page === "line" && <LineSection data={data} error={error} load={load} />}
           {page === "security" && <SecuritySection data={data} signOut={signOut} signingOut={signingOut} />}
           {page === "admins" && <AdminsSection user={user} />}
-          {page === "brands" && <BrandsSection catalog={catalog} />}
-          {page === "shops" && <ShopsSection catalog={catalog} />}
+          {["brands", "shops"].includes(page) && <CatalogSection mode={page} catalog={catalog} reload={loadCatalog} brandFilter={brandFilter} setBrandFilter={setBrandFilter} viewBranches={(id) => { setBrandFilter(id); go("shops"); }} />}
         </div>
       </main>
     </div>
@@ -352,47 +354,4 @@ function AdminsSection({ user }) {
     <p className="super-sub">{user.email}</p>
     <p className="super-muted">บัญชีนี้ผ่านการตรวจสอบสิทธิ์ผู้ดูแลแพลตฟอร์มแล้ว · หน้านี้ยังไม่แสดงรายชื่อผู้ดูแลทั้งหมด และยังเพิ่มหรือลบผู้ดูแลไม่ได้</p>
   </section>;
-}
-
-function BrandsSection({ catalog }) {
-  if (!catalog) return <p className="super-muted">กำลังโหลด…</p>;
-  if (catalog.error) return <p className="ad-error">{catalog.error}</p>;
-  return (
-    <div className="super-card">
-      <h3>แบรนด์และแพ็กเกจ</h3>
-      <p className="super-sub">ทุกแบรนด์ในระบบ (ข้ามผู้ใช้)</p>
-      <div className="super-tbl" role="table">
-        <div className="super-tr super-hd" role="row"><div role="columnheader">แบรนด์ / เจ้าของ</div><div role="columnheader">สาขา</div><div role="columnheader">แพ็กเกจ</div></div>
-        {(catalog.brands || []).map((b) => (
-          <div key={b.id} className="super-tr" role="row">
-            <div className="super-main-cell" role="cell"><b>{b.name}</b><small>{b.ownerEmail || "—"}</small></div>
-            <div role="cell">{b.branchCount}/{b.branchLimit > 99 ? "∞" : b.branchLimit}</div>
-            <div role="cell"><span className="super-pill2 info">{b.plan}</span></div>
-          </div>
-        ))}
-      </div>
-      {catalog.brands?.length === 0 && <p className="super-muted">ยังไม่มีแบรนด์</p>}
-    </div>
-  );
-}
-
-function ShopsSection({ catalog }) {
-  if (!catalog) return <p className="super-muted">กำลังโหลด…</p>;
-  if (catalog.error) return <p className="ad-error">{catalog.error}</p>;
-  return (
-    <div className="super-card">
-      <h3>ร้านและสาขา</h3>
-      <p className="super-sub">ทุกร้านในระบบ (ดูอย่างเดียว)</p>
-      <div className="super-tbl" role="table">
-        <div className="super-tr super-hd" role="row"><div role="columnheader">ร้าน</div><div role="columnheader">แบรนด์</div><div role="columnheader">ประเภท</div></div>
-        {(catalog.shops || []).map((s) => (
-          <div key={s.id} className="super-tr" role="row">
-            <div className="super-main-cell" role="cell"><b>{s.name}</b><small className="mono">/b/{s.slug}</small></div>
-            <div role="cell">{s.brandName || "—"}</div>
-            <div role="cell">{s.kind || "—"}</div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
 }

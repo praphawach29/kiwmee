@@ -1,5 +1,5 @@
 // Desktop-only navigation. Narrow screens keep their existing dashboard navigation.
-export default function MerchantSidebar({ groups, active, onSelect, name, role, onSignOut }) {
+export default function MerchantSidebar({ groups, active, onSelect, name, role, onSignOut, signingOut = false }) {
   const item = ({ id, label, icon, href }) => {
     const props = {
       className: "merchant-nav" + (active === id ? " is-active" : ""),
@@ -24,7 +24,7 @@ export default function MerchantSidebar({ groups, active, onSelect, name, role, 
     </nav>
     <div className="merchant-sidebar-footer">
       <div className="merchant-identity"><span className="merchant-avatar" aria-hidden="true">{name?.[0]?.toUpperCase() || "K"}</span><div><b>{name}</b><span>{role}</span></div></div>
-      {onSignOut && <button type="button" className="merchant-nav" onClick={onSignOut}><span className="merchant-nav-icon" aria-hidden="true">↪</span>ออกจากระบบ</button>}
+      {onSignOut && <button type="button" className="merchant-nav" disabled={signingOut} onClick={onSignOut}><span className="merchant-nav-icon" aria-hidden="true">↪</span>{signingOut ? "กำลังออกจากระบบ…" : "ออกจากระบบ"}</button>}
     </div>
   </aside>;
 }

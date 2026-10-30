@@ -1,6 +1,11 @@
 /* v2 booking page — phone first (LIFF opens it full screen inside LINE). Uses the tokens in globals.css. */
 
 .customer-side, .customer-top { display: none; }
+.customer-task-nav { display: grid; gap: 6px; }
+.customer-task-button { text-align: left; padding: 12px 14px; border-radius: 10px; background: transparent; color: var(--grape-deep); cursor: pointer; min-height: 44px; }
+.customer-task-button:hover:not(:disabled) { background: var(--selected); }
+.customer-task-button:disabled { opacity: .5; cursor: not-allowed; }
+.customer-task-button:focus-visible { outline: 3px solid var(--grape); outline-offset: 2px; }
 .customer-body { min-width: 0; }
 @media (min-width: 1100px) {
   .customer-workspace { display: grid; grid-template-columns: 256px minmax(0, 1fr); min-height: 100svh; }

@@ -197,7 +197,7 @@ export default function BookingV2Client({ shop, liffId }) {
 
   if (booking) {
     return (
-      <CustomerFrame shop={shop} completed><main className="bk-shell">
+      <CustomerFrame shop={shop} completed actions={booking.manageToken ? [{ label: "ดูการจองของฉัน", href: `/b/${shop.slug}/manage/${booking.manageToken}` }] : []}><main className="bk-shell">
         <header className="bk-header">
           <h1>{shop.name}</h1>
         </header>

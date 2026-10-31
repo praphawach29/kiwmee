@@ -597,6 +597,13 @@
   font-size: 1.2rem;
 }
 
+/* Owner URL galleries; scoped so shared /super styles are unchanged. */
+.merchant-layout .ad-media-editor { min-width: 0; margin: 0; padding: 16px; border: 1px solid var(--line); border-radius: 12px; display: grid; gap: 12px; }
+.merchant-layout .ad-media-editor legend { padding: 0 6px; color: var(--ink); font-weight: 600; }
+.merchant-layout .ad-media-row { min-width: 0; display: grid; gap: 10px; padding-bottom: 12px; border-bottom: 1px solid var(--line-soft); }
+.merchant-layout .ad-media-row input { min-width: 0; }
+.merchant-layout .ad-media-row > .ad-link, .merchant-layout .ad-media-editor > button { justify-self: start; min-height: 44px; }
+
 /* Merchant desktop workspace only: /super also imports this stylesheet. */
 .merchant-layout .merchant-sidebar,
 .merchant-layout .merchant-topbar,

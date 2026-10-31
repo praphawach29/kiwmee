@@ -9,6 +9,7 @@
 // them inside rolled-back transactions.
 
 const { AppError, badRequest, forbidden, notFound } = require("../errors");
+const { validateMedia } = require("./media-validation");
 
 const SHOP_KINDS = ["salon", "barber", "spa", "court", "other"];
 const UNITS = ["per_booking", "per_hour", "per_person"];
@@ -181,7 +182,7 @@ async function memberShop(client, slug, { owner = false } = {}) {
 /** Everything the admin page edits, for one shop. */
 async function getCatalog(client, shop) {
   const queries = [
-    "select name, kind from public.businesses where id = $1",
+    "select name, kind, media from public.businesses where id = $1",
     `select min_lead_minutes, slot_interval_minutes, max_advance_days, hold_minutes,
             customer_can_cancel, customer_can_reschedule, customer_change_cutoff_hours
        from public.business_booking_settings where business_id = $1`,
@@ -193,7 +194,7 @@ async function getCatalog(client, shop) {
     `select id, resource_id, date::text as date, is_full_day, start_time, end_time, reason from public.resource_time_off
         where business_id = $1 and date >= current_date - 1 order by date, start_time nulls first`,
     `select id, category, name, description, duration_mode, duration_minutes, min_minutes, max_minutes, step_minutes,
-              buffer_after_minutes, max_party_size, sort_order, active
+              buffer_after_minutes, max_party_size, sort_order, active, media
          from public.offerings where business_id = $1 order by active desc, sort_order, name`,
     "select offering_id, kind, customer_picks, units_per_booking from public.offering_requirements where business_id = $1 order by kind",
     "select offering_id, resource_id from public.offering_resources where business_id = $1",
@@ -221,7 +222,7 @@ async function getCatalog(client, shop) {
   const dayHours = (d) => hours.find((h) => h.day_of_week === d) ?? (hours.length ? null : { is_open: true, open_time: "10:00", close_time: "19:00" });
 
   return {
-    shop: { slug: shop.slug, name: current.name, kind: current.kind, timezone: shop.timezone, role: shop.role },
+    shop: { slug: shop.slug, name: current.name, kind: current.kind, timezone: shop.timezone, role: shop.role, media: current.media },
     settings: {
       minLeadMinutes: s.min_lead_minutes,
       slotIntervalMinutes: s.slot_interval_minutes,
@@ -266,6 +267,7 @@ async function getCatalog(client, shop) {
       category: o.category,
       name: o.name,
       description: o.description,
+      media: o.media,
       durationMode: o.duration_mode,
       durationMinutes: o.duration_minutes,
       minMinutes: o.min_minutes,
@@ -304,7 +306,10 @@ async function getCatalog(client, shop) {
 async function saveShop(client, shop, input = {}) {
   const name = text(input.name, "ชื่อร้าน");
   const kind = oneOf(input.kind ?? shop.kind, SHOP_KINDS, "ประเภทร้าน");
-  await client.query("update public.businesses set name = $2, kind = $3 where id = $1", [shop.id, name, kind]);
+  const media = validateMedia(input.media);
+  // SQL NULL means omitted; an explicit [] clears the gallery. No read/write race.
+  await client.query("update public.businesses set name = $2, kind = $3, media = coalesce($4::jsonb, media) where id = $1",
+    [shop.id, name, kind, media === undefined ? null : JSON.stringify(media)]);
 
   if (input.settings !== undefined) {
     const s = input.settings ?? {};
@@ -483,8 +488,9 @@ function priceRow(p, i) {
 /** Create (id null) or change an offering with its requirements, resources and price rules. */
 async function saveOffering(client, shop, id, input = {}) {
   const o = offeringRow(input);
+  const media = validateMedia(input.media);
   const values = [o.category, o.name, o.description, o.durationMode, o.durationMinutes, o.minMinutes, o.maxMinutes, o.stepMinutes,
-    o.bufferAfterMinutes, o.maxPartySize, o.sortOrder, o.active];
+    o.bufferAfterMinutes, o.maxPartySize, o.sortOrder, o.active, media === undefined ? null : JSON.stringify(media)];
 
   let offeringId = id;
   if (id) {
@@ -492,7 +498,7 @@ async function saveOffering(client, shop, id, input = {}) {
     const { rowCount } = await client.query(
       `update public.offerings set category = $3, name = $4, description = $5, duration_mode = $6, duration_minutes = $7,
               min_minutes = $8, max_minutes = $9, step_minutes = $10, buffer_after_minutes = $11, max_party_size = $12,
-              sort_order = $13, active = $14
+              sort_order = $13, active = $14, media = coalesce($15::jsonb, media)
         where id = $1 and business_id = $2`,
       [id, shop.id, ...values]
     );
@@ -500,8 +506,8 @@ async function saveOffering(client, shop, id, input = {}) {
   } else {
     const { rows } = await client.query(
       `insert into public.offerings (business_id, category, name, description, duration_mode, duration_minutes, min_minutes, max_minutes,
-              step_minutes, buffer_after_minutes, max_party_size, sort_order, active)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) returning id`,
+              step_minutes, buffer_after_minutes, max_party_size, sort_order, active, media)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, coalesce($14::jsonb, '[]'::jsonb)) returning id`,
       [shop.id, ...values]
     );
     offeringId = rows[0].id;

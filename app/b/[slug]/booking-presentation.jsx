@@ -1,4 +1,46 @@
+"use client";
+
+import { useState } from "react";
+
 // Presentation only: the booking engine remains the source of selections and next steps.
+const isDemo = (item) => item?.url?.startsWith("/demo-media/");
+const safeMedia = (media) => (Array.isArray(media) ? media : []).filter((item) => {
+  if (typeof item?.url !== "string") return false;
+  if (/^\/demo-media\/[a-zA-Z0-9_./-]+$/.test(item.url) && !item.url.includes("..")) return true;
+  try { const url = new URL(item.url); return url.protocol === "https:" && !url.username && !url.password; } catch { return false; }
+}).slice(0, 8);
+const mediaAlt = (item, name) => `${isDemo(item) ? "ILLUSTRATION · ภาพประกอบ ไม่ใช่ภาพสถานที่จริง · " : ""}${item.alt || name || "ภาพจากร้าน"}`;
+
+export function MediaImage({ item, name, eager = false }) {
+  const [state, setState] = useState("loading");
+  return (
+    <span className="bk-media-image" data-state={state}>
+      {state !== "error" && <img src={item.url} alt={mediaAlt(item, name)} loading={eager ? "eager" : "lazy"} decoding="async" referrerPolicy="no-referrer" onLoad={() => setState("loaded")} onError={() => setState("error")} />}
+      {state !== "loaded" && <span className="bk-media-status" role="status">{state === "error" ? "โหลดภาพไม่สำเร็จ" : "กำลังโหลดภาพ…"}</span>}
+    </span>
+  );
+}
+
+export function ShopGallery({ shop }) {
+  const media = safeMedia(shop.media);
+  const [selected, setSelected] = useState(0);
+  const item = media[selected] || media[0];
+  if (!item) return <section className="bk-gallery-empty" aria-label="ภาพร้าน"><span aria-hidden="true" className="bk-shop-monogram">{shop.name?.[0]}</span><div><strong>{shop.name}</strong><p className="bk-muted">ยังไม่มีภาพจากร้าน · จองผ่าน Kiwmee</p></div></section>;
+  return (
+    <section className="bk-gallery" aria-label="แกลเลอรีภาพร้าน">
+      <figure className="bk-gallery-cover">
+        <MediaImage key={item.url} item={item} name={shop.name} eager />
+        <figcaption aria-live="polite">{isDemo(item) ? "ILLUSTRATION · ภาพประกอบ ไม่ใช่ภาพสถานที่จริง" : item.alt || `ภาพจาก ${shop.name}`}</figcaption>
+      </figure>
+      {media.length > 1 && <div className="bk-gallery-thumbnails" aria-label="เลือกภาพร้าน">{media.map((image, index) => <button key={`${image.url}-${index}`} type="button" aria-label={`ดูภาพที่ ${index + 1}: ${mediaAlt(image, shop.name)}`} aria-pressed={item === image} onClick={() => setSelected(index)}><MediaImage key={image.url} item={image} name={shop.name} /></button>)}</div>}
+    </section>
+  );
+}
+
+export function OfferingThumbnail({ offering }) {
+  const item = safeMedia(offering.media)[0];
+  return <span className="bk-offering-media">{item ? <><MediaImage key={item.url} item={item} name={offering.name} />{isDemo(item) && <span className="bk-media-caption">ILLUSTRATION · ภาพประกอบ ไม่ใช่ภาพสถานที่จริง</span>}</> : <span className="bk-offering-placeholder"><span aria-hidden="true">{offering.name?.[0]}</span><small>ยังไม่มีภาพจากร้าน</small></span>}</span>;
+}
 export function ShopHeader({ shop, subtitle }) {
   return (
     <header className="bk-header bk-shop-header">

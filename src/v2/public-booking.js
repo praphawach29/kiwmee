@@ -55,6 +55,13 @@ function priceFrom(prices, offeringId) {
 async function shopInfo(db, slug) {
   const shop = await requireShop(db, slug);
   const catalog = await loadCatalog(db, shop);
+  // Keep gallery reads out of the availability snapshot: media never affects booking rules.
+  const { rows: [gallery] } = await db.query(
+    `select b.media,
+            (select coalesce(jsonb_object_agg(o.id, o.media), '{}'::jsonb)
+               from public.offerings o where o.business_id = b.id and o.active) as offering_media
+       from public.businesses b where b.id = $1`, [shop.id]
+  );
   const pickable = new Set(
     catalog.requirements
       .filter((r) => r.customer_picks)
@@ -71,6 +78,7 @@ async function shopInfo(db, slug) {
     name: shop.name,
     kind: shop.kind,
     timezone: shop.timezone,
+    media: gallery.media,
     flow: {
       entry: catalog.flow.entry,
       then: catalog.flow.then,
@@ -87,6 +95,7 @@ async function shopInfo(db, slug) {
       name: o.name,
       category: o.category,
       description: o.description,
+      media: gallery.offering_media[o.id] ?? [],
       durationMinutes: o.duration_mode === "fixed" ? o.duration_minutes : null,
       minMinutes: o.duration_mode === "customer_choice" ? o.min_minutes : null,
       maxMinutes: o.duration_mode === "customer_choice" ? o.max_minutes : null,

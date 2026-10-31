@@ -196,6 +196,7 @@ export default function ShopAdmin({ slug }) {
         ))}
       </nav>
       <ReadOnly.Provider value={readOnly}>
+        {tab === "overview" && <OverviewTab slug={slug} catalog={catalog} onNavigate={show} />}
         {tab === "bookings" && <BookingsTab slug={slug} catalog={catalog} />}
         {tab === "bills" && <BillsTab slug={slug} catalog={catalog} />}
         {tab === "flow" && <FlowTab slug={slug} catalog={catalog} version={version} onSaved={reload} />}
@@ -209,8 +210,178 @@ export default function ShopAdmin({ slug }) {
   );
 }
 
-// ---------- bookings (members, staff included) ----------
+// ---------- overview (dashboard summary) ----------
 
+function OverviewTab({ slug, catalog, onNavigate }) {
+  const [day, setDay] = useState(today());
+  const [bookings, setBookings] = useState(null);
+  const [bills, setBills] = useState(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const [bookingList, billData] = await Promise.all([
+        api("GET", shopPath(slug, `/bookings?from=${day}`)),
+        api("GET", shopPath(slug, `/bills?from=${day}`))
+      ]);
+      setBookings(Array.isArray(bookingList) ? bookingList : []);
+      setBills(billData);
+    } catch (e) {
+      if (e.status === 401) window.location.href = "/dashboard";
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }, [slug, day]);
+
+  useEffect(() => {
+    setBookings(null);
+    setBills(null);
+    load();
+  }, [load]);
+
+  const active = (bookings ?? []).filter((b) => ACTIVE.includes(b.status));
+  const upcoming = active.filter((b) => ["held", "pending", "confirmed"].includes(b.status));
+  const checkedIn = active.filter((b) => b.status === "checked_in").length;
+  const completed = active.filter((b) => b.status === "completed").length;
+  const closed = active.filter((b) => b.status === "cancelled" || b.status === "no_show").length;
+  const sum = bills?.summary;
+  const walkIns = (bills?.bills ?? []).filter((b) => !b.bookingId).length;
+  const resources = catalog.resources ?? [];
+  const offerings = catalog.offerings ?? [];
+  const activeOfferings = offerings.filter((o) => o.active).length;
+
+  const nextBookings = active
+    .slice()
+    .sort((a, b) => `${a.date ?? day} ${a.start}`.localeCompare(`${b.date ?? day} ${b.start}`))
+    .slice(0, 5);
+
+  return (
+    <div className="ad-stack">
+      <section className="ad-card">
+        <div className="ad-row ad-wrap ad-between">
+          <div>
+            <p className="ad-muted">สรุปการดำเนินงาน</p>
+            <h2>{longDate(day)}{day === today() ? " (วันนี้)" : ""}</h2>
+          </div>
+          <div className="ad-row ad-wrap">
+            <button type="button" className="ad-secondary ad-icon-btn" onClick={() => setDay(addDays(day, -1))} aria-label="วันก่อนหน้า">‹</button>
+            <input type="date" value={day} onChange={(e) => e.target.value && setDay(e.target.value)} aria-label="วันที่" />
+            <button type="button" className="ad-secondary ad-icon-btn" onClick={() => setDay(addDays(day, 1))} aria-label="วันถัดไป">›</button>
+            {day !== today() && <button type="button" className="ad-link" onClick={() => setDay(today())}>วันนี้</button>}
+            <button type="button" className="ad-secondary" disabled={busy} onClick={load}>{busy ? "กำลังโหลด…" : "รีเฟรช"}</button>
+          </div>
+        </div>
+        {error && <p className="ad-error" role="alert">{error}</p>}
+      </section>
+
+      <section className="ad-grid" aria-label="ตัวชี้วัดวันนี้">
+        <article className="ad-card ad-metric">
+          <span className="ad-muted">การจองทั้งหมด</span>
+          <strong>{bookings === null ? "…" : bookings.length}</strong>
+          <span className="ad-muted">{upcoming.length} รอให้บริการ · {checkedIn} มาถึงแล้ว</span>
+        </article>
+        <article className="ad-card ad-metric">
+          <span className="ad-muted">รายรับสุทธิ</span>
+          <strong>{sum ? money(sum.net) : "…"}</strong>
+          <span className="ad-muted">{sum ? `${sum.closedBills} บิลปิดแล้ว` : "กำลังโหลด…"}</span>
+        </article>
+        <article className="ad-card ad-metric">
+          <span className="ad-muted">เสร็จแล้ว</span>
+          <strong>{bookings === null ? "…" : completed}</strong>
+          <span className="ad-muted">{checkedIn} กำลังให้บริการ · {closed} ยกเลิก/ไม่มา</span>
+        </article>
+        <article className="ad-card ad-metric">
+          <span className="ad-muted">ทรัพยากร / บริการ</span>
+          <strong>{resources.length} / {activeOfferings}</strong>
+          <span className="ad-muted">{offerings.length} บริการทั้งหมด · {catalog.shop.media?.length ?? 0} รูปร้าน</span>
+        </article>
+      </section>
+
+      <div className="ad-split">
+        <section className="ad-card">
+          <div className="ad-row ad-between">
+            <h2>การจองถัดไป</h2>
+            <button type="button" className="ad-link" onClick={() => onNavigate?.("bookings")}>ดูทั้งหมด</button>
+          </div>
+          {!bookings && !error && <p className="ad-muted">กำลังโหลด…</p>}
+          {bookings && nextBookings.length === 0 && <p className="ad-empty">ยังไม่มีการจองที่รอให้บริการ</p>}
+          <ul className="ad-bookings">
+            {nextBookings.map((b) => {
+              const [label, tone] = STATUS[b.status] ?? [b.status, "off"];
+              return (
+                <li key={b.id} className="ad-booking">
+                  <div className="ad-booking-time"><strong>{b.start}</strong><span>{b.end}</span></div>
+                  <div className="ad-booking-main">
+                    <div className="ad-row ad-wrap">
+                      <strong className="ad-booking-name">{b.customer.name}</strong>
+                      <span className="ad-status" data-tone={tone}>{label}</span>
+                    </div>
+                    <div className="ad-muted">
+                      {b.offering.name}
+                      {b.resources.length ? ` · ${b.resources.map((r) => r.name).join(", ")}` : ""}
+                      {b.partySize > 1 ? ` · ${b.partySize} คน` : ""}
+                      {b.price ? ` · ${money(b.price)}` : ""}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+
+        <section className="ad-card">
+          <div className="ad-row ad-between">
+            <h2>รายรับและบิล</h2>
+            <button type="button" className="ad-link" onClick={() => onNavigate?.("bills")}>ดูทั้งหมด</button>
+          </div>
+          {sum && (
+            <dl className="ad-totals">
+              <div data-main="true"><dt>รับสุทธิ</dt><dd>{money(sum.net)}</dd></div>
+              {Object.entries(METHODS).map(([k, v]) => (sum.byMethod[k] ? <div key={k}><dt>{v}</dt><dd>{money(sum.byMethod[k])}</dd></div> : null))}
+              {sum.refunds > 0 && <div><dt>คืนเงิน</dt><dd>−{money(sum.refunds)}</dd></div>}
+              <div><dt>จำนวนบิล</dt><dd>{sum.closedBills}</dd></div>
+              <div><dt>ขายหน้าร้าน</dt><dd>{walkIns}</dd></div>
+            </dl>
+          )}
+          {!sum && !error && <p className="ad-muted">กำลังโหลด…</p>}
+          {(bills?.bills ?? []).length > 0 && (
+            <ul className="ad-bookings">
+              {(bills.bills ?? []).slice(0, 5).map((b) => (
+                <li key={b.id} className="ad-booking">
+                  <div className="ad-booking-time"><strong>{b.time}</strong></div>
+                  <div className="ad-booking-main">
+                    <div className="ad-row ad-wrap">
+                      <strong className="ad-booking-name">{b.title}</strong>
+                      {b.status !== "closed" && <span className="ad-status" data-tone="warn">ยังไม่ปิด</span>}
+                      {!b.bookingId && <span className="ad-status" data-tone="info">ขายหน้าร้าน</span>}
+                    </div>
+                    <div className="ad-muted">{b.customerName ? `${b.customerName} · ` : ""}{money(b.total)}</div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+
+      <section className="ad-card">
+        <h2>ทางลัด</h2>
+        <div className="ad-row ad-wrap">
+          <button type="button" className="ad-primary" onClick={() => onNavigate?.("bookings")}>+ เพิ่มการจอง</button>
+          <button type="button" className="ad-secondary" onClick={() => onNavigate?.("bills")}>+ ขายหน้าร้าน</button>
+          <button type="button" className="ad-secondary" onClick={() => onNavigate?.("offerings")}>จัดการบริการ</button>
+          <button type="button" className="ad-secondary" onClick={() => onNavigate?.("resources")}>จัดการสนาม/ช่าง</button>
+          <button type="button" className="ad-secondary" onClick={() => onNavigate?.("hours")}>เวลาทำการ</button>
+        </div>
+        <p className="ad-muted">ภาพร้านและบริการแก้ได้ในแท็บ “บริการและราคา” และ “ร้านและเวลาทำการ”</p>
+      </section>
+    </div>
+  );
+}
 const STATUS = {
   held: ["รอชำระ", "warn"],
   pending: ["รอยืนยัน", "warn"],

@@ -1,5 +1,6 @@
 // Navigation mirrors existing shop-route permissions; the backend remains the authority.
 const DAILY = [
+  { id: "overview", label: "ภาพรวม", icon: "▨" },
   { id: "bookings", label: "การจอง", icon: "▦" },
   { id: "bills", label: "บิลและรายรับ", icon: "▤" },
 ];

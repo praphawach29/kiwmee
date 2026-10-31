@@ -70,7 +70,7 @@ function formatPrice(price) {
 }
 
 function formatDateOnly(value) {
-  return value ? new Intl.DateTimeFormat("th-TH", { timeZone: "Asia/Bangkok", dateStyle: "medium" }).format(new Date(value)) : "";
+  return value ? new Intl.DateTimeFormat("th-TH", { timeZone: "Asia/Bangkok", day: "numeric", month: "long", year: "numeric" }).format(new Date(value)) : "";
 }
 
 function formatTime(value) {

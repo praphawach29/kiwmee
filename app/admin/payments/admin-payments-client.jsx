@@ -143,7 +143,7 @@ export default function AdminPaymentsClient() {
                       <div className="meta" style={{ marginTop: "4px", fontSize: "0.85rem", color: "#666" }}>
                         <span>บริการ: {item.service_name}</span> · 
                         <span>ช่าง: {item.staff_name}</span> · 
-                        <span>นัดหมาย: {new Date(item.appointment_start).toLocaleString("th-TH")}</span>
+                        <span>นัดหมาย: {new Intl.DateTimeFormat("th-TH", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(item.appointment_start))}</span>
                       </div>
                       <div style={{ marginTop: "6px" }}>
                         <span style={{ fontWeight: "bold" }}>ยอดที่ต้องชำระ: ฿{item.amount_due}</span>
@@ -203,7 +203,7 @@ export default function AdminPaymentsClient() {
                   </div>
                   <div><strong>ผลตรวจบัญชีผู้รับ:</strong> {selectedReview.evidence?.receiver_match_status}</div>
                   <div><strong>Fingerprint สลิป:</strong> {selectedReview.evidence?.trans_ref_fingerprint ?? "-"}</div>
-                  <div><strong>เวลาในสลิป:</strong> {selectedReview.evidence?.transaction_timestamp ? new Date(selectedReview.evidence?.transaction_timestamp).toLocaleString("th-TH") : "-"}</div>
+                  <div><strong>เวลาในสลิป:</strong> {selectedReview.evidence?.transaction_timestamp ? new Intl.DateTimeFormat("th-TH", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(selectedReview.evidence?.transaction_timestamp)) : "-"}</div>
                   <div><strong>สัญญาณสลิปซ้ำ:</strong> {selectedReview.evidence?.duplicate_signal ? "ตรวจพบสลิปซ้ำ ⚠️" : "ไม่พบประวัติซ้ำ"}</div>
                 </div>
               </div>
@@ -217,7 +217,7 @@ export default function AdminPaymentsClient() {
                         <strong>#{idx + 1} {att.verification_provider}</strong> · ผลลัพธ์: {att.normalized_result} · ผู้รับ: {att.verified_receiver || "-"}
                       </div>
                       <div style={{ color: "#666" }}>
-                        เวลาตรวจ: {new Date(att.created_at).toLocaleString("th-TH")} · Fingerprint: {att.trans_ref_fingerprint}
+                        เวลาตรวจ: {new Intl.DateTimeFormat("th-TH", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(att.created_at))} · Fingerprint: {att.trans_ref_fingerprint}
                       </div>
                     </div>
                   ))}

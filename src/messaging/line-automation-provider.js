@@ -13,5 +13,5 @@ class LineAutomationNotificationProvider {
     return this.fallback[fallbackMethod](payload);
   }
 }
-function format(value) { return new Intl.DateTimeFormat("th-TH", { timeZone: "Asia/Bangkok", dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
+function format(value) { return new Intl.DateTimeFormat("th-TH", { timeZone: "Asia/Bangkok", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(value)); }
 module.exports = { LineAutomationNotificationProvider };

@@ -65,4 +65,4 @@ export default function AssistantClient() {
     <footer><button onClick={() => { setSessionId(null); setMessages([]); setError(""); setInput(""); }} disabled={loading}>เริ่มใหม่</button><button onClick={() => send("คุยกับพนักงาน")} disabled={loading}>ติดต่อพนักงาน</button></footer>
   </main>;
 }
-function formatDate(value) { return value ? new Intl.DateTimeFormat("th-TH", { timeZone: "Asia/Bangkok", dateStyle: "medium", timeStyle: "short" }).format(new Date(value)) : ""; }
+function formatDate(value) { return value ? new Intl.DateTimeFormat("th-TH", { timeZone: "Asia/Bangkok", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(value)) : ""; }

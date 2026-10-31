@@ -5,13 +5,13 @@ import { shopNavigation, shopTabs, resolveShopTab, homeTabFromHash } from "../ap
 test("owners see existing daily operations and shop settings", () => {
   const groups = shopNavigation("owner");
   assert.deepEqual(groups.flatMap((group) => group.items.map((item) => item.id)),
-    ["shops", "bookings", "bills", "flow", "offerings", "resources", "hours"]);
+    ["shops", "overview", "bookings", "bills", "flow", "offerings", "resources", "hours"]);
   assert.equal(groups.find((group) => group.label === "ตั้งค่าร้าน").collapsible, true);
 });
 
 test("staff see daily operations but no settings", () => {
   const groups = shopNavigation("staff");
-  assert.deepEqual(groups.flatMap((group) => group.items.map((item) => item.id)), ["shops", "bookings", "bills"]);
+  assert.deepEqual(groups.flatMap((group) => group.items.map((item) => item.id)), ["shops", "overview", "bookings", "bills"]);
 });
 
 test("tab definitions match sidebar items and reject restricted or invalid requests", () => {
@@ -23,7 +23,7 @@ test("tab definitions match sidebar items and reject restricted or invalid reque
       assert.equal(resolveShopTab(role, invalid), tabs[0]?.id ?? null);
     }
   }
-  for (const id of ["flow", "offerings", "resources", "hours"]) assert.equal(resolveShopTab("staff", id), "bookings");
+  for (const id of ["flow", "offerings", "resources", "hours"]) assert.equal(resolveShopTab("staff", id), "overview");
   assert.equal(resolveShopTab("unknown", "bookings"), null);
 });
 

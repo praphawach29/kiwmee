@@ -4,6 +4,42 @@
 // to the chosen offering is skipped there, which this says in a note.
 
 export const STEP_ORDER = ["offering", "resource", "date", "time", "duration", "party"];
+
+// Keep an untouched custom flow byte-for-byte in meaning (including ordering/options).
+// The form's projection is only rebuilt after an explicit owner edit or template choice.
+const draftFields = (draft) => ({
+  entry: draft.entry, modes: draft.modes, showAnyStaff: draft.showAnyStaff,
+  dateRangeDays: draft.dateRangeDays
+});
+
+export function bookingFlowDraft(flow) {
+  const mode = (step) => flow.require.includes(step) ? "require" : flow.optional.includes(step) ? "optional" : "off";
+  const draft = {
+    entry: [...flow.entry],
+    modes: { resource: mode("resource"), duration: mode("duration"), party: mode("party") },
+    showAnyStaff: flow.options?.showAnyStaff ?? false,
+    dateRangeDays: flow.options?.dateRangeDays ?? "",
+    original: structuredClone(flow)
+  };
+  draft.originalFields = JSON.stringify(draftFields(draft));
+  return draft;
+}
+
+export function bookingFlowFromDraft(draft) {
+  if (JSON.stringify(draftFields(draft)) === draft.originalFields) return structuredClone(draft.original);
+  const require = ["offering", "date", "time"];
+  const optional = [];
+  for (const [step, mode] of Object.entries(draft.modes)) {
+    if (mode === "require") require.push(step);
+    if (mode === "optional") optional.push(step);
+  }
+  return {
+    entry: draft.entry.filter((step) => require.includes(step) || optional.includes(step)),
+    require, optional, then: [...(draft.original?.then || ["customer"])],
+    options: { ...draft.original?.options, showAnyStaff: draft.showAnyStaff,
+      dateRangeDays: draft.dateRangeDays === "" ? null : Number(draft.dateRangeDays) }
+  };
+}
 export const KIND_WORD = { staff: "ช่าง", court: "สนาม", room: "ห้อง", equipment: "อุปกรณ์" };
 // a kind the shop named itself ("เก้าอี้นวด") is its own word
 export const kindWord = (kind) => KIND_WORD[kind] ?? kind;

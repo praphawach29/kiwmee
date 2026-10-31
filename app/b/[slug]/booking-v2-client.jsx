@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CustomerFrame from "./customer-frame.jsx";
+import { BookingProgress, BookingReview, BookingSubmitBar, ShopHeader } from "./booking-presentation.jsx";
 
 const RESOURCE_WORD = { staff: "ช่าง", court: "สนาม", room: "ห้อง", equipment: "อุปกรณ์" };
 const STEP_TITLE = {
@@ -198,9 +199,8 @@ export default function BookingV2Client({ shop, liffId }) {
   if (booking) {
     return (
       <CustomerFrame shop={shop} completed actions={booking.manageToken ? [{ label: "ดูการจองของฉัน", href: `/b/${shop.slug}/manage/${booking.manageToken}` }] : []}><main className="bk-shell">
-        <header className="bk-header">
-          <h1>{shop.name}</h1>
-        </header>
+        <ShopHeader shop={shop} subtitle="รายละเอียดการจองของคุณ" />
+        <BookingProgress phase="complete" />
         <section className="bk-card bk-done" data-testid="booking-done">
           <h2>{booking.status === "held" ? "กันคิวไว้ให้แล้ว" : "จองสำเร็จ"}</h2>
           <dl className="bk-summary">
@@ -243,12 +243,10 @@ export default function BookingV2Client({ shop, liffId }) {
 
   return (
     <CustomerFrame shop={shop}><main className="bk-shell" aria-busy={busy}>
-      <header className="bk-header">
-        <h1>{shop.name}</h1>
-        <p className="bk-muted">จองคิวออนไลน์</p>
-      </header>
+      <ShopHeader shop={shop} subtitle="จองคิวออนไลน์ · เลือกจากคิวว่างของร้าน" />
+      <BookingProgress phase={atCustomer ? "customer" : "selection"} />
 
-      {SUMMARY_ORDER.some((s) => selected[KEY[s]] !== undefined) && (
+      {!atCustomer && SUMMARY_ORDER.some((s) => selected[KEY[s]] !== undefined) && (
         <nav className="bk-chips" aria-label="ที่เลือกไว้">
           {SUMMARY_ORDER.filter((s) => selected[KEY[s]] !== undefined).map((s) => (
             <button key={s} type="button" className="bk-chip" data-active={ask === s} onClick={() => showStep(s)} disabled={busy}>
@@ -272,6 +270,7 @@ export default function BookingV2Client({ shop, liffId }) {
 
       {atStart && (
         <section className="bk-card">
+          <p className="bk-eyebrow">เริ่มต้นการจอง</p>
           <h2>เริ่มจองจาก</h2>
           <div className="bk-start">
             {next.choices.map((c) => (
@@ -288,12 +287,14 @@ export default function BookingV2Client({ shop, liffId }) {
 
       {ask && view.options && (
         <section className="bk-card" data-step={ask}>
+          <p className="bk-eyebrow">{ask === "date" || ask === "time" ? "วันเวลาที่สะดวก" : "ตัวเลือกของคุณ"}</p>
           <h2>{ask === "resource" ? `เลือก${resourceWord}` : STEP_TITLE[ask]}</h2>
+          <p className="bk-muted">{ask === "date" ? "แตะวันที่ต้องการเพื่อดูตัวเลือกต่อไป" : ask === "time" && selected.date ? `${formatDate(selected.date, { long: true })} · เวลาตามร้าน` : "แตะเพื่อเลือก · ตัวเลือกที่ไม่ว่างจะแสดงเหตุผล"}</p>
           {view.options.length === 0 || !view.options.some((o) => o.available) ? (
             <p className="bk-muted">{ask === "time" ? "วันนี้ไม่มีเวลาว่างแล้ว" : "ไม่มีตัวเลือกที่ว่าง"} {view.reason ? `(${REASON_TEXT[view.reason] ?? view.reason})` : ""} — ลองเปลี่ยนตัวเลือกด้านบน</p>
           ) : null}
           <div className={`bk-options bk-options-${ask}`}>
-            {view.options.map((o, i) => {
+            {view.options.map((o) => {
               const chosen = selected[KEY[ask]] === o.value;
               return (
                 <button
@@ -303,10 +304,11 @@ export default function BookingV2Client({ shop, liffId }) {
                   data-testid={`option-${ask}`}
                   data-value={o.value === null ? "any" : String(o.value)}
                   data-selected={chosen}
+                  aria-pressed={chosen}
                   disabled={busy || !o.available}
                   onClick={() => choose(ask, o.value)}
                 >
-                  <OptionBody ask={ask} option={o} index={i} offering={offerings.get(o.value)} resourceWord={resourceWord} />
+                  <OptionBody ask={ask} option={o} offering={offerings.get(o.value)} resourceWord={resourceWord} />
                   {!o.available && <small className="bk-reason">{REASON_TEXT[o.reason] ?? "ไม่ว่าง"}</small>}
                 </button>
               );
@@ -316,8 +318,11 @@ export default function BookingV2Client({ shop, liffId }) {
       )}
 
       {atCustomer && (
-        <form className="bk-card" onSubmit={submit}>
+        <>
+        <BookingReview items={SUMMARY_ORDER.filter((s) => selected[KEY[s]] !== undefined).map((s) => ({ step: s, label: s === "resource" ? resourceWord : STEP_TITLE[s]?.replace("เลือก", "") ?? s, value: valueLabel(s, selected[KEY[s]]) }))} onEdit={showStep} busy={busy} />
+        <form id="booking-customer" className="bk-card" onSubmit={submit}>
           <h2>ข้อมูลผู้จอง</h2>
+          <p className="bk-muted">ใช้สำหรับติดต่อเรื่องนัดหมายนี้</p>
           <label className="bk-field">
             <span>ชื่อ</span>
             <input name="name" required maxLength={100} autoComplete="name" value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} />
@@ -334,12 +339,11 @@ export default function BookingV2Client({ shop, liffId }) {
               onChange={(e) => setCustomer({ ...customer, phone: e.target.value })}
             />
           </label>
-          <button type="submit" className="bk-primary" disabled={busy || !liff.ready}>
-            ยืนยันการจอง
-          </button>
         </form>
+        </>
       )}
       <PoweredBy />
+      {atCustomer && <BookingSubmitBar formId="booking-customer" disabled={busy || !liff.ready} busy={busy} />}
     </main></CustomerFrame>
   );
 }
@@ -381,12 +385,12 @@ function PoweredBy() {
   );
 }
 
-function OptionBody({ ask, option, index, offering, resourceWord }) {
+function OptionBody({ ask, option, offering, resourceWord }) {
   if (ask === "offering" && offering) {
     const length = offering.durationMinutes ? formatMinutes(offering.durationMinutes) : `${formatMinutes(offering.minMinutes)}–${formatMinutes(offering.maxMinutes)}`;
     return (
       <>
-        <strong>{offering.name}</strong>
+        <span className="bk-option-title"><strong>{offering.name}</strong><span className="bk-choice-mark" aria-hidden="true" /></span>
         <span className="bk-muted">
           {length}
           {offering.price ? ` · ${priceText(offering.price)}` : ""}
@@ -400,7 +404,7 @@ function OptionBody({ ask, option, index, offering, resourceWord }) {
     const part = (opts) => new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", ...opts }).format(d);
     return (
       <>
-        <span className="bk-day-label">{index === 0 ? "วันนี้" : index === 1 ? "พรุ่งนี้" : part({ weekday: "short" })}</span>
+        <span className="bk-day-label">{part({ weekday: "long" })}</span>
         <strong>{part({ day: "numeric", month: "short" })}</strong>
       </>
     );

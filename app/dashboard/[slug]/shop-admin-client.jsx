@@ -9,7 +9,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { api } from "../api.mjs";
 import MerchantSidebar from "../merchant-sidebar.jsx";
 import { shopNavigation, shopTabs, resolveShopTab } from "../merchant-navigation.mjs";
-import { catalogWarnings, kindWord, previewPaths, resourceWord } from "./flow-preview.mjs";
+import { bookingFlowDraft, bookingFlowFromDraft, catalogWarnings, kindWord, previewPaths, resourceWord } from "./flow-preview.mjs";
+import { BOOKING_TEMPLATES, previewBookingTemplate } from "../../../src/v2/booking-templates.js";
 
 // Defense in depth for owner-only settings controls; APIs/RLS enforce permissions.
 const ReadOnly = createContext(false);
@@ -808,69 +809,18 @@ function BookingForm({ slug, catalog, booking, defaultDate, onClose, onSaved }) 
 
 // ---------- booking flow ----------
 
-const TEMPLATES = {
-  salon: {
-    label: "ร้านเสริมสวย",
-    hint: "เริ่มจากวันหรือบริการก็ได้ เลือกช่างหรือ “ใครก็ได้”",
-    flow: { entry: ["date", "offering"], modes: { resource: "optional", duration: "off", party: "off" }, showAnyStaff: true, dateRangeDays: 30 }
-  },
-  barber: {
-    label: "ร้านตัดผมชาย",
-    hint: "เริ่มจากบริการเสมอ ระบบเลือกช่างที่ว่างให้",
-    flow: { entry: ["offering"], modes: { resource: "off", duration: "off", party: "off" }, showAnyStaff: false, dateRangeDays: 14 }
-  },
-  court: {
-    label: "สนามกีฬา",
-    hint: "เลือกสนาม → วัน → เวลาเริ่ม → จำนวนชั่วโมง",
-    flow: { entry: ["resource"], modes: { resource: "require", duration: "require", party: "off" }, showAnyStaff: false, dateRangeDays: 7 }
-  },
-  class: {
-    label: "คลาส / เวิร์กช็อป",
-    hint: "เลือกวันหรือคลาส แล้วระบุจำนวนคน",
-    flow: { entry: ["date", "offering"], modes: { resource: "off", duration: "off", party: "require" }, showAnyStaff: false, dateRangeDays: 30 }
-  }
-};
-
-function modesOf(flow) {
-  const mode = (s) => (flow.require.includes(s) ? "require" : flow.optional.includes(s) ? "optional" : "off");
-  return { resource: mode("resource"), duration: mode("duration"), party: mode("party") };
-}
-
-function draftFlow(draft) {
-  const require = ["offering", "date", "time"];
-  const optional = [];
-  for (const [step, mode] of Object.entries(draft.modes)) {
-    if (mode === "require") require.push(step);
-    if (mode === "optional") optional.push(step);
-  }
-  const chosen = [...require, ...optional];
-  return {
-    entry: draft.entry.filter((e) => chosen.includes(e)),
-    require,
-    optional,
-    then: ["customer"],
-    options: { showAnyStaff: draft.showAnyStaff, dateRangeDays: toInt(draft.dateRangeDays) }
-  };
-}
-
 function FlowTab({ slug, catalog, version, onSaved }) {
-  const initial = useMemo(
-    () => ({
-      entry: catalog.flow.entry,
-      modes: modesOf(catalog.flow),
-      showAnyStaff: catalog.flow.options.showAnyStaff,
-      dateRangeDays: catalog.flow.options.dateRangeDays ?? ""
-    }),
-    [catalog]
-  );
+  const initial = useMemo(() => bookingFlowDraft(catalog.flow), [catalog]);
   const [draft, setDraft] = useState(initial);
-  useEffect(() => setDraft(initial), [initial]);
+  const [templateId, setTemplateId] = useState("");
+  useEffect(() => { setDraft(initial); setTemplateId(""); }, [initial]);
   const save = useSave();
-  const flow = draftFlow(draft);
+  const flow = bookingFlowFromDraft(draft);
+  const templatePreview = templateId ? previewBookingTemplate(templateId, catalog, flow) : null;
   const word = resourceWord(catalog);
   const paths = previewPaths(flow, catalog);
   const warnings = catalogWarnings(flow, catalog);
-  const changed = JSON.stringify(flow) !== JSON.stringify(draftFlow(initial));
+  const changed = JSON.stringify(flow) !== JSON.stringify(catalog.flow);
 
   const toggleEntry = (step) =>
     setDraft((d) => ({ ...d, entry: d.entry.includes(step) ? d.entry.filter((s) => s !== step) : [...d.entry, step] }));
@@ -881,6 +831,7 @@ function FlowTab({ slug, catalog, version, onSaved }) {
     ["resource", `เลือก${word}ก่อน`]
   ];
   const chosen = [...flow.require, ...flow.optional];
+  if (catalog.shop.role !== "owner") return null;
 
   return (
     <div className="ad-split">
@@ -888,15 +839,31 @@ function FlowTab({ slug, catalog, version, onSaved }) {
         <h2>ขั้นตอนจองของลูกค้า</h2>
         <Locked>
         <div className="ad-field">
-          เริ่มจากแบบสำเร็จรูป
-          <div className="ad-chips">
-            {Object.entries(TEMPLATES).map(([key, t]) => (
-              <button key={key} type="button" className="ad-chip" title={t.hint} onClick={() => setDraft({ ...t.flow })}>
-                {t.label}
-              </button>
-            ))}
-          </div>
+          <label htmlFor="booking-template">ดูแบบขั้นตอนจอง</label>
+          <select id="booking-template" value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
+            <option value="">ขั้นตอนปัจจุบัน / กำหนดเอง (ไม่เปลี่ยน)</option>
+            {BOOKING_TEMPLATES.map((template) => {
+              const available = previewBookingTemplate(template.id, catalog, flow).applicable;
+              return <option key={template.id} value={template.id}>{template.label} — {available ? "ใช้กับข้อมูลร้านนี้ได้" : template.status === "planned" ? "อยู่ในแผน · ยังใช้ไม่ได้" : "ข้อมูลร้านยังไม่รองรับ"}</option>;
+            })}
+          </select>
+          <p className="ad-muted">การดูแบบไม่เปลี่ยนขั้นตอนปัจจุบัน เลือกใช้กับแบบร่างแล้วกด “บันทึกขั้นตอนจอง” เองเท่านั้น · ไม่แก้บริการ ทรัพยากร ราคา หรือการตั้งค่าร้าน</p>
         </div>
+        {templatePreview && (
+          <div className="ad-notice" aria-live="polite">
+            <h3>{templatePreview.template.label}</h3>
+            <p>{templatePreview.template.description}</p>
+            {templatePreview.template.limitation && <p>{templatePreview.template.limitation}</p>}
+            {templatePreview.errors.length > 0 && <ul>{templatePreview.errors.map((error) => <li key={error.code + error.message}>{error.message}</li>)}</ul>}
+            {templatePreview.flow && previewPaths(templatePreview.flow, catalog).map((path) => (
+              <p key={path.entry}>ตัวอย่างแบบ: {path.steps.map((step) => step.label).join(" → ")}</p>
+            ))}
+            <button type="button" className="ad-secondary" disabled={!templatePreview.applicable || save.busy} onClick={() => {
+              const preview = previewBookingTemplate(templateId, catalog, flow);
+              if (preview.applicable) setDraft(bookingFlowDraft(preview.flow));
+            }}>ใช้แบบนี้กับแบบร่าง (ยังไม่บันทึก)</button>
+          </div>
+        )}
 
         <div className="ad-field">
           ลูกค้าเริ่มจากอะไรได้บ้าง (เลือกหลายทาง = ลูกค้าเลือกเองที่หน้าแรก)

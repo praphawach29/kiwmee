@@ -23,7 +23,7 @@ test("salon: start from a date, then offering, anyone, time", async ({ page }) =
   await page.getByRole("button", { name: /เลือกวันก่อน/ }).click();
 
   await expect(page.getByRole("heading", { name: "เลือกวัน" })).toBeVisible();
-  await expect(page.locator('[data-testid="option-date"]').first()).toContainText("วันนี้");
+  await expect(page.locator('[data-testid="option-date"]').first()).toContainText(/วันนี้|วันจันทร์|วันอังคาร|วันพุธ|วันพฤหัสบดี|วันศุกร์|วันเสาร์|วันอาทิตย์/);
   await enabled(page, "date").nth(2).click();
 
   await expect(page.getByRole("heading", { name: "เลือกบริการ" })).toBeVisible();

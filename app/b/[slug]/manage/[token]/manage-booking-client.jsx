@@ -6,6 +6,7 @@
 
 import { useState } from "react";
 import CustomerFrame from "../../customer-frame.jsx";
+import { ShopHeader } from "../../booking-presentation.jsx";
 
 const STATUS = {
   held: "รอชำระเงิน",
@@ -118,10 +119,7 @@ export default function ManageBookingClient({ token, initial }) {
       ...(view.reschedule.allowed ? [{ label: "เลื่อนนัด", onClick: startReschedule, disabled: busy }] : []),
       ...(view.cancel.allowed ? [{ label: "ยกเลิกการจอง", onClick: () => { setMode("cancel"); setNotice(null); }, disabled: busy }] : []),
     ]}><main className="bk-shell" aria-busy={busy}>
-      <header className="bk-header">
-        <h1>{shop.name}</h1>
-        <p className="bk-muted">การจองของ {booking.customerName}</p>
-      </header>
+      <ShopHeader shop={shop} subtitle={`การจองของ ${booking.customerName}`} />
 
       {notice && <p className="bk-notice" role="status">{notice}</p>}
       {error && <p className="bk-error" role="alert">{error}</p>}
@@ -200,6 +198,7 @@ export default function ManageBookingClient({ token, initial }) {
                   data-testid="option-date"
                   data-value={o.value}
                   data-selected={pick.date === o.value}
+                  aria-pressed={pick.date === o.value}
                   disabled={busy || !o.available}
                   onClick={() => chooseDate(o.value)}
                 >
@@ -229,6 +228,7 @@ export default function ManageBookingClient({ token, initial }) {
                         data-testid="option-time"
                         data-value={o.value}
                         data-selected={pick.time === o.value}
+                        aria-pressed={pick.time === o.value}
                         disabled={busy || current}
                         onClick={() => setPick({ ...pick, time: o.value })}
                       >

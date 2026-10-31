@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CustomerFrame from "./customer-frame.jsx";
-import { BookingProgress, BookingReview, BookingSubmitBar, ShopHeader } from "./booking-presentation.jsx";
+import { BookingProgress, BookingReview, BookingSubmitBar, ShopHeader, ShopGallery, OfferingThumbnail } from "./booking-presentation.jsx";
 
 const RESOURCE_WORD = { staff: "ช่าง", court: "สนาม", room: "ห้อง", equipment: "อุปกรณ์" };
 const STEP_TITLE = {
@@ -244,6 +244,7 @@ export default function BookingV2Client({ shop, liffId }) {
   return (
     <CustomerFrame shop={shop}><main className="bk-shell" aria-busy={busy}>
       <ShopHeader shop={shop} subtitle="จองคิวออนไลน์ · เลือกจากคิวว่างของร้าน" />
+      <ShopGallery shop={shop} />
       <BookingProgress phase={atCustomer ? "customer" : "selection"} />
 
       {!atCustomer && SUMMARY_ORDER.some((s) => selected[KEY[s]] !== undefined) && (
@@ -390,6 +391,7 @@ function OptionBody({ ask, option, offering, resourceWord }) {
     const length = offering.durationMinutes ? formatMinutes(offering.durationMinutes) : `${formatMinutes(offering.minMinutes)}–${formatMinutes(offering.maxMinutes)}`;
     return (
       <>
+        <OfferingThumbnail offering={offering} />
         <span className="bk-option-title"><strong>{offering.name}</strong><span className="bk-choice-mark" aria-hidden="true" /></span>
         <span className="bk-muted">
           {length}

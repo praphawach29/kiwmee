@@ -58,7 +58,7 @@ export default function ManageBookingClient({ token, initial }) {
   const { shop, booking } = view;
   const api = `/api/b/${shop.slug}/manage/${token}`;
   // formatted the same on the server and in the browser (no short weekday names, which differ)
-  const deadline = `${new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", day: "numeric", month: "long" }).format(new Date(`${view.deadline.date}T00:00:00Z`))} ${view.deadline.time}`;
+  const deadline = `${new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", day: "numeric", month: "long", year: "numeric" }).format(new Date(`${view.deadline.date}T00:00:00Z`))} ${view.deadline.time}`;
 
   async function task(fn) {
     setBusy(true);
@@ -203,7 +203,7 @@ export default function ManageBookingClient({ token, initial }) {
                   onClick={() => chooseDate(o.value)}
                 >
                   <span className="bk-day-label">{new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", weekday: "short" }).format(new Date(`${o.value}T00:00:00Z`))}</span>
-                  <strong>{new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", day: "numeric", month: "short" }).format(new Date(`${o.value}T00:00:00Z`))}</strong>
+                  <strong>{new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" }).format(new Date(`${o.value}T00:00:00Z`))}</strong>
                   {!o.available && <small className="bk-reason">{REASON_TEXT[o.reason] ?? "ไม่ว่าง"}</small>}
                 </button>
               ))}

@@ -402,7 +402,7 @@ function addDays(date, n) {
 }
 
 const longDate = (date) =>
-  new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long" }).format(new Date(`${date}T00:00:00Z`));
+  new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date(`${date}T00:00:00Z`));
 
 function BookingsTab({ slug, catalog }) {
   const [day, setDay] = useState(today);
@@ -515,7 +515,7 @@ function BookingsTab({ slug, catalog }) {
                     {SOURCE[b.source] ?? b.source}
                     {b.statusReason === "บันทึกย้อนหลัง" ? " (ย้อนหลัง)" : ""}
                     {b.status === "held" && b.holdExpiresAt
-                      ? ` · รอถึง ${new Date(b.holdExpiresAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}`
+                      ? ` · รอถึง ${new Intl.DateTimeFormat("th-TH", { hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(b.holdExpiresAt))}`
                       : ""}
                   </div>
                   {b.notes && <p className="ad-booking-notes">{b.notes}</p>}

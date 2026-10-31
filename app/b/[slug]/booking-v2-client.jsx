@@ -42,7 +42,8 @@ function formatDate(date, { long = false } = {}) {
     timeZone: "UTC",
     weekday: long ? "long" : "short",
     day: "numeric",
-    month: long ? "long" : "short"
+    month: long ? "long" : "short",
+    year: "numeric"
   }).format(new Date(`${date}T00:00:00Z`));
 }
 
@@ -407,7 +408,7 @@ function OptionBody({ ask, option, offering, resourceWord }) {
     return (
       <>
         <span className="bk-day-label">{part({ weekday: "long" })}</span>
-        <strong>{part({ day: "numeric", month: "short" })}</strong>
+        <strong>{part({ day: "numeric", month: "short", year: "numeric" })}</strong>
       </>
     );
   }

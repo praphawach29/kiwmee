@@ -71,7 +71,7 @@ function AdminDashboardClient() {
           {handoffs.length === 0 ? <div className="state">ยังไม่มีคำขอส่งต่อ</div> : null}
           <div className="list">
             {handoffs.map((item) => <div className="handoff-row" key={item.id}>
-              <div><strong>{handoffReason(item.reason)}</strong><span>{item.customer_channel} · {new Date(item.created_at).toLocaleString("th-TH")}</span></div>
+              <div><strong>{handoffReason(item.reason)}</strong><span>{item.customer_channel} · {new Intl.DateTimeFormat("th-TH", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(item.created_at))}</span></div>
               <span className={`status ${item.status}`}>{item.status}</span>
               <div className="handoff-actions">
                 {item.status === "pending" && <button className="ghost-button" onClick={() => updateHandoff(item.id, "accepted")}>รับเรื่อง</button>}

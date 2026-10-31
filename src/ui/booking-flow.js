@@ -47,8 +47,12 @@ function formatDateTime(value) {
     return "-";
   }
   return new Intl.DateTimeFormat("th-TH", {
-    dateStyle: "medium",
-    timeStyle: "short",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
     timeZone: "Asia/Bangkok"
   }).format(new Date(value));
 }

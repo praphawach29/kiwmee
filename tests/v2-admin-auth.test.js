@@ -46,15 +46,16 @@ test("no cookies: nobody, and nothing asked of Supabase", async () => {
 test("a live access token is checked with Supabase once, then cached", async () => {
   const { fetchImpl, calls } = fakeSupabase();
   const req = request({ bk_access: LIVE, bk_refresh: "r1" });
-  assert.deepEqual(await auth.currentUser(req, { fetchImpl, now: NOW }), { user: USER, cookies: [] });
-  assert.deepEqual(await auth.currentUser(req, { fetchImpl, now: NOW + 1000 }), { user: USER, cookies: [] });
+  assert.deepEqual(await auth.currentUser(req, { fetchImpl, now: NOW }), { user: USER, cookies: [], accessToken: LIVE });
+  assert.deepEqual(await auth.currentUser(req, { fetchImpl, now: NOW + 1000 }), { user: USER, cookies: [], accessToken: LIVE });
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url, "https://example.supabase.co/auth/v1/user");
 });
 
 test("an expired access token is refreshed and the new session goes back as cookies", async () => {
   const { fetchImpl, calls } = fakeSupabase({ refresh: { r1: { access_token: LIVE, refresh_token: "r2" } } });
-  const { user, cookies } = await auth.currentUser(request({ bk_access: EXPIRED, bk_refresh: "r1" }), { fetchImpl, now: NOW });
+  const { user, cookies, accessToken } = await auth.currentUser(request({ bk_access: EXPIRED, bk_refresh: "r1" }), { fetchImpl, now: NOW });
+  assert.equal(accessToken, LIVE);
   assert.deepEqual(user, USER);
   assert.equal(calls[0].url, "https://example.supabase.co/auth/v1/token?grant_type=refresh_token");
   assert.match(cookies[0], /^bk_access=h\.[^;]+; HttpOnly; SameSite=Lax; Path=\/; Secure; Max-Age=\d+$/);

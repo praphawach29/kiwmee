@@ -17,7 +17,7 @@ function loadComponents(file = 'booking-presentation.jsx') {
   const mod = new Module(filename, module);
   mod.filename = filename;
   mod.paths = module.paths;
-  if (file.includes('shop-admin-client')) mod.require = (name) => name.startsWith('.') ? {} : require(name);
+  if (file.includes('shop-admin-client')) mod.require = (name) => name === '../media-editor.jsx' ? loadComponents('../../dashboard/media-editor.jsx') : name.startsWith('.') ? {} : require(name);
   mod._compile(code, filename);
   return mod.exports;
 }
@@ -42,7 +42,7 @@ test('owner media editor retains URLs and alt labels until explicit form save', 
   assert.match(html, /คำอธิบายภาพ/);
   assert.match(html, /type="button"/);
   assert.match(html, /HTTPS/);
-  assert.doesNotMatch(html, /type="file"/);
+  assert.match(html, /type="file"/);
 });
 
 test('shop gallery uses a branded empty state and rejects unsafe media', () => {

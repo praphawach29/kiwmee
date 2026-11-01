@@ -7,6 +7,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { api } from "../api.mjs";
+import OwnerMediaEditor from "../media-editor.jsx";
 import MerchantSidebar from "../merchant-sidebar.jsx";
 import { shopNavigation, shopTabs, resolveShopTab } from "../merchant-navigation.mjs";
 import { bookingFlowDraft, bookingFlowFromDraft, catalogWarnings, kindWord, previewPaths, resourceWord } from "./flow-preview.mjs";
@@ -58,30 +59,9 @@ function useSave() {
   return { ...state, run };
 }
 
-export function MediaEditor({ value = [], onChange, label }) {
+export function MediaEditor(props) {
   const readOnly = useContext(ReadOnly);
-  if (readOnly) return null;
-  const update = (index, patch) => onChange(value.map((item, i) => i === index ? { ...item, ...patch } : item));
-  return (
-    <fieldset className="ad-media-editor">
-      <legend>{label} ({value.length}/8)</legend>
-      <p className="ad-muted">ใส่ลิงก์ภาพ HTTPS หรือ /demo-media/ ได้สูงสุด 8 ภาพ · ยังไม่มีการอัปโหลดไฟล์ · ภาพแรกเป็นภาพหลัก</p>
-      {value.length === 0 && <p className="ad-muted">ยังไม่มีภาพ · ลูกค้าจะเห็นพื้นภาพแบรนด์แทน</p>}
-      {value.map((item, index) => <div className="ad-media-row" key={index}>
-        <label className="ad-field">URL ภาพที่ {index + 1}<input required type="text" inputMode="url" maxLength={2048} placeholder="https://…" value={item.url} onChange={(event) => { event.target.setCustomValidity(""); update(index, { url: event.target.value }); }} onBlur={(event) => {
-          const url = event.target.value;
-          let valid = /^\/demo-media\/[a-zA-Z0-9_./-]+$/.test(url) && !url.includes("..");
-          try { const parsed = new URL(url); valid = valid || (parsed.protocol === "https:" && !parsed.username && !parsed.password); } catch { /* local demo paths checked above */ }
-          event.target.setCustomValidity(valid ? "" : "ใช้ลิงก์ HTTPS หรือเส้นทาง /demo-media/ เท่านั้น");
-        }} /></label>
-        <label className="ad-field">คำอธิบายภาพ (alt) ที่ {index + 1}<input value={item.alt ?? ""} maxLength={200} placeholder="อธิบายสิ่งที่เห็นในภาพ" onChange={(event) => update(index, { alt: event.target.value })} /></label>
-        {item.url.startsWith("/demo-media/") && <p className="ad-muted">ILLUSTRATION · ภาพประกอบ ไม่ใช่ภาพสถานที่จริง</p>}
-        <button type="button" className="ad-link" aria-label={`ลบภาพที่ ${index + 1}`} onClick={() => onChange(value.filter((_, i) => i !== index))}>ลบภาพ</button>
-      </div>)}
-      <button type="button" className="ad-secondary" disabled={value.length >= 8} onClick={() => onChange([...value, { url: "", alt: "" }])}>+ เพิ่ม URL ภาพ</button>
-      <p className="ad-muted">ภาพจะเปลี่ยนในหน้าลูกค้าหลังจากกดบันทึกด้านล่างเท่านั้น</p>
-    </fieldset>
-  );
+  return readOnly ? null : <OwnerMediaEditor {...props} />;
 }
 
 function Status({ save }) {
@@ -1277,7 +1257,7 @@ function OfferingEditor({ slug, catalog, initial, onSaved, onClose }) {
         <label className="ad-field">หมวด (ไม่บังคับ)<input value={o.category ?? ""} onChange={(e) => set({ category: e.target.value })} /></label>
       </div>
       <label className="ad-field">รายละเอียด (ไม่บังคับ)<textarea rows={2} value={o.description ?? ""} onChange={(e) => set({ description: e.target.value })} /></label>
-      <MediaEditor label="ภาพบริการ" value={o.media ?? []} onChange={(media) => set({ media })} />
+      <MediaEditor slug={slug} disabled={save.busy} label="ภาพบริการ" value={o.media ?? []} onChange={(media) => set({ media })} />
 
       <div className="ad-field">
         ระยะเวลา
@@ -1654,7 +1634,7 @@ function HoursTab({ slug, catalog, onSaved }) {
             </select>
           </label>
         </div>
-        <MediaEditor label="ภาพร้าน" value={form.media} onChange={(media) => setForm((f) => ({ ...f, media }))} />
+        <MediaEditor slug={slug} disabled={save.busy} label="ภาพร้าน" value={form.media} onChange={(media) => setForm((f) => ({ ...f, media }))} />
         <h2>เวลาทำการ</h2>
         <table className="ad-table">
           <tbody>

@@ -130,11 +130,11 @@ async function currentUser(request, options = {}) {
   }
   const user = access ? await fetchUser(access, options) : null;
   if (!user) return { user: null, cookies: sessionCookies(request, null) };
-  return { user, cookies: refreshed ? sessionCookies(request, refreshed) : [] };
+  return { user, cookies: refreshed ? sessionCookies(request, refreshed) : [], accessToken: access };
 }
 
 /**
- * A route handler for signed-in users: runs handler(user), answers 401 without a session, turns
+ * A route handler for signed-in users: runs handler(user, internalSession), answers 401 without a session, turns
  * errors into the usual JSON error, and adds any session cookies to whatever goes back.
  */
 async function adminRoute(request, handler, options) {
@@ -144,7 +144,8 @@ async function adminRoute(request, handler, options) {
     const session = await currentUser(request, options);
     cookies = session.cookies;
     if (!session.user) throw unauthorized();
-    response = await handler(session.user);
+    // Internal only: never serialize this session/token into a route response.
+    response = await handler(session.user, { accessToken: session.accessToken });
   } catch (error) {
     response = jsonError(error);
   }

@@ -25,6 +25,12 @@ const kindWord = (kind) => KIND_WORD[kind] ?? kind ?? "ช่าง/สนาม
 function whenText(startAt, endAt, timezone) {
   const part = (opts, iso = startAt) => new Intl.DateTimeFormat("th-TH", { timeZone: timezone, ...opts }).format(new Date(iso));
   const clock = (iso) => part({ hour: "2-digit", minute: "2-digit", hourCycle: "h23" }, iso);
+  const dateOf = (iso) => part({ year: "numeric", month: "2-digit", day: "2-digit" }, iso);
+  // a rental over several days (design 11.7): pick-up day → return day, at the same time
+  if (endAt && dateOf(startAt) !== dateOf(endAt)) {
+    const short = (iso) => part({ weekday: "short", day: "numeric", month: "short" }, iso);
+    return { day: `รับ ${short(startAt)} → คืน ${short(endAt)}`, time: `${clock(startAt)} น.`, clock };
+  }
   return {
     day: `${part({ weekday: "long" })} ${part({ day: "numeric", month: "short", year: "numeric" })}`,
     time: endAt ? `${clock(startAt)}–${clock(endAt)} น.` : `${clock(startAt)} น.`,

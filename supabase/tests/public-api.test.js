@@ -123,7 +123,7 @@ test("booking: confirmed with the stylist and price; incomplete or bad details a
     const selected = { offeringId: CUT, resourceId: NAN, date: DAY, time: "11:00" };
     const b = await book(db, "bloom-hair", { selected, customer: { name: " คุณเอ ", phone: "081-234-5678" } });
     assert.equal(b.status, "confirmed");
-    assert.deepEqual(b.resources, [{ id: NAN, name: "ช่างแนน" }]);
+    assert.deepEqual(b.resources, [{ id: NAN, name: "ช่างแนน", kind: "staff" }]);
     assert.equal(b.price.total, 450);
     const row = (await db.query("select c.name, c.phone, b.source from public.bookings b join public.customers c on c.id = b.customer_id where b.id = $1", [b.id])).rows[0];
     assert.deepEqual(row, { name: "คุณเอ", phone: "0812345678", source: "web" });

@@ -60,7 +60,9 @@ function previewBookingTemplate(id, catalog = {}, currentFlow = catalog.flow) {
     const requirements = offering.requirements || [];
     const validDuration = offering.durationMode === "fixed"
       ? Number.isInteger(offering.durationMinutes) && offering.durationMinutes > 0
-      : offering.durationMode === "customer_choice" && Number.isInteger(offering.minMinutes) && offering.minMinutes > 0
+      : offering.durationMode === "days"
+        ? Number.isInteger(offering.minDays) && offering.minDays > 0 && Number.isInteger(offering.maxDays) && offering.maxDays >= offering.minDays
+        : offering.durationMode === "customer_choice" && Number.isInteger(offering.minMinutes) && offering.minMinutes > 0
         && Number.isInteger(offering.maxMinutes) && offering.maxMinutes >= offering.minMinutes
         && Number.isInteger(offering.stepMinutes) && offering.stepMinutes > 0;
     if (!validDuration) error("INVALID_DURATION", `“${offering.name}” ยังไม่มีระยะเวลาที่ใช้จองได้`);

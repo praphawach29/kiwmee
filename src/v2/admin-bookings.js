@@ -112,7 +112,8 @@ async function listBookings(client, shop, { from, days = 1 } = {}) {
        from public.bookings b
        join public.offerings o on o.id = b.offering_id
        join public.customers c on c.id = b.customer_id
-      where b.business_id = $1 and b.start_at >= $2 and b.start_at < $3
+      -- every booking that touches the days: a rental over several days shows on each of them
+      where b.business_id = $1 and b.start_at < $3 and b.end_at > $2
       order by b.start_at, coalesce(b.customer_name, c.name)`,
     [shop.id, new Date(fromMs).toISOString(), new Date(fromMs + n * DAY_MS).toISOString()]
   );
@@ -125,6 +126,7 @@ async function listBookings(client, shop, { from, days = 1 } = {}) {
       date: start.date,
       start: start.time,
       end: end.time,
+      endDate: end.date,
       startAt: b.start_at,
       endAt: b.end_at,
       partySize: b.party_size,

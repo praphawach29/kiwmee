@@ -26,7 +26,7 @@ const DAYS = ["อาทิตย์", "จันทร์", "อังคาร
 const DAY_SHORT = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
 const SHOP_KINDS = { salon: "ร้านเสริมสวย", barber: "ร้านตัดผมชาย", spa: "สปา / นวด", court: "สนามกีฬา", other: "อื่น ๆ" };
 const RESOURCE_KINDS = { staff: "ช่าง / พนักงาน", court: "สนาม", room: "ห้อง", equipment: "อุปกรณ์" };
-const UNITS = { per_booking: "ต่อครั้ง", per_hour: "ต่อชั่วโมง", per_person: "ต่อคน" };
+const UNITS = { per_booking: "ต่อครั้ง", per_hour: "ต่อชั่วโมง", per_person: "ต่อคน", per_day: "ต่อวัน" };
 
 
 const money = (n) => `${Number(n).toLocaleString("th-TH")} บาท`;
@@ -516,8 +516,17 @@ function BookingsTab({ slug, catalog, initialDay }) {
             return (
               <li key={b.id} className="ad-booking" data-tone={tone}>
                 <div className="ad-booking-time">
-                  <strong>{b.start}</strong>
-                  <span>{b.end}</span>
+                  {b.endDate && b.endDate !== b.date ? (
+                    // a rental over several days: what happens on the day shown
+                    day === b.date ? <><strong>{b.start}</strong><span>รับ</span></>
+                      : day === b.endDate ? <><strong>{b.end}</strong><span>คืน</span></>
+                      : <><strong>ทั้งวัน</strong><span>กำลังเช่า</span></>
+                  ) : (
+                    <>
+                      <strong>{b.start}</strong>
+                      <span>{b.end}</span>
+                    </>
+                  )}
                 </div>
                 <div className="ad-booking-main">
                   <div className="ad-row ad-wrap">
@@ -1314,7 +1323,7 @@ function OfferingsTab({ slug, catalog, onSaved }) {
                 <button className="ad-list-item" data-active={editing?.id === o.id} data-off={!o.active} onClick={() => open(o)}>
                   <strong>{o.name}{!o.active && " (ปิดอยู่)"}</strong>
                   <span className="ad-muted">
-                    {o.durationMode === "fixed" ? minutes(o.durationMinutes) : `${minutes(o.minMinutes)}–${minutes(o.maxMinutes)}`} · {priceSummary(o)}
+                    {o.durationMode === "days" ? `เช่า ${o.minDays}–${o.maxDays} วัน` : o.durationMode === "fixed" ? minutes(o.durationMinutes) : `${minutes(o.minMinutes)}–${minutes(o.maxMinutes)}`} · {priceSummary(o)}
                   </span>
                 </button>
               </li>
@@ -1524,6 +1533,8 @@ function OfferingEditor({ slug, catalog, initial, onSaved, onClose }) {
       minMinutes: toInt(o.minMinutes),
       maxMinutes: toInt(o.maxMinutes),
       stepMinutes: toInt(o.stepMinutes),
+      minDays: toInt(o.minDays),
+      maxDays: toInt(o.maxDays),
       bufferAfterMinutes: toInt(o.bufferAfterMinutes) ?? 0,
       maxPartySize: toInt(o.maxPartySize) ?? 1,
       sortOrder: toInt(o.sortOrder) ?? 0,
@@ -1563,9 +1574,16 @@ function OfferingEditor({ slug, catalog, initial, onSaved, onClose }) {
         <div className="ad-checks">
           <label><input type="radio" checked={o.durationMode === "fixed"} onChange={() => set({ durationMode: "fixed" })} />ตายตัว</label>
           <label><input type="radio" checked={o.durationMode === "customer_choice"} onChange={() => set({ durationMode: "customer_choice", prices: o.prices.map((p) => (p.unit === "per_booking" && p.amount === "" ? { ...p, unit: "per_hour" } : p)) })} />ลูกค้าเลือกเอง (เช่น เช่าสนามรายชั่วโมง)</label>
+          <label><input type="radio" checked={o.durationMode === "days"} onChange={() => set({ durationMode: "days", minDays: o.minDays ?? 1, maxDays: o.maxDays ?? 7, prices: o.prices.map((p) => (p.amount === "" ? { ...p, unit: "per_day" } : p)) })} />หลายวัน (เช่ารายวัน เช่น รถ กล้อง)</label>
         </div>
       </div>
-      {o.durationMode === "fixed" ? (
+      {o.durationMode === "days" ? (
+        <div className="ad-grid">
+          <label className="ad-field">เช่าอย่างน้อย (วัน)<input type="number" min={1} max={90} required value={o.minDays ?? ""} onChange={(e) => set({ minDays: e.target.value })} /></label>
+          <label className="ad-field">เช่าได้นานสุด (วัน)<input type="number" min={1} max={90} required value={o.maxDays ?? ""} onChange={(e) => set({ maxDays: e.target.value })} /></label>
+          <p className="ad-muted">เช่าเป็นรอบ 24 ชม. ลูกค้าเลือกวันรับ จำนวนวัน และเวลารับ แล้วคืนเวลาเดียวกัน · ร้านต้องเปิดตอนรับและตอนคืน</p>
+        </div>
+      ) : o.durationMode === "fixed" ? (
         <label className="ad-field ad-short">นาน (นาที)<input type="number" min={5} max={1440} required value={o.durationMinutes ?? ""} onChange={(e) => set({ durationMinutes: e.target.value })} /></label>
       ) : (
         <div className="ad-grid">
@@ -1650,6 +1668,14 @@ function OfferingEditor({ slug, catalog, initial, onSaved, onClose }) {
             ลูกค้าเลือกระยะเวลาเอง แต่ราคาเป็น “ต่อครั้ง” — จอง 1 หรือ 3 ชม. ก็ราคาเท่ากัน ถ้าคิดตามชั่วโมงให้เลือก “ต่อชั่วโมง”{" "}
             <button type="button" className="ad-link" onClick={() => set({ prices: o.prices.map((p) => (p.unit === "per_booking" ? { ...p, unit: "per_hour" } : p)) })}>
               เปลี่ยนเป็นต่อชั่วโมง
+            </button>
+          </p>
+        )}
+        {o.durationMode === "days" && o.prices.some((p) => p.unit !== "per_day") && (
+          <p className="ad-notice" role="status">
+            เช่าหลายวัน แต่ราคาไม่ได้เป็น “ต่อวัน” — เช่า 1 หรือ 3 วันจะคิดเท่ากัน{" "}
+            <button type="button" className="ad-link" onClick={() => set({ prices: o.prices.map((p) => ({ ...p, unit: "per_day" })) })}>
+              เปลี่ยนเป็นต่อวัน
             </button>
           </p>
         )}

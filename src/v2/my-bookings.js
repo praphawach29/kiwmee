@@ -57,6 +57,7 @@ async function myBookings(db, slug, body = {}, { now = new Date(), verifyLineTok
         date: start.date,
         start: start.time,
         end: end.time,
+        endDate: end.date,
         offering: b.offering,
         resources: b.resources,
         total: b.total ?? 0,

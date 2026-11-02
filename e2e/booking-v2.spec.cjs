@@ -260,3 +260,42 @@ test("deposit: the booking is held, the customer sees the account and sends a sl
     await db.end();
   }
 });
+
+test("rental by the day: pick-up day, how many days, pick-up time; back the same time days later", async ({ page }) => {
+  const { Client } = require("pg");
+  const db = new Client({ connectionString: process.env.BOOKING_DB_URL || "postgres://postgres@127.0.0.1:54329/booking_test" });
+  await db.connect();
+  const BARBER = "b2000000-0000-4000-8000-000000000002"; // open 09–19, closed Mondays
+  const { rows: [car] } = await db.query("insert into public.resources (business_id, kind, name, capacity) values ($1, 'รถ', 'Yaris ทดสอบ', 1) returning id", [BARBER]);
+  const { rows: [hire] } = await db.query(
+    "insert into public.offerings (business_id, name, duration_mode, min_days, max_days, sort_order) values ($1, 'เช่ารถรายวัน', 'days', 1, 3, 99) returning id",
+    [BARBER]
+  );
+  await db.query("insert into public.offering_requirements (business_id, offering_id, kind, customer_picks, units_per_booking) values ($1, $2, 'รถ', false, 'one')", [BARBER, hire.id]);
+  await db.query("insert into public.offering_resources (business_id, offering_id, resource_id) values ($1, $2, $3)", [BARBER, hire.id, car.id]);
+  await db.query("insert into public.price_rules (business_id, offering_id, unit, amount) values ($1, $2, 'per_day', 1000)", [BARBER, hire.id]);
+  try {
+    const errors = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    await page.goto("/b/gentleman-barber");
+    await page.getByRole("button", { name: /เช่ารถรายวัน/ }).click();
+    await expect(page.getByRole("heading", { name: "เลือกวันรับ" })).toBeVisible();
+    await enabled(page, "date").nth(1).click();
+    await expect(page.getByRole("heading", { name: "เช่ากี่วัน" })).toBeVisible();
+    await expect(page.locator('[data-testid="option-duration"]').first()).toContainText(/1 วัน\s*คืน/);
+    await enabled(page, "duration").last().click();
+    await expect(page.getByRole("heading", { name: "เลือกเวลารับ" })).toBeVisible();
+    await enabled(page, "time").first().click();
+    await expect(page.getByText(/ราคารวม/)).toBeVisible();
+    await fillAndConfirm(page, "ผู้เช่ารถ");
+    const done = page.getByTestId("booking-done");
+    await expect(done).toContainText("จองสำเร็จ");
+    await expect(done).toContainText(/รับ \d\d:\d\d น\. · คืน .+ \d\d:\d\d น\./);
+    expect(errors).toEqual([]);
+  } finally {
+    await db.query("delete from public.bookings where offering_id = $1", [hire.id]);
+    await db.query("delete from public.offerings where id = $1", [hire.id]);
+    await db.query("delete from public.resources where id = $1", [car.id]);
+    await db.end();
+  }
+});

@@ -8,7 +8,7 @@
 const crypto = require("node:crypto");
 const { REASON_TEXT } = require("./reason-text");
 const { AppError, badRequest, notFound } = require("../errors");
-const { findShop, loadCatalog } = require("./catalog-repository");
+const { findShopWithCatalog } = require("./catalog-repository");
 const { getOptions, nextStep, reconcile, localToMs } = require("./options-engine");
 const { issueToken } = require("./manage-booking");
 const { getSetting } = require("./platform-settings");
@@ -17,10 +17,11 @@ const { bookingCard, manageLink, pushLine } = require("./line-notify");
 const ASKABLE = ["offering", "resource", "date", "time", "duration", "party", "addons"];
 const SELECTED_KEYS = ["offeringId", "resourceId", "date", "time", "durationMinutes", "partySize"];
 
-async function requireShop(db, slug) {
-  const shop = await findShop(db, slug);
-  if (!shop) throw notFound("shop not found");
-  return shop;
+// the shop and its catalog in one round trip to the database (each booking step needs both)
+async function requireShopWithCatalog(db, slug) {
+  const found = await findShopWithCatalog(db, slug);
+  if (!found) throw notFound("shop not found");
+  return found;
 }
 
 // Only the known keys, with the types the engine expects. null resourceId = "anyone".
@@ -64,8 +65,7 @@ function priceFrom(prices, offeringId) {
 }
 
 async function shopInfo(db, slug) {
-  const shop = await requireShop(db, slug);
-  const catalog = await loadCatalog(db, shop);
+  const { shop, catalog } = await requireShopWithCatalog(db, slug);
   // Keep gallery reads out of the availability snapshot: media never affects booking rules.
   const { rows: [gallery] } = await db.query(
     `select b.media,
@@ -158,8 +158,7 @@ async function shopInfo(db, slug) {
  *   ask:     a step to show instead of the next one (the customer tapped a step to change it)
  */
 async function step(db, slug, body = {}, now = new Date()) {
-  const shop = await requireShop(db, slug);
-  const catalog = await loadCatalog(db, shop);
+  const { shop, catalog } = await requireShopWithCatalog(db, slug);
   let selected = cleanSelected(body.selected);
   let cleared = [];
   if (body.changed !== undefined) {
@@ -194,8 +193,7 @@ async function book(
   body = {},
   { now = new Date(), verifyLineToken = (token) => verifyLineIdToken(token, db), notifyLine = (to, messages) => pushLine(db, to, messages), origin = null } = {}
 ) {
-  const shop = await requireShop(db, slug);
-  const catalog = await loadCatalog(db, shop);
+  const { shop, catalog } = await requireShopWithCatalog(db, slug);
   const selected = cleanSelected(body.selected);
   const next = nextStep(catalog, { selected, now });
   if (ASKABLE.includes(next.step) || next.step === "start") {

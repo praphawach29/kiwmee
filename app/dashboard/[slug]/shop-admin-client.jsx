@@ -1253,34 +1253,221 @@ function priceSummary(o) {
 
 function OfferingsTab({ slug, catalog, onSaved }) {
   const [editing, setEditing] = useState(null);
+  const [group, setGroup] = useState(null); // the add-on group being edited
   const readOnly = useContext(ReadOnly);
-  const open = (o) => setEditing(o ? structuredClone(o) : emptyOffering(catalog));
-  // after a save, keep showing the saved offering (a new one closes)
-  useEffect(() => setEditing((e) => (e?.id ? structuredClone(catalog.offerings.find((o) => o.id === e.id) ?? null) : null)), [catalog]);
+  const open = (o) => {
+    setGroup(null);
+    setEditing(o ? structuredClone(o) : emptyOffering(catalog));
+  };
+  const openGroup = (g) => {
+    setEditing(null);
+    setGroup(g ? structuredClone(g) : emptyAddonGroup());
+  };
+  // after a save, keep showing the saved offering or group (a new one closes)
+  useEffect(() => {
+    setEditing((e) => (e?.id ? structuredClone(catalog.offerings.find((o) => o.id === e.id) ?? null) : null));
+    setGroup((g) => (g?.id ? structuredClone((catalog.addonGroups ?? []).find((x) => x.id === g.id) ?? null) : null));
+  }, [catalog]);
+  const groups = catalog.addonGroups ?? [];
 
   return (
     <div className="ad-split">
-      <section className="ad-card">
-        <div className="ad-row ad-between">
-          <h2>บริการ</h2>
-          {!readOnly && <button className="ad-secondary" onClick={() => open(null)}>+ เพิ่มบริการ</button>}
-        </div>
-        {catalog.offerings.length === 0 && <p className="ad-muted">ยังไม่มีบริการ</p>}
-        <ul className="ad-list">
-          {catalog.offerings.map((o) => (
-            <li key={o.id}>
-              <button className="ad-list-item" data-active={editing?.id === o.id} data-off={!o.active} onClick={() => open(o)}>
-                <strong>{o.name}{!o.active && " (ปิดอยู่)"}</strong>
-                <span className="ad-muted">
-                  {o.durationMode === "fixed" ? minutes(o.durationMinutes) : `${minutes(o.minMinutes)}–${minutes(o.maxMinutes)}`} · {priceSummary(o)}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <div className="ad-stack">
+        <section className="ad-card">
+          <div className="ad-row ad-between">
+            <h2>บริการ</h2>
+            {!readOnly && <button className="ad-secondary" onClick={() => open(null)}>+ เพิ่มบริการ</button>}
+          </div>
+          {catalog.offerings.length === 0 && <p className="ad-muted">ยังไม่มีบริการ</p>}
+          <ul className="ad-list">
+            {catalog.offerings.map((o) => (
+              <li key={o.id}>
+                <button className="ad-list-item" data-active={editing?.id === o.id} data-off={!o.active} onClick={() => open(o)}>
+                  <strong>{o.name}{!o.active && " (ปิดอยู่)"}</strong>
+                  <span className="ad-muted">
+                    {o.durationMode === "fixed" ? minutes(o.durationMinutes) : `${minutes(o.minMinutes)}–${minutes(o.maxMinutes)}`} · {priceSummary(o)}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+        <section className="ad-card">
+          <div className="ad-row ad-between">
+            <h2>ตัวเลือกเสริม</h2>
+            {!readOnly && <button className="ad-secondary" onClick={() => openGroup(null)}>+ เพิ่มกลุ่ม</button>}
+          </div>
+          <p className="ad-muted">ของที่ลูกค้าเลือกเพิ่มได้ เช่น เช่าไม้ ห้องอาบน้ำ ทรีตเมนต์เพิ่ม · จัดเป็นกลุ่ม แล้วเลือกว่าใช้กับบริการไหน</p>
+          {groups.length === 0 && <p className="ad-empty">ยังไม่มีตัวเลือกเสริม</p>}
+          <ul className="ad-list">
+            {groups.map((g) => (
+              <li key={g.id}>
+                <button className="ad-list-item" data-active={group?.id === g.id} data-off={!g.active} onClick={() => openGroup(g)}>
+                  <strong>{g.name}{!g.active && " (ปิดอยู่)"}</strong>
+                  <span className="ad-muted">
+                    {g.addons.filter((a) => a.active).map((a) => a.name).join(", ") || "ไม่มีตัวเลือกที่เปิดอยู่"} · {pickRule(g)} · ใช้กับ {g.offeringIds.length} บริการ
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      </div>
       {editing && <OfferingEditor key={editing.id ?? "new"} slug={slug} catalog={catalog} initial={editing} onSaved={onSaved} onClose={() => setEditing(null)} />}
+      {group && <AddonGroupEditor key={group.id ?? "new-group"} slug={slug} catalog={catalog} initial={group} onSaved={onSaved} onClose={() => setGroup(null)} />}
     </div>
+  );
+}
+
+// ---------- add-ons (design §11) ----------
+
+const ADDON_UNITS = { per_booking: "ต่อการจอง", per_unit: "ต่อชิ้น", per_hour: "ต่อชั่วโมง", per_day: "ต่อวัน", per_person: "ต่อคน" };
+// how many a customer may pick: a few common choices, then any numbers
+const PICK_RULES = [
+  { key: "any", label: "เลือกได้หลายอย่าง (ไม่บังคับ)", min: 0, max: null },
+  { key: "one", label: "เลือกได้ 1 อย่าง (ไม่บังคับ)", min: 0, max: 1 },
+  { key: "must", label: "ต้องเลือก 1 อย่าง", min: 1, max: 1 }
+];
+
+function pickRule(g) {
+  const rule = PICK_RULES.find((r) => r.min === g.minSelect && r.max === g.maxSelect);
+  if (rule) return rule.label;
+  return `เลือก ${g.minSelect}–${g.maxSelect ?? "ไม่จำกัด"} อย่าง`;
+}
+
+function emptyAddon() {
+  return { name: "", amount: "", priceUnit: "per_booking", maxQuantity: 1, addsMinutes: 0, usesKind: null, active: true };
+}
+
+function emptyAddonGroup() {
+  return { name: "", minSelect: 0, maxSelect: null, sortOrder: 0, active: true, offeringIds: [], addons: [emptyAddon()] };
+}
+
+function AddonGroupEditor({ slug, catalog, initial, onSaved, onClose }) {
+  const [g, setG] = useState(initial);
+  const save = useSave();
+  const set = (patch) => setG((x) => ({ ...x, ...patch }));
+  const setAddon = (i, patch) => set({ addons: g.addons.map((a, j) => (j === i ? { ...a, ...patch } : a)) });
+  const rule = PICK_RULES.find((r) => r.min === toInt(g.minSelect) && r.max === toInt(g.maxSelect))?.key ?? "custom";
+  const kinds = [...new Set([...catalog.resources.map((r) => r.kind), ...catalog.offerings.flatMap((o) => o.requirements.map((q) => q.kind))])];
+
+  async function submit(event) {
+    event.preventDefault();
+    const body = {
+      ...g,
+      minSelect: toInt(g.minSelect) ?? 0,
+      maxSelect: toInt(g.maxSelect),
+      addons: g.addons.map((a, i) => ({
+        ...a,
+        amount: a.amount === "" ? 0 : Number(a.amount),
+        maxQuantity: toInt(a.maxQuantity) ?? 1,
+        addsMinutes: toInt(a.addsMinutes) ?? 0,
+        usesKind: a.usesKind || null,
+        sortOrder: i
+      }))
+    };
+    const ok = await save.run(() => (g.id ? api("PUT", shopPath(slug, `/addon-groups/${g.id}`), body) : api("POST", shopPath(slug, "/addon-groups"), body)));
+    if (ok) onSaved();
+  }
+
+  async function remove() {
+    if (!window.confirm(`ลบกลุ่ม “${g.name}”? ถ้ามีการจองเลือกตัวเลือกในกลุ่มนี้แล้วจะปิดไว้แทนการลบ`)) return;
+    const ok = await save.run(async () => {
+      const result = await api("DELETE", shopPath(slug, `/addon-groups/${g.id}`));
+      if (result.archived) window.alert("มีการจองเลือกตัวเลือกในกลุ่มนี้แล้ว จึงปิดไว้แทนการลบ");
+    });
+    if (ok) {
+      onClose();
+      onSaved();
+    }
+  }
+
+  return (
+    <form className="ad-card" onSubmit={submit}>
+      <div className="ad-row ad-between">
+        <h2>{g.id ? "แก้กลุ่มตัวเลือกเสริม" : "กลุ่มตัวเลือกเสริมใหม่"}</h2>
+        <button type="button" className="ad-link" onClick={onClose}>ปิด</button>
+      </div>
+      <p className="ad-notice">ตั้งไว้ได้เลย · หน้าจองของลูกค้าจะเริ่มแสดงตัวเลือกเสริมในอัปเดตถัดไป</p>
+      <Locked>
+      <div className="ad-grid">
+        <label className="ad-field">ชื่อกลุ่ม<input required maxLength={80} placeholder="เช่น อุปกรณ์, ประกันภัย" value={g.name} onChange={(e) => set({ name: e.target.value })} /></label>
+        <label className="ad-field">
+          ลูกค้าเลือกได้
+          <select value={rule} onChange={(e) => {
+            const r = PICK_RULES.find((x) => x.key === e.target.value);
+            set(r ? { minSelect: r.min, maxSelect: r.max } : { minSelect: toInt(g.minSelect) ?? 0, maxSelect: toInt(g.maxSelect) ?? 2 });
+          }}>
+            {PICK_RULES.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
+            <option value="custom">กำหนดจำนวนเอง</option>
+          </select>
+        </label>
+      </div>
+      {rule === "custom" && (
+        <div className="ad-grid">
+          <label className="ad-field">ต้องเลือกอย่างน้อย<input type="number" min={0} max={50} value={g.minSelect ?? 0} onChange={(e) => set({ minSelect: e.target.value })} /></label>
+          <label className="ad-field">เลือกได้สูงสุด (ว่าง = ไม่จำกัด)<input type="number" min={1} max={50} value={g.maxSelect ?? ""} onChange={(e) => set({ maxSelect: e.target.value === "" ? null : e.target.value })} /></label>
+        </div>
+      )}
+
+      <div className="ad-field">
+        ใช้กับบริการ
+        {catalog.offerings.length === 0 && <span className="ad-muted">ยังไม่มีบริการ</span>}
+        <div className="ad-checks">
+          {catalog.offerings.map((o) => (
+            <label key={o.id}>
+              <input
+                type="checkbox"
+                checked={g.offeringIds.includes(o.id)}
+                onChange={(e) => set({ offeringIds: e.target.checked ? [...g.offeringIds, o.id] : g.offeringIds.filter((x) => x !== o.id) })}
+              />
+              {o.name}{!o.active && " (ปิดอยู่)"}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className="ad-field">
+        ตัวเลือกในกลุ่มนี้
+        {g.addons.map((a, i) => (
+          <fieldset key={a.id ?? `new-${i}`} className="ad-addon" data-off={!a.active}>
+            <legend className="ad-sr-only">ตัวเลือกที่ {i + 1}</legend>
+            <div className="ad-addon-main">
+              <input required maxLength={80} placeholder="ชื่อ เช่น เช่าไม้แบด" value={a.name} onChange={(e) => setAddon(i, { name: e.target.value })} aria-label={`ชื่อตัวเลือกที่ ${i + 1}`} />
+              <input type="number" min={0} step="0.01" placeholder="ราคา" value={a.amount} onChange={(e) => setAddon(i, { amount: e.target.value })} aria-label={`ราคาตัวเลือกที่ ${i + 1}`} />
+              <select value={a.priceUnit} onChange={(e) => setAddon(i, { priceUnit: e.target.value })} aria-label={`หน่วยราคาตัวเลือกที่ ${i + 1}`}>
+                {Object.entries(ADDON_UNITS).map(([k, v]) => <option key={k} value={k}>บาท {v}</option>)}
+              </select>
+            </div>
+            <div className="ad-addon-more">
+              <label>เลือกได้สูงสุด<input type="number" min={1} max={1000} value={a.maxQuantity} onChange={(e) => setAddon(i, { maxQuantity: e.target.value })} /> ชิ้น</label>
+              <label>เพิ่มเวลา<input type="number" min={0} max={720} step={5} value={a.addsMinutes} onChange={(e) => setAddon(i, { addsMinutes: e.target.value })} /> นาที</label>
+              <label>
+                ใช้ของ/คนที่ต้องว่าง
+                <select value={a.usesKind ?? ""} onChange={(e) => setAddon(i, { usesKind: e.target.value || null })}>
+                  <option value="">ไม่ใช้</option>
+                  {kinds.map((k) => <option key={k} value={k}>{kindWord(k)}</option>)}
+                </select>
+              </label>
+              <label className="ad-check"><input type="checkbox" checked={a.active} onChange={(e) => setAddon(i, { active: e.target.checked })} />เปิดให้เลือก</label>
+              {g.addons.length > 1 && <button type="button" className="ad-link" onClick={() => set({ addons: g.addons.filter((_, j) => j !== i) })}>ลบ</button>}
+            </div>
+            {a.usesKind && !catalog.resources.some((r) => r.kind === a.usesKind && r.active) && (
+              <p className="ad-muted">ยังไม่มี{kindWord(a.usesKind)}ที่เปิดอยู่ — เพิ่มที่แท็บ “ช่าง / สนาม” (เช่น ไม้แบด ความจุ 10)</p>
+            )}
+          </fieldset>
+        ))}
+        <button type="button" className="ad-link" onClick={() => set({ addons: [...g.addons, emptyAddon()] })}>+ เพิ่มตัวเลือก</button>
+      </div>
+
+      <label className="ad-check"><input type="checkbox" checked={g.active} onChange={(e) => set({ active: e.target.checked })} />เปิดใช้กลุ่มนี้</label>
+      <Status save={save} />
+      <div className="ad-row">
+        <button className="ad-primary" disabled={save.busy}>บันทึก</button>
+        {g.id && <button type="button" className="ad-danger" onClick={remove} disabled={save.busy}>ลบกลุ่ม</button>}
+      </div>
+      </Locked>
+    </form>
   );
 }
 

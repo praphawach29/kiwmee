@@ -62,3 +62,24 @@ test('booking link card: the message names the shop and time, with copy, LINE an
   assert.match(html, /href="sms:0812345678\?body=/);
   assert.doesNotMatch(render(ManageLinkCard, { ...props, link: { ...props.link, phone: null } }), /sms:/);
 });
+
+test('add-on group editor: pick rule, offerings to tick, and each add-on with price, quantity, minutes and what it uses', () => {
+  const { AddonGroupEditor, pickRule, emptyAddonGroup } = load('[slug]/shop-admin-client.jsx', '\nexport { AddonGroupEditor, pickRule, emptyAddonGroup };');
+  assert.equal(pickRule({ minSelect: 1, maxSelect: 1 }), 'ต้องเลือก 1 อย่าง');
+  assert.equal(pickRule({ minSelect: 0, maxSelect: null }), 'เลือกได้หลายอย่าง (ไม่บังคับ)');
+  assert.equal(pickRule({ minSelect: 2, maxSelect: null }), 'เลือก 2–ไม่จำกัด อย่าง');
+  const catalog = {
+    offerings: [{ id: 'o1', name: 'สนาม 1 ชม.', active: true, requirements: [{ kind: 'court' }] }],
+    resources: [{ id: 'r1', kind: 'ไม้แบด', name: 'ไม้แบด', active: true }]
+  };
+  const initial = { ...emptyAddonGroup(), name: 'อุปกรณ์', offeringIds: ['o1'], addons: [{ name: 'เช่าไม้', amount: 50, priceUnit: 'per_unit', maxQuantity: 4, addsMinutes: 0, usesKind: 'ไม้แบด', active: true }] };
+  const html = render(AddonGroupEditor, { slug: 's', catalog, initial, onSaved() {}, onClose() {} });
+  assert.match(html, /value="อุปกรณ์"/);
+  assert.match(html, /<option value="any" selected="">เลือกได้หลายอย่าง/);
+  assert.match(html, /checked=""\/>สนาม 1 ชม\./);
+  assert.match(html, /value="เช่าไม้"/);
+  assert.match(html, /<option value="per_unit" selected="">บาท ต่อชิ้น/);
+  assert.match(html, /<option value="ไม้แบด" selected="">ไม้แบด/);
+  assert.match(html, /หน้าจองของลูกค้าจะเริ่มแสดงตัวเลือกเสริมในอัปเดตถัดไป/);
+  assert.doesNotMatch(html, /ยังไม่มีไม้แบดที่เปิดอยู่/);
+});

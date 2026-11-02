@@ -200,13 +200,17 @@ async function getCatalog(client, shop) {
     "select offering_id, resource_id from public.offering_resources where business_id = $1",
     `select id, offering_id, unit, amount::float8 as amount, days_of_week, start_time, end_time, priority
          from public.price_rules where business_id = $1 order by priority, start_time nulls first, id`,
-    "select entry, require, optional, \"then\", options from public.booking_flows where business_id = $1 and category is null"
+    "select entry, require, optional, \"then\", options from public.booking_flows where business_id = $1 and category is null",
+    "select id, name, min_select, max_select, sort_order, active from public.addon_groups where business_id = $1 order by active desc, sort_order, name",
+    "select offering_id, group_id from public.offering_addon_groups where business_id = $1",
+    `select id, group_id, name, description, media, price_unit, amount::float8 as amount, max_quantity, adds_minutes, uses_kind, sort_order, active
+         from public.addons where business_id = $1 order by active desc, sort_order, name`
   ];
 
   // one client runs one query at a time
   const results = [];
   for (const sql of queries) results.push((await client.query(sql, [shop.id])).rows);
-  const [[current], settings, hours, closures, resources, schedules, timeOff, offerings, requirements, links, prices, flows] = results;
+  const [[current], settings, hours, closures, resources, schedules, timeOff, offerings, requirements, links, prices, flows, groups, groupLinks, addons] = results;
 
   const s = settings[0] ?? {
     min_lead_minutes: 15,
@@ -291,6 +295,32 @@ async function getCatalog(client, shop) {
           start: hhmm(p.start_time),
           end: hhmm(p.end_time),
           priority: p.priority
+        })),
+      addonGroupIds: groupLinks.filter((l) => l.offering_id === o.id).map((l) => l.group_id)
+    })),
+    // optional extras (design §11): groups of add-ons, each group offered with some offerings
+    addonGroups: groups.map((g) => ({
+      id: g.id,
+      name: g.name,
+      minSelect: g.min_select,
+      maxSelect: g.max_select,
+      sortOrder: g.sort_order,
+      active: g.active,
+      offeringIds: groupLinks.filter((l) => l.group_id === g.id).map((l) => l.offering_id),
+      addons: addons
+        .filter((a) => a.group_id === g.id)
+        .map((a) => ({
+          id: a.id,
+          name: a.name,
+          description: a.description,
+          media: a.media,
+          priceUnit: a.price_unit,
+          amount: a.amount,
+          maxQuantity: a.max_quantity,
+          addsMinutes: a.adds_minutes,
+          usesKind: a.uses_kind,
+          sortOrder: a.sort_order,
+          active: a.active
         }))
     })),
     flow: {
@@ -560,6 +590,101 @@ async function saveOffering(client, shop, id, input = {}) {
 
 const deleteOffering = (client, shop, id) => removeOrArchive(client, "offerings", shop, id);
 
+// ---------- add-ons (design §11) ----------
+
+const ADDON_UNITS = ["per_booking", "per_hour", "per_day", "per_person", "per_unit"];
+
+function addonRow(a, i) {
+  const label = ` (ตัวเลือกที่ ${i + 1})`;
+  const amount = Number(a?.amount ?? 0);
+  if (!Number.isFinite(amount) || amount < 0 || amount > 10000000) throw invalid(`ราคาต้องเป็นตัวเลขไม่ติดลบ${label}`);
+  return {
+    id: a.id ? uuid(a.id, `รหัสตัวเลือก${label}`) : null,
+    name: text(a.name, `ชื่อตัวเลือก${label}`, { max: 80 }),
+    description: text(a.description, `รายละเอียด${label}`, { max: 300, required: false }),
+    media: validateMedia(a.media),
+    priceUnit: oneOf(a.priceUnit ?? "per_booking", ADDON_UNITS, `หน่วยราคา${label}`),
+    amount: Math.round(amount * 100) / 100,
+    maxQuantity: int(a.maxQuantity ?? 1, `จำนวนสูงสุด${label}`, { min: 1, max: 1000 }),
+    addsMinutes: int(a.addsMinutes ?? 0, `เวลาที่เพิ่ม (นาที)${label}`, { min: 0, max: 720 }),
+    usesKind: a.usesKind ? kindOf(a.usesKind, `ชนิดทรัพยากรที่ใช้${label}`) : null,
+    sortOrder: int(a.sortOrder ?? i, `ลำดับ${label}`, { min: -1000, max: 1000 }),
+    active: a.active !== false
+  };
+}
+
+/**
+ * Create (id null) or change a group of add-ons with its add-ons and the offerings that offer it.
+ * Add-ons left out of `addons` are deleted, or switched off when a booking took them.
+ */
+async function saveAddonGroup(client, shop, id, input = {}) {
+  const name = text(input.name, "ชื่อกลุ่ม", { max: 80 });
+  const minSelect = int(input.minSelect ?? 0, "ต้องเลือกอย่างน้อย", { min: 0, max: 50 });
+  const maxSelect = input.maxSelect === null || input.maxSelect === undefined || input.maxSelect === ""
+    ? null
+    : int(input.maxSelect, "เลือกได้สูงสุด", { min: Math.max(minSelect, 1), max: 50 });
+  const sortOrder = int(input.sortOrder ?? 0, "ลำดับ", { min: -1000, max: 1000 });
+  const active = input.active !== false;
+  const rows = (list(input.addons, "ตัวเลือก") ?? []).map(addonRow);
+  if (rows.length === 0) throw invalid("เพิ่มตัวเลือกอย่างน้อย 1 รายการ");
+  if (new Set(rows.map((a) => a.name)).size !== rows.length) throw invalid("ชื่อตัวเลือกในกลุ่มซ้ำกัน");
+  const open = rows.filter((a) => a.active).length;
+  if (minSelect > open) throw invalid(`กลุ่มนี้ต้องเลือกอย่างน้อย ${minSelect} อย่าง แต่มีตัวเลือกที่เปิดอยู่ ${open} อย่าง`);
+
+  let groupId = id;
+  if (id) {
+    uuid(id);
+    const { rowCount } = await client.query(
+      "update public.addon_groups set name = $3, min_select = $4, max_select = $5, sort_order = $6, active = $7 where id = $1 and business_id = $2",
+      [id, shop.id, name, minSelect, maxSelect, sortOrder, active]
+    );
+    if (!rowCount) throw notFound("ไม่พบกลุ่มตัวเลือกนี้");
+  } else {
+    const { rows: made } = await client.query(
+      "insert into public.addon_groups (business_id, name, min_select, max_select, sort_order, active) values ($1, $2, $3, $4, $5, $6) returning id",
+      [shop.id, name, minSelect, maxSelect, sortOrder, active]
+    );
+    groupId = made[0].id;
+  }
+
+  const { rows: existing } = await client.query("select id from public.addons where group_id = $1 and business_id = $2", [groupId, shop.id]);
+  const kept = new Set();
+  for (const a of rows) {
+    const values = [a.name, a.description, a.media === undefined ? null : JSON.stringify(a.media), a.priceUnit, a.amount, a.maxQuantity, a.addsMinutes, a.usesKind, a.sortOrder, a.active];
+    if (a.id && existing.some((e) => e.id === a.id)) {
+      await client.query(
+        `update public.addons set name = $3, description = $4, media = coalesce($5::jsonb, media), price_unit = $6, amount = $7,
+                max_quantity = $8, adds_minutes = $9, uses_kind = $10, sort_order = $11, active = $12
+          where id = $1 and business_id = $2`,
+        [a.id, shop.id, ...values]
+      );
+      kept.add(a.id);
+    } else {
+      await client.query(
+        `insert into public.addons (business_id, group_id, name, description, media, price_unit, amount, max_quantity, adds_minutes, uses_kind, sort_order, active)
+         values ($1, $2, $3, $4, coalesce($5::jsonb, '[]'::jsonb), $6, $7, $8, $9, $10, $11, $12)`,
+        [shop.id, groupId, ...values]
+      );
+    }
+  }
+  for (const e of existing) if (!kept.has(e.id)) await removeOrArchive(client, "addons", shop, e.id);
+
+  const offeringIds = list(input.offeringIds, "บริการ");
+  if (offeringIds !== undefined) {
+    offeringIds.forEach((o) => uuid(o, "รหัสบริการ"));
+    await client.query("delete from public.offering_addon_groups where group_id = $1 and business_id = $2", [groupId, shop.id]);
+    await client.query(
+      `insert into public.offering_addon_groups (business_id, offering_id, group_id)
+       select $1, o, $2 from unnest($3::uuid[]) o on conflict do nothing`,
+      [shop.id, groupId, [...new Set(offeringIds)]]
+    );
+  }
+  return { id: groupId };
+}
+
+// a group whose add-ons bookings took is switched off instead, so those bookings keep their names
+const deleteAddonGroup = (client, shop, id) => removeOrArchive(client, "addon_groups", shop, id);
+
 // ---------- days off ----------
 
 async function addClosure(client, shop, input = {}) {
@@ -658,6 +783,8 @@ module.exports = {
   deleteResource,
   saveOffering,
   deleteOffering,
+  saveAddonGroup,
+  deleteAddonGroup,
   addClosure,
   deleteClosure,
   addTimeOff,

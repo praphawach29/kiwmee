@@ -279,6 +279,8 @@ async function lineCard(client, shop, id, kind) {
             coalesce((select array_agg(r.name order by r.sort_order, r.name) from public.booking_resources br
                         join public.resources r on r.id = br.resource_id
                        where br.booking_id = b.id and br.addon_id is null), '{}') as resources,
+            (select r.kind from public.booking_resources br join public.resources r on r.id = br.resource_id
+              where br.booking_id = b.id and br.addon_id is null order by r.sort_order, r.name limit 1) as resource_kind,
             coalesce((select json_agg(json_build_object('name', ba.name, 'quantity', ba.quantity) order by ba.name)
                         from public.booking_addons ba where ba.booking_id = b.id), '[]'::json) as addons
        from public.bookings b
@@ -295,7 +297,7 @@ async function lineCard(client, shop, id, kind) {
     card: bookingCard({
       kind,
       shop: { name: shop.name, timezone: shop.timezone },
-      booking: { offering: b.offering, startAt: b.start_at, endAt: b.end_at, resources: b.resources, addons: b.addons, total: b.total ?? 0, deposit: null },
+      booking: { offering: b.offering, startAt: b.start_at, endAt: b.end_at, resources: b.resources, resourceKind: b.resource_kind, addons: b.addons, total: b.total ?? 0, deposit: null },
       link: null
     })
   };

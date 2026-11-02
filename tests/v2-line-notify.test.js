@@ -10,6 +10,7 @@ const booking = {
   startAt: "2026-11-05T11:00:00.000Z", // 18:00 in Bangkok
   endAt: "2026-11-05T13:00:00.000Z",
   resources: ["สนาม 2"],
+  resourceKind: "court",
   addons: [{ name: "เช่าไม้", quantity: 2 }],
   total: 500,
   deposit: null
@@ -20,9 +21,10 @@ const noDb = { query: async () => { throw new Error("no database in unit tests")
 test("a booked card: shop, offering, day and time in the shop's zone, extras, price, and the button to the booking", () => {
   const card = bookingCard({ kind: "booked", shop, booking, link: "https://liff.line.me/1-x/qcourt/manage/T" });
   assert.equal(card.type, "flex");
-  assert.match(card.altText, /^จองสำเร็จ · QCourt Badminton · วันพฤหัสบดีที่ 5 พฤศจิกายน 2569 18:00–20:00 น\.$/);
+  assert.match(card.altText, /^จองสำเร็จ · QCourt Badminton · วันพฤหัสบดี 5 พ\.ย\. 2569 18:00–20:00 น\.$/);
   const all = texts(card.contents);
-  for (const t of ["จองสำเร็จ", "QCourt Badminton", "เช่าสนาม", "18:00–20:00 น.", "สนาม 2", "เช่าไม้ ×2", "500 บาท", "ดู เลื่อน หรือยกเลิกนัด", "https://liff.line.me/1-x/qcourt/manage/T"]) {
+  assert.ok(all.includes("สนาม"), "the resource is labelled by its kind");
+  for (const t of ["✓ จองสำเร็จ", "QCourt Badminton", "เช่าสนาม", "18:00–20:00 น.", "สนาม 2", "เช่าไม้ ×2", "500 บาท", "ดู เลื่อน หรือยกเลิกนัด", "https://liff.line.me/1-x/qcourt/manage/T"]) {
     assert.ok(all.some((x) => x.includes(t)), t);
   }
 });
@@ -30,9 +32,9 @@ test("a booked card: shop, offering, day and time in the shop's zone, extras, pr
 test("a held card asks for the transfer by its deadline; no link = no button", () => {
   const card = bookingCard({ kind: "held", shop, booking: { ...booking, deposit: { due: 200, holdExpiresAt: "2026-11-02T10:30:00.000Z" } }, link: null });
   const all = texts(card.contents);
-  assert.ok(all.includes("กันคิวไว้ให้แล้ว"));
+  assert.ok(all.includes("⏳ กันคิวไว้ให้แล้ว"));
   assert.ok(all.some((t) => t.includes("โอนมัดจำ 200 บาท ภายใน 17:30 น.")));
-  assert.equal(card.contents.footer, undefined);
+  assert.ok(!card.contents.footer.contents.some((c) => c.type === "button"), "no link, no button");
 });
 
 test("the button opens the booking inside LINE when there is a LIFF app, else on the site", async () => {

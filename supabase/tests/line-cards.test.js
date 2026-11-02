@@ -60,7 +60,7 @@ test("booked inside LINE: the card goes to that customer with the LIFF link to t
     assert.equal(sent.length, 1);
     assert.equal(sent[0].to, LINE_USER);
     const all = texts(sent[0].messages[0].contents);
-    assert.ok(all.includes("จองสำเร็จ"));
+    assert.ok(all.includes("✓ จองสำเร็จ"));
     assert.ok(all.includes("ตัดผมหญิง + สระไดร์"));
     assert.ok(all.includes(`https://liff.line.me/2010969802-QiiDBSxa/bloom-hair/manage/${made.manageToken}`));
 
@@ -83,15 +83,15 @@ test("a deposit to transfer: the card says how much and by when; the shop's conf
     const made = await book(db, "bloom-hair", request("11:00"), { ...fromLine, notifyLine: async (to, messages) => (sent.push(messages[0]), { sent: true }) });
     assert.equal(made.status, "held");
     const held = texts(sent[0].contents);
-    assert.ok(held.includes("กันคิวไว้ให้แล้ว"));
-    assert.ok(held.some((t) => /^โอนมัดจำ 200 บาท ภายใน \d\d:\d\d น\./.test(t)));
+    assert.ok(held.includes("⏳ กันคิวไว้ให้แล้ว"));
+    assert.ok(held.some((t) => /^โอนมัดจำ 200 บาท ภายใน \d\d:\d\d น\.$/.test(t)));
 
     await admin.actAs(db, OWNER);
     const shop = await admin.memberShop(db, "bloom-hair");
     await bookings.confirmDeposit(db, shop, made.id);
     const next = await bookings.lineCard(db, shop, made.id, "confirmed");
     assert.equal(next.to, LINE_USER);
-    assert.ok(texts(next.card.contents).includes("ร้านยืนยันคิวแล้ว"));
+    assert.ok(texts(next.card.contents).includes("✓ ร้านยืนยันคิวแล้ว"));
 
     // a walk-in the shop typed in has no LINE id: nothing to send
     const desk = await bookings.createBooking(db, shop, { offeringId: CUT, resourceId: NAN, date: DAY, time: "15:00", customer: { name: "โทรมา" } });

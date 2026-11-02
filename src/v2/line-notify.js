@@ -10,55 +10,87 @@ const crypto = require("node:crypto");
 const { getSetting } = require("./platform-settings");
 
 const GRAPE = "#6A4CFF";
+const GRAPE_DEEP = "#4F33E0";
 const INK = "#1B1640";
 const MUTED = "#5F5A7A";
-const MINT = "#0B7A50";
+const MIST = "#F7F5FF";
+const LINE_SOFT = "#E8E4F8";
 const WARN = "#B54708";
 
 const baht = (n) => `${Number(n).toLocaleString("th-TH")} บาท`;
+const KIND_WORD = { staff: "ช่าง", court: "สนาม", room: "ห้อง", equipment: "อุปกรณ์" };
+const kindWord = (kind) => KIND_WORD[kind] ?? kind ?? "ช่าง/สนาม";
 
+// "วันอังคาร 3 พ.ย. 2569" and "14:00–15:00 น." in the shop's time zone
 function whenText(startAt, endAt, timezone) {
-  const day = new Intl.DateTimeFormat("th-TH", { timeZone: timezone, weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date(startAt));
-  const time = (iso) => new Intl.DateTimeFormat("th-TH", { timeZone: timezone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(iso));
-  return { day, time: endAt ? `${time(startAt)}–${time(endAt)} น.` : `${time(startAt)} น.`, clock: time };
+  const part = (opts, iso = startAt) => new Intl.DateTimeFormat("th-TH", { timeZone: timezone, ...opts }).format(new Date(iso));
+  const clock = (iso) => part({ hour: "2-digit", minute: "2-digit", hourCycle: "h23" }, iso);
+  return {
+    day: `${part({ weekday: "long" })} ${part({ day: "numeric", month: "short", year: "numeric" })}`,
+    time: endAt ? `${clock(startAt)}–${clock(endAt)} น.` : `${clock(startAt)} น.`,
+    clock
+  };
 }
 
-const row = (label, value, { bold = false, color = INK } = {}) => ({
+const row = (label, value, { bold = false } = {}) => ({
   type: "box",
-  layout: "horizontal",
+  layout: "baseline",
   spacing: "md",
   contents: [
-    { type: "text", text: label, size: "sm", color: MUTED, flex: 2 },
-    { type: "text", text: String(value), size: "sm", color, flex: 5, wrap: true, align: "end", weight: bold ? "bold" : "regular" }
+    { type: "text", text: label, size: "sm", color: MUTED, flex: 3 },
+    { type: "text", text: String(value), size: "sm", color: INK, flex: 7, wrap: true, align: "end", weight: bold ? "bold" : "regular" }
   ]
 });
 
 const KINDS = {
-  booked: { title: "จองสำเร็จ", color: MINT, button: "ดู เลื่อน หรือยกเลิกนัด" },
-  held: { title: "กันคิวไว้ให้แล้ว", color: WARN, button: "แนบสลิปโอนมัดจำ" },
-  confirmed: { title: "ร้านยืนยันคิวแล้ว", color: MINT, button: "ดูการจองของฉัน" }
+  booked: { title: "จองสำเร็จ", icon: "✓", color: GRAPE, button: "ดู เลื่อน หรือยกเลิกนัด" },
+  held: { title: "กันคิวไว้ให้แล้ว", icon: "⏳", color: WARN, button: "แนบสลิปโอนมัดจำ" },
+  confirmed: { title: "ร้านยืนยันคิวแล้ว", icon: "✓", color: "#0B7A50", button: "ดูการจองของฉัน" }
 };
 
 /**
  * kind: booked | held (waiting for a transfer deposit) | confirmed (the shop confirmed the deposit)
- * booking: { offering, startAt, endAt, resources: [names], addons: [{ name, quantity }], total,
- *            deposit: { due, holdExpiresAt } | null }
+ * booking: { offering, startAt, endAt, resources: [names], resourceKind, addons: [{ name, quantity }],
+ *            total, deposit: { due, holdExpiresAt } | null }
  * link: where the button goes (the customer's own booking page), or null for no button
  */
 function bookingCard({ kind, shop, booking, link }) {
   const k = KINDS[kind] ?? KINDS.booked;
   const when = whenText(booking.startAt, booking.endAt, shop.timezone);
-  const rows = [row("วัน", when.day), row("เวลา", when.time, { bold: true })];
-  if (booking.resources?.length) rows.push(row("ช่าง/ที่", booking.resources.join(", ")));
-  if (booking.addons?.length) rows.push(row("เพิ่มเติม", booking.addons.map((a) => `${a.name}${a.quantity > 1 ? ` ×${a.quantity}` : ""}`).join(", ")));
-  if (booking.total > 0) rows.push(row("ราคา", baht(booking.total), { bold: true }));
+
+  const details = [];
+  if (booking.resources?.length) details.push(row(kindWord(booking.resourceKind), booking.resources.join(", ")));
+  if (booking.addons?.length) details.push(row("เพิ่มเติม", booking.addons.map((a) => `${a.name}${a.quantity > 1 ? ` ×${a.quantity}` : ""}`).join(", ")));
 
   const body = [
-    { type: "text", text: shop.name, weight: "bold", size: "lg", color: INK, wrap: true },
-    { type: "text", text: booking.offering, size: "md", color: INK, wrap: true, margin: "sm" },
-    { type: "separator", margin: "lg" },
-    { type: "box", layout: "vertical", spacing: "sm", margin: "lg", contents: rows }
+    { type: "text", text: booking.offering, weight: "bold", size: "md", color: INK, wrap: true },
+    {
+      // the date and time, the thing the customer looks for first
+      type: "box",
+      layout: "vertical",
+      margin: "md",
+      paddingAll: "md",
+      backgroundColor: MIST,
+      cornerRadius: "md",
+      contents: [
+        { type: "text", text: when.day, size: "sm", color: MUTED, wrap: true },
+        { type: "text", text: when.time, size: "xl", weight: "bold", color: GRAPE_DEEP, margin: "xs" }
+      ]
+    }
   ];
+  if (details.length) body.push({ type: "box", layout: "vertical", spacing: "sm", margin: "lg", contents: details });
+  if (booking.total > 0) {
+    body.push({ type: "separator", margin: "lg", color: LINE_SOFT });
+    body.push({
+      type: "box",
+      layout: "baseline",
+      margin: "md",
+      contents: [
+        { type: "text", text: "ราคา", size: "sm", color: MUTED, flex: 3 },
+        { type: "text", text: baht(booking.total), size: "lg", weight: "bold", color: INK, align: "end", flex: 7 }
+      ]
+    });
+  }
   if (kind === "held" && booking.deposit) {
     const by = booking.deposit.holdExpiresAt ? ` ภายใน ${when.clock(booking.deposit.holdExpiresAt)} น.` : "";
     body.push({
@@ -68,29 +100,38 @@ function bookingCard({ kind, shop, booking, link }) {
       paddingAll: "md",
       backgroundColor: "#FFF4E5",
       cornerRadius: "md",
-      contents: [{ type: "text", text: `โอนมัดจำ ${baht(booking.deposit.due)}${by} แล้วแนบสลิป ไม่อย่างนั้นคิวจะถูกปล่อย`, size: "sm", color: WARN, wrap: true }]
+      contents: [
+        { type: "text", text: `โอนมัดจำ ${baht(booking.deposit.due)}${by}`, size: "sm", weight: "bold", color: WARN, wrap: true },
+        { type: "text", text: "แล้วแนบสลิป ไม่อย่างนั้นคิวจะถูกปล่อยให้คนอื่น", size: "xs", color: WARN, wrap: true, margin: "xs" }
+      ]
     });
   }
 
   const bubble = {
     type: "bubble",
+    size: "mega",
     header: {
       type: "box",
       layout: "vertical",
       paddingAll: "lg",
-      backgroundColor: GRAPE,
-      contents: [{ type: "text", text: k.title, color: "#FFFFFF", weight: "bold", size: "lg" }]
+      backgroundColor: k.color,
+      contents: [
+        { type: "text", text: `${k.icon} ${k.title}`, color: "#FFFFFF", weight: "bold", size: "md" },
+        { type: "text", text: shop.name, color: "#FFFFFFCC", size: "sm", wrap: true, margin: "xs" }
+      ]
     },
-    body: { type: "box", layout: "vertical", contents: body },
-    styles: { footer: { separator: true } }
-  };
-  if (link) {
-    bubble.footer = {
+    body: { type: "box", layout: "vertical", paddingAll: "lg", contents: body },
+    footer: {
       type: "box",
       layout: "vertical",
-      contents: [{ type: "button", style: "primary", color: GRAPE, height: "sm", action: { type: "uri", label: k.button, uri: link } }]
-    };
-  }
+      spacing: "sm",
+      paddingAll: "md",
+      contents: [
+        ...(link ? [{ type: "button", style: "primary", color: GRAPE, height: "sm", action: { type: "uri", label: k.button, uri: link } }] : []),
+        { type: "text", text: "จองผ่าน Kiwmee", size: "xxs", color: "#AAA6C3", align: "center", margin: link ? "sm" : "none" }
+      ]
+    }
+  };
   return { type: "flex", altText: `${k.title} · ${shop.name} · ${when.day} ${when.time}`.slice(0, 400), contents: bubble };
 }
 

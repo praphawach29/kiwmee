@@ -419,19 +419,24 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   .bk-submit-bar[data-has-price] .bk-primary { flex: none; }
 }
 
-/* ---------- services with photos: big photo cards, two across ---------- */
-.bk-options-offering[data-photos] { grid-template-columns: repeat(auto-fill, minmax(min(100%, 9.5em), 1fr)); gap: 12px; }
-.bk-options-offering[data-photos] .bk-option-wrap { display: grid; }
-.bk-options-offering[data-photos] .bk-option,
-.bk-options-offering[data-photos] .bk-option-wrap > .bk-option { flex-direction: column; align-items: stretch; gap: 8px; min-height: 0; padding: 0 0 12px; border-radius: 18px; overflow: hidden; }
-.bk-options-offering[data-photos] .bk-offering-media { width: 100%; height: auto; aspect-ratio: 4 / 3; border-radius: 0; }
-.bk-options-offering[data-photos] .bk-option-text { padding: 0 12px; }
-.bk-options-offering[data-photos] .bk-option-wrap .bk-option-text { padding-right: 52px; }
-.bk-options-offering[data-photos] .bk-choice-mark,
-.bk-options-offering[data-photos] .bk-option-wrap .bk-choice-mark { position: absolute; right: 10px; top: 10px; margin: 0; background-color: #fff; box-shadow: 0 2px 8px rgba(27, 22, 64, .2); }
-.bk-options-offering[data-photos] .bk-media-caption { font-size: .6rem; padding: 2px 6px; text-align: left; }
-.bk-options-offering[data-photos] .bk-option[data-selected="true"] { box-shadow: 0 0 0 2px var(--grape); }
-.bk-options-offering[data-photos] .bk-option > .bk-reason { position: static; padding: 0 12px; }
+/* ---------- services, courts and staff with photos: big photo cards, two across ---------- */
+:is(.bk-options-offering, .bk-options-resource)[data-photos] { grid-template-columns: repeat(auto-fill, minmax(min(100%, 9.5em), 1fr)); gap: 12px; }
+:is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-option-wrap { display: grid; }
+:is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-option,
+:is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-option-wrap > .bk-option { flex-direction: column; align-items: stretch; gap: 8px; min-height: 0; padding: 0 0 12px; border-radius: 18px; overflow: hidden; }
+:is(.bk-options-offering, .bk-options-resource)[data-photos] :is(.bk-offering-media, .bk-resource-media) { width: 100%; height: auto; aspect-ratio: 4 / 3; border-radius: 0; }
+:is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-option-text { padding: 0 12px; }
+:is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-option-wrap .bk-option-text { padding-right: 52px; }
+:is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-choice-mark,
+:is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-option-wrap .bk-choice-mark { position: absolute; right: 10px; top: 10px; margin: 0; background-color: #fff; box-shadow: 0 2px 8px rgba(27, 22, 64, .2); }
+:is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-media-caption { font-size: .6rem; padding: 2px 6px; text-align: left; }
+:is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-option[data-selected="true"] { box-shadow: 0 0 0 2px var(--grape); }
+:is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-option > .bk-reason { position: static; padding: 0 12px; }
+/* "any court / any stylist" stays a row across the top of the photo cards */
+.bk-options-resource[data-photos] .bk-option[data-value="any"] { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: 12px; min-height: 64px; padding: 10px 14px; }
+.bk-options-resource[data-photos] .bk-option[data-value="any"] .bk-option-text { padding: 0; }
+.bk-options-resource[data-photos] .bk-option[data-value="any"] .bk-choice-mark { position: static; box-shadow: none; }
+
 
 /* ---------- about the venue + what it offers (migration …002400) ---------- */
 .bk-about { gap: 16px; }
@@ -485,3 +490,4 @@ a.bk-booking-row:hover .bk-row-text strong { color: var(--grape-deep); }
 .bk-qr figcaption span { color: var(--muted); font-size: .88rem; }
 .bk-qr .bk-secondary { min-height: 44px; justify-self: stretch; text-decoration: none; }
 .bk-qr small { font-size: .74rem; line-height: 1.5; }
+.bk-options-resource[data-photos] .bk-resource-media img { object-position: center 25%; } /* faces sit in the upper part of a portrait */

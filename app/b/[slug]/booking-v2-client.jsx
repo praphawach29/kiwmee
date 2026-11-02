@@ -287,6 +287,12 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
   const atCustomer = next && !ask && !atStart;
   const categories = ask === "offering" ? [...new Set((view?.options ?? []).map((o) => offerings.get(o.value)?.category).filter(Boolean))] : [];
   const shownOptions = (view?.options ?? []).filter((o) => ask !== "offering" || !category || categories.length < 2 || offerings.get(o.value)?.category === category);
+  // big photo cards when every service (or every court / stylist, "any" aside) has a photo
+  const pictured = shownOptions.filter((o) => o.value !== null);
+  const photoCards =
+    pictured.length > 0 &&
+    ((ask === "offering" && pictured.every((o) => withMedia(offerings.get(o.value)))) ||
+      (ask === "resource" && pictured.every((o) => withMedia(resources.get(o.value)))));
   const optionProps = (o) => {
     const tapped = pending?.step === ask && pending.value === o.value;
     const chosen = pending?.step === ask ? tapped : selected[KEY[ask]] === o.value;
@@ -400,7 +406,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
             ) : ask === "time" ? (
               <TimeTabs key={selected.date} options={view.options} chosen={selected.time} optionButton={optionButton} />
             ) : (
-              <div className={`bk-options bk-options-${ask}`} data-photos={(ask === "offering" && shownOptions.length > 0 && shownOptions.every((o) => withMedia(offerings.get(o.value)))) || undefined}>
+              <div className={`bk-options bk-options-${ask}`} data-photos={photoCards || undefined}>
                 {shownOptions.map(optionButton)}
               </div>
             )}

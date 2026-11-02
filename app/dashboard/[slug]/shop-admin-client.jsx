@@ -78,6 +78,8 @@ export default function ShopAdmin({ slug }) {
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState("");
   const [version, setVersion] = useState(0);
+  const [bookingDay, setBookingDay] = useState(null); // a day picked from the activity panel
+  const activity = useActivity(slug, Boolean(catalog?.shop.role));
 
   const reload = useCallback(async () => {
     try {
@@ -116,6 +118,11 @@ export default function ShopAdmin({ slug }) {
     window.history.replaceState(null, "", `#${allowed}`);
   }
 
+  function pickActivity(event) {
+    setBookingDay(event.date);
+    show("bookings");
+  }
+
   async function signOut() {
     setSigningOut(true);
     setSignOutError("");
@@ -147,11 +154,15 @@ export default function ShopAdmin({ slug }) {
         groups={shopNavigation(role)}
         active={tab} onSelect={show} name={catalog.shop.name} role={roleLabel}
         onSignOut={signOut} signingOut={signingOut}
+        badges={{ bookings: activity.data?.unread ?? 0 }}
       />
       <div className="merchant-main">
         <header className="merchant-topbar">
           <div className="merchant-breadcrumb"><a href="/dashboard">ร้านทั้งหมด</a><span>/</span><b>{catalog.shop.name}</b><span>/</span>{activeLabel}</div>
-          <a className="merchant-booking-link" href={`/b/${slug}`} target="_blank" rel="noreferrer">เปิดหน้าจองลูกค้า ↗</a>
+          <div className="ad-row">
+            <ActivityBell activity={activity} onPick={pickActivity} />
+            <a className="merchant-booking-link" href={`/b/${slug}`} target="_blank" rel="noreferrer">เปิดหน้าจองลูกค้า ↗</a>
+          </div>
         </header>
         <main className="ad-shell merchant-content">
           <div className="merchant-page-heading"><div><p>{catalog.shop.name}</p><h1>{activeLabel}</h1></div><span className="ad-status" data-tone="info">{roleLabel}</span></div>
@@ -161,6 +172,7 @@ export default function ShopAdmin({ slug }) {
           <a className="ad-link" href="/dashboard">← ร้านทั้งหมด</a>
         </div>
         <h1>{catalog.shop.name}</h1>
+        <ActivityBell activity={activity} onPick={pickActivity} />
         <button type="button" className="ad-link" disabled={signingOut} onClick={signOut}>{signingOut ? "กำลังออกจากระบบ…" : "ออกจากระบบ"}</button>
         <p className="ad-muted">
           หน้าจองของลูกค้า: <a className="ad-link" href={`/b/${slug}`} target="_blank" rel="noreferrer">/b/{slug}</a>
@@ -178,7 +190,7 @@ export default function ShopAdmin({ slug }) {
       </nav>
       <ReadOnly.Provider value={readOnly}>
         {tab === "overview" && <OverviewTab slug={slug} catalog={catalog} onNavigate={show} />}
-        {tab === "bookings" && <BookingsTab slug={slug} catalog={catalog} />}
+        {tab === "bookings" && <BookingsTab key={bookingDay ?? "today"} slug={slug} catalog={catalog} initialDay={bookingDay} />}
         {tab === "bills" && <BillsTab slug={slug} catalog={catalog} />}
         {tab === "flow" && <FlowTab slug={slug} catalog={catalog} version={version} onSaved={reload} />}
         {tab === "offerings" && <OfferingsTab slug={slug} catalog={catalog} onSaved={reload} />}
@@ -386,8 +398,8 @@ function addDays(date, n) {
 const longDate = (date) =>
   new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date(`${date}T00:00:00Z`));
 
-function BookingsTab({ slug, catalog }) {
-  const [day, setDay] = useState(today);
+function BookingsTab({ slug, catalog, initialDay }) {
+  const [day, setDay] = useState(() => initialDay ?? today());
   const [list, setList] = useState(null);
   const [error, setError] = useState("");
   const [form, setForm] = useState(null); // { booking? } while the form is open
@@ -1857,6 +1869,119 @@ function TeamTab({ slug }) {
           </>
         )}
       </section>
+    </div>
+  );
+}
+
+// ---------- activity (members): what customers did, unread until opened ----------
+
+const ACTIVITY_KIND = {
+  created: "จองใหม่",
+  rescheduled: "เลื่อนนัด",
+  cancelled: "ยกเลิก",
+  status: "เปลี่ยนสถานะ"
+};
+const ACTIVITY_ACTOR = { customer: "ลูกค้า", shop: "ร้าน", system: "ระบบ" };
+const shortDate = (date) =>
+  new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" }).format(new Date(`${date}T00:00:00Z`));
+
+/** The shop's recent booking activity, checked every 30 seconds while the page is open */
+function useActivity(slug, enabled) {
+  const [data, setData] = useState(null);
+  const load = useCallback(async () => {
+    try {
+      setData(await api("GET", shopPath(slug, "/activity?limit=20")));
+    } catch (e) {
+      if (e.status === 401) window.location.href = "/dashboard";
+    }
+  }, [slug]);
+  useEffect(() => {
+    if (!enabled) return undefined;
+    load();
+    const timer = setInterval(() => document.visibilityState === "visible" && load(), 30000);
+    return () => clearInterval(timer);
+  }, [enabled, load]);
+  // "(2) ร้าน…" in the browser tab, so the front desk notices from another tab
+  useEffect(() => {
+    if (!enabled) return undefined;
+    const base = document.title.replace(/^\(\d+\) /, "");
+    document.title = data?.unread ? `(${data.unread}) ${base}` : base;
+    return () => {
+      document.title = document.title.replace(/^\(\d+\) /, "");
+    };
+  }, [enabled, data?.unread]);
+  const markSeen = useCallback(async () => {
+    try {
+      await api("POST", shopPath(slug, "/activity/seen"));
+      await load();
+    } catch {
+      // the badge stays; the next check tries again
+    }
+  }, [slug, load]);
+  return { data, load, markSeen };
+}
+
+function activityText(e) {
+  if (e.kind === "rescheduled") return `${e.from ? `${shortDate(e.from.date)} ${e.from.time}` : ""} → ${shortDate(e.date)} ${e.time}`;
+  if (e.kind === "status") return e.status === "expired" ? "หมดเวลารอชำระเงิน" : e.status;
+  return `${shortDate(e.date)} ${e.time}`;
+}
+
+/** The bell: unread count, and a panel of recent changes; opening it marks them seen */
+function ActivityBell({ activity, onPick }) {
+  const [open, setOpen] = useState(false);
+  const [fresh, setFresh] = useState(() => new Set()); // what was unread when the panel opened stays highlighted
+  const unread = activity.data?.unread ?? 0;
+  const events = activity.data?.events ?? [];
+
+  function toggle() {
+    const next = !open;
+    setOpen(next);
+    if (next) setFresh(new Set(events.filter((e) => e.unread).map((e) => e.id)));
+    if (next && unread > 0) activity.markSeen();
+  }
+
+  return (
+    <div className="ad-activity">
+      <button type="button" className="ad-activity-button" aria-expanded={open} onClick={toggle} aria-label={unread ? `ความเคลื่อนไหว ${unread} รายการใหม่` : "ความเคลื่อนไหว"}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+          <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+        </svg>
+        <span>ความเคลื่อนไหว</span>
+        {unread > 0 && <span className="ad-activity-count">{unread > 99 ? "99+" : unread}</span>}
+      </button>
+      {open && (
+        <div className="ad-activity-panel" role="dialog" aria-label="ความเคลื่อนไหวล่าสุด">
+          <div className="ad-row ad-between">
+            <strong>ความเคลื่อนไหวล่าสุด</strong>
+            <button type="button" className="ad-link" onClick={() => setOpen(false)}>ปิด</button>
+          </div>
+          {!activity.data && <p className="ad-muted">กำลังโหลด…</p>}
+          {activity.data && events.length === 0 && <p className="ad-muted">ยังไม่มีความเคลื่อนไหว</p>}
+          <ul className="ad-activity-list">
+            {events.map((e) => (
+              <li key={e.id} data-unread={e.unread || fresh.has(e.id)} data-kind={e.kind}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    onPick(e);
+                  }}
+                >
+                  <span className="ad-activity-line">
+                    <b>{ACTIVITY_KIND[e.kind]}</b> · {e.customerName}
+                    <span className="ad-muted"> โดย{ACTIVITY_ACTOR[e.actor]}</span>
+                  </span>
+                  <span className="ad-muted">{e.offering} · {activityText(e)}</span>
+                  {e.reason && e.kind === "cancelled" && <span className="ad-muted">{e.reason}</span>}
+                  <span className="ad-activity-at">{shortDate(e.at.date)} {e.at.time}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

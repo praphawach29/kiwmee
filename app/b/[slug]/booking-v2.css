@@ -446,3 +446,33 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .bk-amenities::-webkit-scrollbar { display: none; }
 .bk-amenities li { flex: 0 0 5.2em; scroll-snap-align: start; display: grid; justify-items: center; align-content: start; gap: 6px; text-align: center; font-size: .76rem; line-height: 1.35; color: var(--ink); }
 .bk-amenities li span { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 16px; background: var(--selected); font-size: 22px; }
+
+/* ---------- app bottom bar: จองคิว / การจองของฉัน ---------- */
+.bk-tabs { position: fixed; z-index: 20; left: 50%; bottom: max(10px, env(safe-area-inset-bottom)); transform: translateX(-50%);
+  display: flex; gap: 4px; padding: 5px; width: min(360px, calc(100vw - 32px)); border-radius: 999px;
+  background: rgba(255, 255, 255, .94); backdrop-filter: blur(12px); box-shadow: 0 10px 30px rgba(27, 22, 64, .18); border: 1px solid var(--line-soft); }
+.bk-tabs a { flex: 1 1 0; min-width: 0; display: flex; justify-content: center; align-items: center; gap: 6px; min-height: 46px; padding: 0 10px;
+  border-radius: 999px; color: var(--muted); font-size: .86rem; font-weight: 500; text-decoration: none; white-space: nowrap; }
+.bk-tabs a[aria-current="page"] { background: var(--ink); color: #fff; }
+.bk-tabs a svg { flex: none; }
+.bk-shell.bk-with-tabs { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+
+/* ---------- my bookings ---------- */
+.bk-next { display: grid; gap: 14px; padding: 18px; border-radius: 22px; background: var(--surface); border: 2px solid var(--grape);
+  box-shadow: 0 12px 30px rgba(106, 76, 255, .14); }
+.bk-next-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.bk-next-eyebrow { font-family: var(--font-display); font-weight: 500; color: var(--grape-deep); }
+.bk-next .bk-when strong { font-family: var(--font-display); font-weight: 500; font-size: 1.15rem; }
+.bk-center-card { justify-items: center; text-align: center; }
+.bk-center-card .bk-primary { justify-self: stretch; }
+.bk-booking-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.bk-booking-list li + li { border-top: 1px solid var(--line-soft); }
+.bk-booking-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; color: var(--ink); text-decoration: none; }
+a.bk-booking-row:hover .bk-row-text strong { color: var(--grape-deep); }
+.bk-row-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.bk-row-text strong { font-weight: 600; overflow-wrap: anywhere; }
+.bk-row-text small { color: var(--muted); font-size: .8rem; }
+.bk-booking-list[data-past] .bk-date-tile { background: var(--selected); color: var(--grape-deep); }
+.bk-date-tile[data-small] { width: 46px; padding: 4px 0; border-radius: 12px; }
+.bk-date-tile[data-small] strong { font-size: 1.15rem; }
+.bk-booking-row .bk-status { font-size: .74rem; padding: 2px 8px; white-space: nowrap; }

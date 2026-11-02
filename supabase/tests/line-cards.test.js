@@ -106,3 +106,53 @@ test("a card that cannot be sent never fails the booking", { skip }, async () =>
     assert.deepEqual(made.line, { sent: false, reason: "ERROR" });
   });
 });
+
+test("the shop moves or cancels from the dashboard: the LINE customer gets a card (moved → their link, cancelled → book again)", { skip }, async () => {
+  const env = { ...process.env, SETTINGS_ENCRYPTION_KEY: "c".repeat(40) };
+  const before = process.env.SETTINGS_ENCRYPTION_KEY;
+  process.env.SETTINGS_ENCRYPTION_KEY = env.SETTINGS_ENCRYPTION_KEY; // book() seals the customer's link with it
+  try {
+    await inTx(async () => {
+      const made = await book(db, "bloom-hair", request("11:00"), { ...fromLine, notifyLine: async () => ({ sent: true }) });
+      await admin.actAs(db, OWNER);
+      const shop = await admin.memberShop(db, "bloom-hair");
+      const sent = [];
+      const push = async (to, messages) => (sent.push({ to, card: messages[0] }), { sent: true });
+
+      const moved = await bookings.rescheduleBooking(db, shop, made.id, { date: DAY, time: "14:00" });
+      assert.ok(moved.previous, "the old time comes back for the card");
+      assert.deepEqual(await bookings.notifyChange(db, shop, made.id, "moved", { previous: moved.previous, db, env, push }), { sent: true });
+      const m = texts(sent[0].card.contents);
+      assert.equal(sent[0].to, LINE_USER);
+      assert.ok(m.includes("📅 ร้านเลื่อนนัดให้แล้ว"));
+      assert.ok(m.some((t) => /^14:00–/.test(t)), "the new time");
+      assert.ok(m.some((t) => /11:00–.* น\.$/.test(t)), "and where it was (จากเดิม)");
+      assert.ok(m.includes("จากเดิม"));
+      assert.ok(m.includes(`https://liff.line.me/2010969802-QiiDBSxa/bloom-hair/manage/${made.manageToken}`));
+
+      // same time, another stylist: no "จากเดิม"
+      const same = await bookings.rescheduleBooking(db, shop, made.id, { date: DAY, time: "14:00", resourceId: "a1000000-0000-4000-8000-000000000002" });
+      assert.equal(same.previous, null);
+
+      const cancelled = await bookings.cancelBooking(db, shop, made.id, { reason: "สนามปิดซ่อม" });
+      await bookings.notifyChange(db, shop, made.id, "cancelled", { reason: cancelled.reason, db, env, push });
+      const c = texts(sent[1].card.contents);
+      assert.ok(c.includes("✕ นัดถูกยกเลิก"));
+      assert.ok(c.includes("สนามปิดซ่อม"));
+      assert.ok(c.includes("https://liff.line.me/2010969802-QiiDBSxa/bloom-hair"), "book again");
+      assert.ok(!c.some((t) => /บาท$/.test(t)), "no price on a cancelled card");
+
+      // a walk-in typed in by the shop: nothing to send; LINE down: the change stands, the card says why
+      const desk = await bookings.createBooking(db, shop, { offeringId: CUT, resourceId: NAN, date: DAY, time: "16:00", customer: { name: "โทรมา" } });
+      assert.equal(await bookings.notifyChange(db, shop, desk.id, "cancelled", { db, env, push }), null);
+      await db.query("reset role"); // the customer books through the server's connection
+      const other = await book(db, "bloom-hair", request("11:00"), { ...fromLine, notifyLine: async () => ({ sent: true }) });
+      await admin.actAs(db, OWNER);
+      const failed = await bookings.notifyChange(db, shop, other.id, "moved", { db, env, push: async () => { throw new Error("LINE is down"); } });
+      assert.deepEqual(failed, { sent: false, reason: "ERROR" });
+    });
+  } finally {
+    if (before === undefined) delete process.env.SETTINGS_ENCRYPTION_KEY;
+    else process.env.SETTINGS_ENCRYPTION_KEY = before;
+  }
+});

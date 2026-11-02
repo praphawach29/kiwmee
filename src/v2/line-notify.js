@@ -47,7 +47,10 @@ const KINDS = {
   held: { title: "กันคิวไว้ให้แล้ว", icon: "⏳", color: WARN, button: "แนบสลิปโอนมัดจำ" },
   confirmed: { title: "ร้านยืนยันคิวแล้ว", icon: "✓", color: "#0B7A50", button: "ดูการจองของฉัน" },
   remind_day: { title: "พรุ่งนี้มีนัด", icon: "🔔", color: GRAPE, button: "ดู เลื่อน หรือยกเลิกนัด" },
-  remind_soon: { title: "ใกล้ถึงเวลานัดแล้ว", icon: "⏰", color: GRAPE_DEEP, button: "ดูการจองของฉัน" }
+  remind_soon: { title: "ใกล้ถึงเวลานัดแล้ว", icon: "⏰", color: GRAPE_DEEP, button: "ดูการจองของฉัน" },
+  // the shop changed the booking (dashboard): the customer hears it in LINE
+  moved: { title: "ร้านเลื่อนนัดให้แล้ว", icon: "📅", color: GRAPE, button: "ดูการจองของฉัน" },
+  cancelled: { title: "นัดถูกยกเลิก", icon: "✕", color: "#B42318", button: "จองคิวใหม่" }
 };
 
 /**
@@ -61,7 +64,14 @@ function bookingCard({ kind, shop, booking, link }) {
   const when = whenText(booking.startAt, booking.endAt, shop.timezone);
 
   const details = [];
+  if (booking.previous?.startAt) {
+    // short, so it stays on one line: "4 พ.ย. 18:00–20:00 น."
+    const before = whenText(booking.previous.startAt, booking.previous.endAt, shop.timezone);
+    const date = new Intl.DateTimeFormat("th-TH", { timeZone: shop.timezone, day: "numeric", month: "short" }).format(new Date(booking.previous.startAt));
+    details.push(row("จากเดิม", `${date} ${before.time}`));
+  }
   if (booking.resources?.length) details.push(row(kindWord(booking.resourceKind), booking.resources.join(", ")));
+  if (booking.reason) details.push(row("เหตุผล", booking.reason));
   if (booking.addons?.length) details.push(row("เพิ่มเติม", booking.addons.map((a) => `${a.name}${a.quantity > 1 ? ` ×${a.quantity}` : ""}`).join(", ")));
 
   const body = [
@@ -76,12 +86,12 @@ function bookingCard({ kind, shop, booking, link }) {
       cornerRadius: "md",
       contents: [
         { type: "text", text: when.day, size: "sm", color: MUTED, wrap: true },
-        { type: "text", text: when.time, size: "xl", weight: "bold", color: GRAPE_DEEP, margin: "xs" }
+        { type: "text", text: when.time, size: "xl", weight: "bold", color: kind === "cancelled" ? MUTED : GRAPE_DEEP, margin: "xs", decoration: kind === "cancelled" ? "line-through" : "none" }
       ]
     }
   ];
   if (details.length) body.push({ type: "box", layout: "vertical", spacing: "sm", margin: "lg", contents: details });
-  if (booking.total > 0) {
+  if (booking.total > 0 && kind !== "cancelled") {
     body.push({ type: "separator", margin: "lg", color: LINE_SOFT });
     body.push({
       type: "box",
@@ -156,6 +166,13 @@ function openLink(bookingId, sealed, env = process.env) {
   }
 }
 
+/** The shop's booking page (to book again), inside LINE when the LIFF app is set up */
+async function shopLink(db, { slug, origin }, { env = process.env } = {}) {
+  const liffId = await getSetting(db, "line.liff_id", { env });
+  if (liffId) return `https://liff.line.me/${liffId}/${slug}`;
+  return origin ? `${origin}/b/${slug}` : null;
+}
+
 /** The customer's own booking page, opened inside LINE when the LIFF app is set up */
 async function manageLink(db, { slug, token, origin }, { env = process.env } = {}) {
   if (!token) return null;
@@ -185,4 +202,4 @@ async function pushLine(db, to, messages, { fetchImpl = fetch, env = process.env
   }
 }
 
-module.exports = { bookingCard, manageLink, pushLine, sealLink, openLink };
+module.exports = { bookingCard, manageLink, shopLink, pushLine, sealLink, openLink };

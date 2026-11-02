@@ -229,20 +229,24 @@ async function issueManageLink(client, shop, id) {
 
 async function rescheduleBooking(client, shop, id, input = {}) {
   await ownBooking(client, shop, id);
+  // where it was, for the customer's LINE card ("จากเดิม …")
+  const { rows: [before] } = await client.query("select start_at, end_at from public.bookings where id = $1 and business_id = $2", [id, shop.id]);
   await rpc(client, "select public.reschedule_booking($1, $2, $3, $4, 'admin') as booking", [
     id,
     startAt(shop, input.date, input.time),
     optionalId(input.resourceId, "ช่าง/สนาม"),
     optionalInt(input.durationMinutes, "ระยะเวลา")
   ]);
-  return { id };
+  const { rows: [after] } = await client.query("select start_at from public.bookings where id = $1", [id]);
+  const moved = before && after && new Date(before.start_at).getTime() !== new Date(after.start_at).getTime();
+  return { id, previous: moved ? { startAt: before.start_at, endAt: before.end_at } : null };
 }
 
 async function cancelBooking(client, shop, id, input = {}) {
   await ownBooking(client, shop, id);
-  const reason = typeof input.reason === "string" && input.reason.trim() ? input.reason.trim().slice(0, 200) : "ยกเลิกโดยร้าน";
-  await rpc(client, "select public.cancel_booking($1, $2) as booking", [id, reason]);
-  return { id };
+  const given = typeof input.reason === "string" && input.reason.trim() ? input.reason.trim().slice(0, 200) : null;
+  await rpc(client, "select public.cancel_booking($1, $2) as booking", [id, given ?? "ยกเลิกโดยร้าน"]);
+  return { id, reason: given };
 }
 
 async function setStatus(client, shop, id, input = {}) {
@@ -273,7 +277,7 @@ async function confirmDeposit(client, shop, id, input = {}) {
  * The LINE card for a booking whose customer booked inside LINE: { to, card } or null (no LINE id).
  * Read as the signed-in member; sending is the caller's job (it needs the platform's token).
  */
-async function lineCard(client, shop, id, kind) {
+async function lineCard(client, shop, id, kind, { previous = null, reason = null, link = null } = {}) {
   const { rows } = await client.query(
     `select b.start_at, b.end_at, (b.price_snapshot->>'total')::float8 as total, o.name as offering, c.line_user_id,
             coalesce((select array_agg(r.name order by r.sort_order, r.name) from public.booking_resources br
@@ -297,10 +301,43 @@ async function lineCard(client, shop, id, kind) {
     card: bookingCard({
       kind,
       shop: { name: shop.name, timezone: shop.timezone },
-      booking: { offering: b.offering, startAt: b.start_at, endAt: b.end_at, resources: b.resources, resourceKind: b.resource_kind, addons: b.addons, total: b.total ?? 0, deposit: null },
-      link: null
+      booking: { offering: b.offering, startAt: b.start_at, endAt: b.end_at, resources: b.resources, resourceKind: b.resource_kind, addons: b.addons, total: b.total ?? 0, deposit: null, previous, reason },
+      link
     })
   };
+}
+
+/**
+ * The shop moved (kind "moved") or cancelled ("cancelled") a booking from the dashboard: a customer who
+ * booked inside LINE gets a card there. The moved card's button is their own booking link (kept
+ * encrypted since migration …002300), the cancelled card's is the shop's page to book again.
+ * db = the server's pool (reads the platform's LINE settings). Never throws: the change is already made,
+ * so a card that cannot go out only says why ({ sent: false, reason }); null = not a LINE customer.
+ */
+async function notifyChange(client, shop, id, kind, { previous = null, reason = null, db, env = process.env, push = null } = {}) {
+  try {
+    const { rows: [b] } = await client.query(
+      `select b.line_manage_token, c.line_user_id from public.bookings b join public.customers c on c.id = b.customer_id
+        where b.id = $1 and b.business_id = $2`,
+      [id, shop.id]
+    );
+    if (!b?.line_user_id) return null;
+    const { manageLink, shopLink, openLink, pushLine } = require("./line-notify");
+    let link = null;
+    if (kind === "moved") {
+      const token = openLink(id, b.line_manage_token, env);
+      link = token ? await manageLink(db, { slug: shop.slug, token }, { env }) : null;
+    } else {
+      link = await shopLink(db, { slug: shop.slug }, { env });
+    }
+    const moved = previous && kind === "moved" ? previous : null;
+    const message = await lineCard(client, shop, id, kind, { previous: moved, reason, link });
+    const send = push ?? ((to, messages) => pushLine(db, to, messages, { env }));
+    return await send(message.to, [message.card]);
+  } catch (error) {
+    console.error("[line-notify] shop change card not sent:", error.message);
+    return { sent: false, reason: "ERROR" };
+  }
 }
 
 /** A slip the customer sent (newest first: n = 0), as stored: WebP bytes, or null */
@@ -314,4 +351,4 @@ async function getSlip(client, shop, id, n = 0) {
   return rows[0] ? { image: rows[0].image, createdAt: rows[0].created_at, total: rows[0].total } : null;
 }
 
-module.exports = { listBookings, freeTimes, createBooking, rescheduleBooking, cancelBooking, setStatus, issueManageLink, confirmDeposit, getSlip, lineCard, REASON_TEXT };
+module.exports = { listBookings, freeTimes, createBooking, rescheduleBooking, cancelBooking, setStatus, issueManageLink, confirmDeposit, getSlip, lineCard, notifyChange, REASON_TEXT };

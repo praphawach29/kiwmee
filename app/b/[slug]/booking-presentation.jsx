@@ -131,3 +131,89 @@ export function BookingSubmitBar({ formId, disabled, busy, price }) {
     </div>
   );
 }
+
+// ---------- transfer deposit (migration …002200) ----------
+
+const baht = (n) => `${Number(n).toLocaleString("th-TH")} บาท`;
+
+function CopyValue({ label, value }) {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(value.replace(/[\s-]/g, ""));
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  }
+  return (
+    <div className="bk-copy-row">
+      <dt>{label}</dt>
+      <dd>
+        <strong>{value}</strong>
+        <button type="button" className="bk-text-button" onClick={copy} aria-label={`คัดลอก${label}`}>{copied ? "คัดลอกแล้ว" : "คัดลอก"}</button>
+      </dd>
+    </div>
+  );
+}
+
+/**
+ * How much to transfer, where, and by when; then the slip. `status` is the booking's: held = still to
+ * pay, pending = slip sent (the shop is checking). onUploaded(view) gets the manage page's new data.
+ * uploadUrl: /api/b/<slug>/manage/<token>/slip — the customer's own link is their only key.
+ */
+export function DepositBox({ deposit, status, deadline, uploadUrl, onUploaded }) {
+  const [state, setState] = useState({ busy: false, error: "" });
+  const info = deposit.paymentInfo ?? {};
+  const waiting = status === "held";
+
+  async function upload(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setState({ busy: false, error: "เลือกรูปสลิปเป็น JPG หรือ PNG" });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setState({ busy: false, error: "รูปใหญ่เกิน 5 MB" });
+      return;
+    }
+    setState({ busy: true, error: "" });
+    try {
+      const response = await fetch(uploadUrl, { method: "POST", headers: { "content-type": file.type }, body: file });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error?.message || "ส่งสลิปไม่สำเร็จ กรุณาลองใหม่");
+      setState({ busy: false, error: "" });
+      onUploaded?.(payload.data);
+    } catch (e) {
+      setState({ busy: false, error: e.message });
+    }
+  }
+
+  return (
+    <section className="bk-deposit" data-status={status} aria-labelledby="deposit-title">
+      <div className="bk-deposit-head">
+        <h2 id="deposit-title">{waiting ? "โอนมัดจำเพื่อยืนยันคิว" : "ส่งสลิปแล้ว รอร้านตรวจ"}</h2>
+        <strong className="bk-deposit-amount">{baht(deposit.due)}</strong>
+      </div>
+      {waiting && deadline && <p className="bk-deposit-deadline">กรุณาโอนและส่งสลิปภายใน <b>{deadline}</b> ไม่อย่างนั้นคิวจะถูกปล่อยให้คนอื่น</p>}
+      {!waiting && <p className="bk-muted">ร้านจะยืนยันคิวเมื่อตรวจยอดแล้ว · ส่งสลิปเพิ่มได้ถ้าโอนหลายครั้ง</p>}
+      {(info.accountNumber || info.promptPay) && (
+        <dl className="bk-bank">
+          {info.bank && <div className="bk-copy-row"><dt>ธนาคาร</dt><dd><strong>{info.bank}</strong></dd></div>}
+          {info.accountNumber && <CopyValue label="เลขบัญชี" value={info.accountNumber} />}
+          {info.promptPay && <CopyValue label="พร้อมเพย์" value={info.promptPay} />}
+          {info.accountName && <div className="bk-copy-row"><dt>ชื่อบัญชี</dt><dd><strong>{info.accountName}</strong></dd></div>}
+        </dl>
+      )}
+      {info.note && <p className="bk-muted">{info.note}</p>}
+      <label className={waiting ? "bk-primary bk-upload" : "bk-secondary bk-upload"} aria-disabled={state.busy}>
+        <input type="file" accept="image/jpeg,image/png,image/webp" onChange={upload} disabled={state.busy} />
+        {state.busy ? "กำลังส่งสลิป…" : waiting ? "แนบสลิปการโอน" : "ส่งสลิปเพิ่ม"}
+      </label>
+      {state.error && <p className="bk-error" role="alert">{state.error}</p>}
+      {deposit.slips > 0 && <p className="bk-muted">ส่งสลิปแล้ว {deposit.slips} รูป</p>}
+    </section>
+  );
+}

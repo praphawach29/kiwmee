@@ -259,3 +259,21 @@
 .bk-stepper button { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: #fff; color: var(--grape-deep); font-size: 18px; cursor: pointer; }
 .bk-stepper button:disabled { opacity: .4; cursor: not-allowed; }
 .bk-stepper output { min-width: 24px; text-align: center; font-family: var(--font-display); font-weight: 500; }
+
+/* ---------- transfer deposit ---------- */
+.bk-deposit { display: grid; gap: 10px; padding: 18px; border-radius: 20px; background: var(--surface); border: 2px solid var(--grape); box-shadow: var(--shadow); }
+.bk-deposit[data-status="pending"] { border-color: var(--mint); }
+.bk-deposit-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.bk-deposit-head h2 { margin: 0; font-family: var(--font-display); font-weight: 500; font-size: 1.1rem; }
+.bk-deposit-amount { font-family: var(--font-display); font-weight: 500; font-size: 1.5rem; color: var(--grape-deep); white-space: nowrap; }
+.bk-deposit-deadline { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--warn-bg); color: var(--warn); font-size: .9rem; }
+.bk-bank { margin: 0; display: grid; border-radius: 14px; background: var(--bg); padding: 4px 12px; }
+.bk-copy-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 44px; border-bottom: 1px solid var(--line-soft); }
+.bk-copy-row:last-child { border-bottom: 0; }
+.bk-copy-row dt { color: var(--muted); font-size: .88rem; }
+.bk-copy-row dd { margin: 0; display: flex; align-items: center; gap: 6px; text-align: right; overflow-wrap: anywhere; }
+.bk-copy-row .bk-text-button { min-height: 36px; font-size: .85rem; }
+.bk-upload { position: relative; cursor: pointer; }
+.bk-upload input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.bk-upload[aria-disabled="true"] { opacity: .6; cursor: wait; }
+.bk-upload:focus-within { outline: 3px solid var(--grape); outline-offset: 2px; }

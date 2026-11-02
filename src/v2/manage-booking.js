@@ -53,7 +53,9 @@ async function loadBooking(db, shop, token) {
                         from public.booking_addons ba join public.addons ad on ad.id = ba.addon_id
                        where ba.booking_id = b.id), '[]'::json) as addons,
             coalesce(s.customer_can_cancel, true) as can_cancel, coalesce(s.customer_can_reschedule, true) as can_reschedule,
-            coalesce(s.customer_change_cutoff_hours, 2) as cutoff_hours
+            coalesce(s.customer_change_cutoff_hours, 2) as cutoff_hours,
+            b.deposit_due::float8 as deposit_due, coalesce(s.payment_info, '{}'::jsonb) as payment_info,
+            (select count(*)::int from public.payment_slips ps where ps.booking_id = b.id) as slips
        from public.bookings b
        join public.offerings o on o.id = b.offering_id
        join public.customers c on c.id = b.customer_id
@@ -93,7 +95,11 @@ async function findManaged(db, slug, token, now = new Date()) {
       offering: { id: b.offering_id, name: b.offering_name },
       customerName: b.customer_name,
       resources: b.resources.map((r) => ({ name: r.name, kind: r.kind })),
-      addons: b.addons.map((a) => ({ name: a.name, quantity: a.quantity, total: Number(a.total) }))
+      addons: b.addons.map((a) => ({ name: a.name, quantity: a.quantity, total: Number(a.total) })),
+      // a deposit to transfer (held), or a slip the shop has not looked at yet (pending)
+      deposit: b.deposit_due !== null
+        ? { due: b.deposit_due, slips: b.slips, paymentInfo: ["held", "pending"].includes(b.status) ? b.payment_info : null }
+        : null
     },
     cancel: policy(b.can_cancel),
     reschedule: policy(b.can_reschedule),
@@ -165,4 +171,15 @@ async function rescheduleManaged(db, slug, token, body = {}) {
   return findManaged(db, slug, token);
 }
 
-module.exports = { issueToken, hashToken, findManaged, manageOptions, cancelManaged, rescheduleManaged, REASON_TEXT };
+/** The customer's transfer slip (already decoded and re-encoded as WebP by the route) */
+async function submitSlip(db, slug, token, image) {
+  const shop = await requireShop(db, slug);
+  try {
+    await db.query("select public.customer_submit_slip($1, $2, $3)", [shop.id, hashToken(token), image]);
+  } catch (error) {
+    throw rpcError(error);
+  }
+  return findManaged(db, slug, token);
+}
+
+module.exports = { issueToken, hashToken, findManaged, manageOptions, cancelManaged, rescheduleManaged, submitSlip, REASON_TEXT };

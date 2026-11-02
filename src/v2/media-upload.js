@@ -65,7 +65,8 @@ function magicFormat(bytes) {
   return null;
 }
 
-async function sanitizeImage(bytes, mime) {
+// maxSide: shrink to fit (payment slips are kept in the database, so they stay small)
+async function sanitizeImage(bytes, mime, { maxSide = null, maxBytes = MAX_BYTES } = {}) {
   if (magicFormat(bytes) !== MIME_FORMATS[mime]) throw invalid();
   // libvips may expose APNG as a still PNG, so inspect the real chunk structure too.
   if (mime === 'image/png') {
@@ -83,8 +84,10 @@ async function sanitizeImage(bytes, mime) {
     const metadata = await image.metadata();
     if (metadata.format !== MIME_FORMATS[mime] || (metadata.pages || 1) !== 1 || !metadata.width || !metadata.height || metadata.width * metadata.height > MAX_PIXELS) throw invalid();
     // sharp drops EXIF/XMP/ICC by default; full decode + re-encode also discards appended payloads.
-    const output = await image.rotate().webp({ quality: 85 }).toBuffer();
-    if (output.length > MAX_BYTES) throw tooLarge();
+    let pipeline = image.rotate();
+    if (maxSide) pipeline = pipeline.resize({ width: maxSide, height: maxSide, fit: 'inside', withoutEnlargement: true });
+    const output = await pipeline.webp({ quality: maxSide ? 80 : 85 }).toBuffer();
+    if (output.length > maxBytes) throw tooLarge();
     return output;
   } catch (error) {
     if (error instanceof AppError) throw error;
@@ -124,4 +127,4 @@ function mediaUploadRoute(options = {}) {
   }, options.authOptions);
 }
 
-module.exports = { MAX_BYTES, MAX_PIXELS, uploadImage, mediaUploadRoute };
+module.exports = { MAX_BYTES, MAX_PIXELS, uploadImage, mediaUploadRoute, readImage, sanitizeImage };

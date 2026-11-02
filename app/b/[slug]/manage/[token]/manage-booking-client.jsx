@@ -6,11 +6,11 @@
 
 import { useState } from "react";
 import CustomerFrame from "../../customer-frame.jsx";
-import { ShopHeader, ResourceSummary } from "../../booking-presentation.jsx";
+import { DepositBox, ShopHeader, ResourceSummary } from "../../booking-presentation.jsx";
 
 const STATUS = {
-  held: "รอชำระเงิน",
-  pending: "รอร้านยืนยัน",
+  held: "รอโอนมัดจำ",
+  pending: "รอร้านตรวจสลิป",
   confirmed: "ยืนยันแล้ว",
   checked_in: "มาถึงร้านแล้ว",
   completed: "ใช้บริการแล้ว",
@@ -120,6 +120,21 @@ export default function ManageBookingClient({ token, initial }) {
 
       {notice && <p className="bk-notice" role="status">{notice}</p>}
       {error && <p className="bk-error" role="alert">{error}</p>}
+
+      {booking.deposit?.paymentInfo && ["held", "pending"].includes(booking.status) && (
+        <DepositBox
+          deposit={booking.deposit}
+          status={booking.status}
+          deadline={booking.holdExpiresAt
+            ? `${new Intl.DateTimeFormat("th-TH", { timeZone: shop.timezone, day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(booking.holdExpiresAt))} น.`
+            : null}
+          uploadUrl={`${api}/slip`}
+          onUploaded={(next) => {
+            setView(next);
+            setNotice("ส่งสลิปแล้ว ร้านจะยืนยันคิวเมื่อตรวจยอด");
+          }}
+        />
+      )}
 
       <section className="bk-card" data-testid="manage-booking">
         <div className="bk-row">

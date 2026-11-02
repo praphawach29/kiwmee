@@ -97,6 +97,10 @@ async function shopInfo(db, slug) {
       showAnyStaff: Boolean(catalog.flow.options?.show_any_staff)
     },
     // what the customer may do later from the link they get after booking
+    // asked before booking; the transfer details come with the held booking
+    deposit: (catalog.settings?.deposit_mode ?? "none") === "none"
+      ? null
+      : { mode: catalog.settings.deposit_mode, value: catalog.settings.deposit_value, holdMinutes: catalog.settings.hold_minutes },
     selfService: {
       cancel: catalog.settings?.customer_can_cancel ?? true,
       reschedule: catalog.settings?.customer_can_reschedule ?? true,
@@ -205,7 +209,8 @@ async function book(db, slug, body = {}, { now = new Date(), verifyLineToken = (
   }
 
   const startAt = new Date(localToMs(selected.date, selected.time, shop.timezone)).toISOString();
-  const hold = (catalog.flow.then || []).includes("payment");
+  // a deposit to transfer (or a flow that ends in payment): the booking is held until the shop has it
+  const hold = (catalog.flow.then || []).includes("payment") || (catalog.settings?.deposit_mode ?? "none") !== "none";
   // the customer's link to see, cancel or move this booking (/b/<slug>/manage/<token>)
   const link = issueToken();
   try {
@@ -234,6 +239,9 @@ async function book(db, slug, body = {}, { now = new Date(), verifyLineToken = (
       startAt: b.start_at,
       endAt: b.end_at,
       holdExpiresAt: b.hold_expires_at,
+      deposit: b.deposit_due !== null && b.deposit_due !== undefined
+        ? { due: Number(b.deposit_due), paymentInfo: catalog.settings?.payment_info ?? {} }
+        : null,
       price: b.price,
       manageToken: link.token,
       addons: (b.addons ?? []).map((a) => ({ id: a.addon_id, name: a.name, quantity: a.quantity, total: Number(a.total) })),

@@ -6,7 +6,7 @@
 
 import { useState } from "react";
 import CustomerFrame from "../../customer-frame.jsx";
-import { ShopHeader } from "../../booking-presentation.jsx";
+import { ShopHeader, ResourceSummary } from "../../booking-presentation.jsx";
 
 const STATUS = {
   held: "รอชำระเงิน",
@@ -141,7 +141,7 @@ export default function ManageBookingClient({ token, initial }) {
           {booking.resources.length > 0 && (
             <div>
               <dt>{booking.resources[0].kind === "staff" ? "ช่าง" : "ที่"}</dt>
-              <dd>{booking.resources.map((r) => r.name).join(", ")}</dd>
+              <dd><ResourceSummary resources={booking.resources} /></dd>
             </div>
           )}
           {booking.partySize > 1 && (

@@ -59,7 +59,9 @@ async function shopInfo(db, slug) {
   const { rows: [gallery] } = await db.query(
     `select b.media,
             (select coalesce(jsonb_object_agg(o.id, o.media), '{}'::jsonb)
-               from public.offerings o where o.business_id = b.id and o.active) as offering_media
+               from public.offerings o where o.business_id = b.id and o.active) as offering_media,
+            (select coalesce(jsonb_object_agg(r.id, r.media), '{}'::jsonb)
+               from public.resources r where r.business_id = b.id and r.active) as resource_media
        from public.businesses b where b.id = $1`, [shop.id]
   );
   const pickable = new Set(
@@ -105,7 +107,7 @@ async function shopInfo(db, slug) {
     resources: catalog.resources
       .filter((r) => pickable.has(r.id))
       .sort(bySort)
-      .map((r) => ({ id: r.id, name: r.name, kind: r.kind }))
+      .map((r) => ({ id: r.id, name: r.name, kind: r.kind, media: gallery.resource_media[r.id] ?? [] }))
   };
 }
 

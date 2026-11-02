@@ -184,6 +184,7 @@ export default function ShopAdmin({ slug }) {
         {tab === "offerings" && <OfferingsTab slug={slug} catalog={catalog} onSaved={reload} />}
         {tab === "resources" && <ResourcesTab slug={slug} catalog={catalog} onSaved={reload} />}
         {tab === "hours" && <HoursTab slug={slug} catalog={catalog} onSaved={reload} />}
+        {tab === "team" && <TeamTab slug={slug} />}
       </ReadOnly.Provider>
         </main>
       </div>
@@ -1701,6 +1702,161 @@ function HoursTab({ slug, catalog, onSaved }) {
         remove={(id) => api("DELETE", shopPath(slug, `/closures/${id}`))}
         onSaved={onSaved}
       />
+    </div>
+  );
+}
+
+// ---------- team (owners only) ----------
+
+const TEAM_ROLES = { owner: "เจ้าของร้าน", staff: "พนักงาน" };
+
+/** Who works at the shop: invite by email, change role, remove (the shop keeps one owner) */
+function TeamTab({ slug }) {
+  const [team, setTeam] = useState(null);
+  const [error, setError] = useState("");
+  const [form, setForm] = useState({ email: "", role: "staff" });
+  const [result, setResult] = useState(null); // the last invite: { status: "added" | "invited", email }
+  const [copied, setCopied] = useState(false);
+  const save = useSave(); // the invite form
+  const edit = useSave(); // role changes and removals in the list
+
+  const load = useCallback(async () => {
+    try {
+      setTeam(await api("GET", shopPath(slug, "/team")));
+      setError("");
+    } catch (e) {
+      if (e.status === 401) window.location.href = "/dashboard";
+      setError(e.message);
+    }
+  }, [slug]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function invite(event) {
+    event.preventDefault();
+    let answer;
+    const ok = await save.run(async () => {
+      answer = await api("POST", shopPath(slug, "/team"), form);
+    }, "");
+    if (!ok) return;
+    setResult(answer);
+    setCopied(false);
+    setForm({ email: "", role: form.role });
+    load();
+  }
+
+  async function changeRole(member, role) {
+    if (role === member.role) return;
+    const text = role === "owner" ? `ให้ ${member.email} เป็นเจ้าของร้าน? จะแก้ตั้งค่าร้าน คืนเงิน และจัดการพนักงานได้` : `เปลี่ยน ${member.email} เป็นพนักงาน?`;
+    if (!window.confirm(text)) return;
+    setResult(null);
+    if (await edit.run(() => api("PUT", shopPath(slug, `/team/members/${member.userId}`), { role }), "เปลี่ยนสิทธิ์แล้ว")) load();
+  }
+
+  async function remove(member) {
+    const text = member.you ? "ออกจากร้านนี้? คุณจะไม่เห็นร้านนี้อีก" : `เอา ${member.email} ออกจากร้าน?`;
+    if (!window.confirm(text)) return;
+    setResult(null);
+    const ok = await edit.run(() => api("DELETE", shopPath(slug, `/team/members/${member.userId}`)), "เอาออกแล้ว");
+    if (ok && member.you) window.location.href = "/dashboard";
+    else if (ok) load();
+  }
+
+  async function cancel(invite) {
+    setResult(null);
+    if (await edit.run(() => api("DELETE", shopPath(slug, `/team/invites/${invite.id}`)), "ยกเลิกคำเชิญแล้ว")) load();
+  }
+
+  const invited = result?.status === "invited" ? result.email : null;
+  const message = invited
+    ? `คุณได้รับเชิญให้ดูแลร้านบน Kiwmee · เข้าสู่ระบบหรือสมัครที่ ${typeof window === "undefined" ? "" : window.location.origin}/dashboard ด้วยอีเมล ${invited}`
+    : "";
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(message);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <div className="ad-stack">
+      <form className="ad-card" onSubmit={invite}>
+        <h2>เชิญเข้าร้าน</h2>
+        <p className="ad-muted">
+          พนักงาน: ดูภาพรวม จัดการการจอง ขายหน้าร้าน และปิดบิล · เจ้าของร้าน: ทำได้ทุกอย่าง รวมถึงตั้งค่าร้าน คืนเงิน และจัดการพนักงาน
+        </p>
+        <div className="ad-grid">
+          <label className="ad-field">
+            อีเมล
+            <input type="email" required autoComplete="off" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+          </label>
+          <label className="ad-field">
+            สิทธิ์
+            <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
+              {Object.entries(TEAM_ROLES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </label>
+        </div>
+        <Status save={save} />
+        <div className="ad-row">
+          <button className="ad-primary" disabled={save.busy}>เชิญ</button>
+        </div>
+        {result?.status === "added" && <p className="ad-ok" role="status">เพิ่ม {result.email} เข้าร้านแล้ว · เขาเห็นร้านนี้ตอนเปิด /dashboard ครั้งถัดไป</p>}
+        {invited && (
+          <div className="ad-notice" role="status">
+            <p>
+              ยังไม่มีบัญชีของ {invited} · ระบบยังไม่ส่งอีเมลให้ ส่งข้อความนี้ให้เขาทาง LINE หรือแชท พอเขาสมัครหรือเข้าสู่ระบบด้วยอีเมลนี้ (และยืนยันอีเมลแล้ว) จะเห็นร้านนี้ทันที
+            </p>
+            <p className="ad-muted">{message}</p>
+            <button type="button" className="ad-secondary" onClick={copy}>{copied ? "คัดลอกแล้ว" : "คัดลอกข้อความ"}</button>
+          </div>
+        )}
+      </form>
+
+      <section className="ad-card">
+        <h2>คนในร้าน</h2>
+        <Status save={edit} />
+        {error && <p className="ad-error">{error}</p>}
+        {!team && !error && <p className="ad-muted">กำลังโหลด…</p>}
+        <ul className="ad-list">
+          {(team?.members ?? []).map((m) => (
+            <li key={m.userId} className="ad-list-item ad-row ad-wrap ad-between">
+              <div>
+                <strong>{m.email ?? "(ไม่มีอีเมล)"}</strong>
+                {m.you && <span className="ad-muted"> (คุณ)</span>}
+                {m.brandOwner && <span className="ad-status" data-tone="info">เจ้าของแบรนด์</span>}
+              </div>
+              <div className="ad-row ad-wrap">
+                <select value={m.role} disabled={edit.busy} onChange={(e) => changeRole(m, e.target.value)} aria-label={`สิทธิ์ของ ${m.email ?? "สมาชิก"}`}>
+                  {Object.entries(TEAM_ROLES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+                <button type="button" className="ad-link" disabled={edit.busy} onClick={() => remove(m)}>{m.you ? "ออกจากร้าน" : "เอาออก"}</button>
+              </div>
+            </li>
+          ))}
+        </ul>
+        {team?.invites.length > 0 && (
+          <>
+            <h3>รอเข้าร่วม</h3>
+            <ul className="ad-list">
+              {team.invites.map((i) => (
+                <li key={i.id} className="ad-list-item ad-row ad-wrap ad-between">
+                  <div>
+                    <strong>{i.email}</strong>
+                    <span className="ad-muted"> · {TEAM_ROLES[i.role]} · เชิญเมื่อ {longDate(i.createdAt.slice(0, 10))}</span>
+                  </div>
+                  <button type="button" className="ad-link" disabled={edit.busy} onClick={() => cancel(i)}>ยกเลิกคำเชิญ</button>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </section>
     </div>
   );
 }

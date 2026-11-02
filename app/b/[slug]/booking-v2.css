@@ -476,3 +476,12 @@ a.bk-booking-row:hover .bk-row-text strong { color: var(--grape-deep); }
 .bk-date-tile[data-small] { width: 46px; padding: 4px 0; border-radius: 12px; }
 .bk-date-tile[data-small] strong { font-size: 1.15rem; }
 .bk-booking-row .bk-status { font-size: .74rem; padding: 2px 8px; white-space: nowrap; }
+
+/* ---------- PromptPay QR (deposit) ---------- */
+.bk-qr { margin: 0; display: grid; justify-items: center; gap: 10px; padding: 16px; border-radius: 18px; background: #fff; border: 1px solid var(--line); text-align: center; }
+.bk-qr-brand { padding: 4px 12px; border-radius: 999px; background: #113566; color: #fff; font-size: .78rem; font-weight: 600; letter-spacing: .02em; }
+.bk-qr img { display: block; width: min(220px, 70vw); height: auto; aspect-ratio: 1; image-rendering: pixelated; }
+.bk-qr figcaption { display: grid; gap: 2px; }
+.bk-qr figcaption span { color: var(--muted); font-size: .88rem; }
+.bk-qr .bk-secondary { min-height: 44px; justify-self: stretch; text-decoration: none; }
+.bk-qr small { font-size: .74rem; line-height: 1.5; }

@@ -138,6 +138,29 @@ test("percentage and full deposits; no deposit set = the booking is confirmed st
   }, { depositMode: "none" });
 });
 
+test("a shop that takes PromptPay gets a QR with the deposit filled in, until the slip is sent", { skip }, async () => {
+  const { promptPayPayload } = require("../../src/v2/promptpay");
+  await inTx(async () => {
+    const shop = await as(OWNER);
+    const catalog = await admin.getCatalog(db, shop);
+    await admin.saveShop(db, shop, { name: catalog.shop.name, kind: catalog.shop.kind, settings: { ...(await shopSettings(shop)), depositMode: "fixed", depositValue: 200, paymentInfo: { promptPay: "081-234-5678", accountName: "บลูม แฮร์" } } });
+    await asCustomer();
+    const made = await book(db, "bloom-hair", booking("11:00"));
+    assert.match(made.deposit.qr, /^data:image\/png;base64,/);
+    assert.match(promptPayPayload("081-234-5678", made.deposit.due), /5406200\.00/);
+
+    const held = await manage.findManaged(db, "bloom-hair", made.manageToken);
+    assert.match(held.booking.deposit.qr, /^data:image\/png;base64,/);
+    const sent = await manage.submitSlip(db, "bloom-hair", made.manageToken, SLIP);
+    assert.equal(sent.booking.deposit.qr, undefined, "no QR once the slip is sent");
+  });
+  // bank account only: no QR
+  await inTx(async () => {
+    const made = await book(db, "bloom-hair", booking("11:00"));
+    assert.equal(made.deposit.qr, undefined);
+  });
+});
+
 test("settings are checked in words: an account to transfer to, sensible amounts", { skip }, async () => {
   await inTx(async () => {
     const shop = await as(OWNER);

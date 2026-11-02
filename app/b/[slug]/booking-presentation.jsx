@@ -105,6 +105,24 @@ export function ShopAbout({ shop }) {
   );
 }
 
+// An app's bottom bar: book, or see my bookings (/b/<slug>/me). Shown where LINE login is set up.
+export function CustomerTabs({ slug, active }) {
+  const tabs = [
+    { key: "book", href: `/b/${slug}`, label: "จองคิว", icon: <><rect x="3.5" y="5" width="17" height="15.5" rx="3" /><path d="M8 3v4M16 3v4M3.5 10h17M12 13v5M9.5 15.5h5" /></> },
+    { key: "me", href: `/b/${slug}/me`, label: "การจองของฉัน", icon: <><circle cx="12" cy="8" r="3.6" /><path d="M4.5 20c1.2-3.6 4-5.4 7.5-5.4s6.3 1.8 7.5 5.4" /></> }
+  ];
+  return (
+    <nav className="bk-tabs" aria-label="เมนู">
+      {tabs.map((t) => (
+        <a key={t.key} href={t.href} aria-current={active === t.key ? "page" : undefined}>
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{t.icon}</svg>
+          {t.label}
+        </a>
+      ))}
+    </nav>
+  );
+}
+
 export const withMedia = (thing) => safeMedia(thing?.media).length > 0;
 
 export function OfferingThumbnail({ offering }) {

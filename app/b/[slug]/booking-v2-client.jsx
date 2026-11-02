@@ -7,7 +7,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CustomerFrame from "./customer-frame.jsx";
-import { BookingProgress, BookingReview, BookingSubmitBar, DepositBox, OfferingDetails, ShopAbout, ShopHeader, ShopHero, OfferingThumbnail, ResourceChoice, groupTimes, withMedia } from "./booking-presentation.jsx";
+import { useLiff } from "./use-liff.jsx";
+import { BookingProgress, BookingReview, BookingSubmitBar, CustomerTabs, DepositBox, OfferingDetails, ShopAbout, ShopHeader, ShopHero, OfferingThumbnail, ResourceChoice, groupTimes, withMedia } from "./booking-presentation.jsx";
 
 const RESOURCE_WORD = { staff: "ช่าง", court: "สนาม", room: "ห้อง", equipment: "อุปกรณ์" };
 const STEP_TITLE = {
@@ -145,38 +146,6 @@ async function post(url, body) {
   return payload.data;
 }
 
-function useLiff(liffId) {
-  const [liff, setLiff] = useState({ ready: !liffId, idToken: null, name: "" });
-  useEffect(() => {
-    if (!liffId) return;
-    let cancelled = false;
-    const script = document.createElement("script");
-    script.src = "https://static.line-scdn.net/liff/edge/2/sdk.js";
-    script.onload = async () => {
-      try {
-        await window.liff.init({ liffId });
-        if (!window.liff.isInClient() && !window.liff.isLoggedIn()) {
-          if (!cancelled) setLiff({ ready: true, idToken: null, name: "" });
-          return;
-        }
-        if (!window.liff.isLoggedIn()) {
-          window.liff.login();
-          return;
-        }
-        const profile = await window.liff.getProfile().catch(() => null);
-        if (!cancelled) setLiff({ ready: true, idToken: window.liff.getIDToken(), name: profile?.displayName ?? "" });
-      } catch {
-        if (!cancelled) setLiff({ ready: true, idToken: null, name: "" });
-      }
-    };
-    script.onerror = () => !cancelled && setLiff({ ready: true, idToken: null, name: "" });
-    document.head.appendChild(script);
-    return () => {
-      cancelled = true;
-    };
-  }, [liffId]);
-  return liff;
-}
 
 export default function BookingV2Client({ shop, liffId, initialView = null }) {
   const api = `/api/b/${shop.slug}`;
@@ -302,11 +271,12 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
   if (booking) {
     return (
       <CustomerFrame>
-        <main className="bk-shell">
+        <main className={liffId ? "bk-shell bk-with-tabs" : "bk-shell"}>
           <BookingDone shop={shop} booking={booking} items={summaryItems} selected={selected} resourceWord={resourceWord}
             onSlip={(view) => setBooking((b) => ({ ...b, status: view.booking.status, deposit: { ...b.deposit, slips: view.booking.deposit?.slips ?? 1 } }))} />
           <PoweredBy />
         </main>
+        {liffId && <CustomerTabs slug={shop.slug} active="book" />}
       </CustomerFrame>
     );
   }
@@ -358,7 +328,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
       hero={withMedia(shop) ? <ShopHero shop={shop} compact={Boolean(atCustomer)} /> : null}
       aside={<SummaryAside items={summaryItems} estimate={estimate} shop={shop} onEdit={showStep} busy={busy} />}
     >
-      <main className="bk-shell" aria-busy={busy}>
+      <main className={liffId && !atCustomer ? "bk-shell bk-with-tabs" : "bk-shell"} aria-busy={busy}>
         <ShopHeader shop={shop} subtitle="จองคิวออนไลน์ · เลือกจากคิวว่างของร้าน" />
         {/* the venue's details while the customer is still looking; out of the way once they start picking */}
         {!atCustomer && summaryItems.length === 0 && <ShopAbout shop={shop} />}
@@ -468,6 +438,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
         {atCustomer && <BookingSubmitBar formId="booking-customer" disabled={busy || !liff.ready} busy={busy} price={estimate?.short} />}
         <PoweredBy />
       </main>
+      {liffId && !atCustomer && <CustomerTabs slug={shop.slug} active="book" />}
       {details && offerings.get(details.value) && (
         <OfferingDetails
           offering={offerings.get(details.value)}

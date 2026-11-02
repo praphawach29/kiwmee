@@ -1554,7 +1554,7 @@ function OfferingEditor({ slug, catalog, initial, onSaved, onClose }) {
         ระยะเวลา
         <div className="ad-checks">
           <label><input type="radio" checked={o.durationMode === "fixed"} onChange={() => set({ durationMode: "fixed" })} />ตายตัว</label>
-          <label><input type="radio" checked={o.durationMode === "customer_choice"} onChange={() => set({ durationMode: "customer_choice" })} />ลูกค้าเลือกเอง (เช่น เช่าสนามรายชั่วโมง)</label>
+          <label><input type="radio" checked={o.durationMode === "customer_choice"} onChange={() => set({ durationMode: "customer_choice", prices: o.prices.map((p) => (p.unit === "per_booking" && p.amount === "" ? { ...p, unit: "per_hour" } : p)) })} />ลูกค้าเลือกเอง (เช่น เช่าสนามรายชั่วโมง)</label>
         </div>
       </div>
       {o.durationMode === "fixed" ? (
@@ -1637,6 +1637,14 @@ function OfferingEditor({ slug, catalog, initial, onSaved, onClose }) {
             <button type="button" className="ad-link" onClick={() => set({ prices: o.prices.filter((_, j) => j !== i) })}>ลบ</button>
           </div>
         ))}
+        {o.durationMode === "customer_choice" && o.prices.some((p) => p.unit === "per_booking") && (
+          <p className="ad-notice" role="status">
+            ลูกค้าเลือกระยะเวลาเอง แต่ราคาเป็น “ต่อครั้ง” — จอง 1 หรือ 3 ชม. ก็ราคาเท่ากัน ถ้าคิดตามชั่วโมงให้เลือก “ต่อชั่วโมง”{" "}
+            <button type="button" className="ad-link" onClick={() => set({ prices: o.prices.map((p) => (p.unit === "per_booking" ? { ...p, unit: "per_hour" } : p)) })}>
+              เปลี่ยนเป็นต่อชั่วโมง
+            </button>
+          </p>
+        )}
         <button type="button" className="ad-link" onClick={() => set({ prices: [...o.prices, { unit: o.prices[0]?.unit ?? "per_booking", amount: "", daysOfWeek: null, start: null, end: null, priority: null }] })}>
           + เพิ่มราคา (เช่น ช่วงเย็น / เสาร์อาทิตย์)
         </button>

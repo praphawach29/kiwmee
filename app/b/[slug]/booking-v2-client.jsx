@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CustomerFrame from "./customer-frame.jsx";
-import { BookingProgress, BookingReview, BookingSubmitBar, DepositBox, OfferingDetails, ShopHeader, ShopGallery, OfferingThumbnail, ResourceChoice, groupTimes } from "./booking-presentation.jsx";
+import { BookingProgress, BookingReview, BookingSubmitBar, DepositBox, OfferingDetails, ShopHeader, ShopHero, OfferingThumbnail, ResourceChoice, groupTimes, withMedia } from "./booking-presentation.jsx";
 
 const RESOURCE_WORD = { staff: "ช่าง", court: "สนาม", room: "ห้อง", equipment: "อุปกรณ์" };
 const STEP_TITLE = {
@@ -256,7 +256,9 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
   const summaryItems = SUMMARY_ORDER.filter((s) => selected[KEY[s]] !== undefined).map((s) => ({
     step: s,
     label: s === "resource" ? resourceWord : SUMMARY_LABEL[s] ?? s,
-    value: s === "date" ? mediumDate(selected.date) : valueLabel(s, selected[KEY[s]])
+    value: s === "date" ? mediumDate(selected.date) : valueLabel(s, selected[KEY[s]]),
+    // the day on its own line, the date below it
+    display: s === "date" ? <>{dayName(selected.date)}<br />{dateOnly(selected.date)}</> : null
   }));
   const estimate = priceEstimate(offerings.get(selected.offeringId), selected, addonInfo);
 
@@ -344,19 +346,20 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     return (
       <div key={String(o.value)} className="bk-option-wrap">
         {button}
-        <button type="button" className="bk-details-link" onClick={() => setDetails(o)} aria-label={`รายละเอียด ${offering.name}`}>
-          รายละเอียด
+        <button type="button" className="bk-details-link" onClick={() => setDetails(o)} aria-label={`รายละเอียด ${offering.name}`} title="รายละเอียด">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5" /><path d="M12 11v6" /><circle cx="12" cy="7.5" r=".6" fill="currentColor" /></svg>
         </button>
       </div>
     );
   };
 
   return (
-    <CustomerFrame aside={<SummaryAside items={summaryItems} estimate={estimate} shop={shop} onEdit={showStep} busy={busy} />}>
+    <CustomerFrame
+      hero={withMedia(shop) ? <ShopHero shop={shop} compact={Boolean(atCustomer)} /> : null}
+      aside={<SummaryAside items={summaryItems} estimate={estimate} shop={shop} onEdit={showStep} busy={busy} />}
+    >
       <main className="bk-shell" aria-busy={busy}>
         <ShopHeader shop={shop} subtitle="จองคิวออนไลน์ · เลือกจากคิวว่างของร้าน" />
-        {/* the photos help choosing; once the customer is filling in their details they only push the form down */}
-        {!atCustomer && <ShopGallery shop={shop} />}
         <BookingProgress phase={atCustomer ? "customer" : "selection"} />
 
         {!atCustomer && summaryItems.length > 0 && (
@@ -423,18 +426,11 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
             ) : ask === "date" ? (
               <DateStrip options={view.options} today={todayIn(shop.timezone)} optionProps={optionProps} />
             ) : ask === "time" ? (
-              <div className="bk-time-groups">
-                {groupTimes(view.options).map((part) => (
-                  <div key={part.key} className="bk-time-group">
-                    <h3>
-                      {part.label} <span>· ว่าง {part.options.filter((o) => o.available).length} เวลา</span>
-                    </h3>
-                    <div className="bk-options bk-options-time">{part.options.map(optionButton)}</div>
-                  </div>
-                ))}
-              </div>
+              <TimeTabs key={selected.date} options={view.options} chosen={selected.time} optionButton={optionButton} />
             ) : (
-              <div className={`bk-options bk-options-${ask}`}>{shownOptions.map(optionButton)}</div>
+              <div className={`bk-options bk-options-${ask}`} data-photos={(ask === "offering" && shownOptions.length > 0 && shownOptions.every((o) => withMedia(offerings.get(o.value)))) || undefined}>
+                {shownOptions.map(optionButton)}
+              </div>
             )}
           </section>
         )}
@@ -591,6 +587,36 @@ function AddonsStep({ view, info, initial, busy, onDone }) {
 }
 
 // All dates the server offers in one swipeable row, a week's worth on screen at a time.
+// Times as tabs (เช้า / บ่าย / เย็น), the way an app shows slots: one part of the day at a time,
+// starting with the part that holds the chosen time, or the first with a free one.
+const PART_ICON = { morning: "☀️", afternoon: "⛅", evening: "🌙" };
+function TimeTabs({ options, chosen, optionButton }) {
+  const parts = groupTimes(options);
+  const start = parts.find((p) => p.options.some((o) => o.value === chosen)) ?? parts.find((p) => p.options.some((o) => o.available)) ?? parts[0];
+  const [open, setOpen] = useState(start?.key);
+  const part = parts.find((p) => p.key === open) ?? parts[0];
+  if (!part) return null;
+  return (
+    <div className="bk-time-groups">
+      {parts.length > 1 && (
+        <div className="bk-time-tabs" role="tablist" aria-label="ช่วงเวลา">
+          {parts.map((p) => {
+            const free = p.options.filter((o) => o.available).length;
+            return (
+              <button key={p.key} type="button" role="tab" aria-selected={p.key === part.key} data-empty={free === 0 || undefined} onClick={() => setOpen(p.key)}>
+                <span aria-hidden="true">{PART_ICON[p.key]}</span>
+                {p.label.replace("ช่วง", "")}
+                <small>{free > 0 ? `ว่าง ${free}` : "เต็ม"}</small>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <div className="bk-options bk-options-time" role="tabpanel" aria-label={part.label}>{part.options.map(optionButton)}</div>
+    </div>
+  );
+}
+
 function DateStrip({ options, today, optionProps }) {
   const strip = useRef(null);
   useEffect(() => {
@@ -623,6 +649,8 @@ function DateStrip({ options, today, optionProps }) {
 }
 
 // "วันอังคาร 3 พ.ย. 2569": the whole date on one line in a summary (the day in full, the month short)
+const dayName = (value) => new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", weekday: "long" }).format(new Date(`${value}T00:00:00Z`));
+const dateOnly = (value) => new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" }).format(new Date(`${value}T00:00:00Z`));
 const mediumDate = (value) => {
   const d = new Date(`${value}T00:00:00Z`);
   const part = (opts) => new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", ...opts }).format(d);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 // Presentation only: the booking engine remains the source of selections and next steps.
 const isDemo = (item) => item?.url?.startsWith("/demo-media/");
@@ -20,9 +20,15 @@ export function initial(name) {
 
 export function MediaImage({ item, name, eager = false }) {
   const [state, setState] = useState("loading");
+  const img = useRef(null);
+  // a picture sent with the page can finish loading before React listens for onLoad: check once
+  useEffect(() => {
+    const el = img.current;
+    if (el?.complete) setState(el.naturalWidth > 0 ? "loaded" : "error");
+  }, []);
   return (
     <span className="bk-media-image" data-state={state}>
-      {state !== "error" && <img src={item.url} alt={mediaAlt(item, name)} loading={eager ? "eager" : "lazy"} decoding="async" referrerPolicy="no-referrer" onLoad={() => setState("loaded")} onError={() => setState("error")} />}
+      {state !== "error" && <img ref={img} src={item.url} alt={mediaAlt(item, name)} loading={eager ? "eager" : "lazy"} decoding="async" referrerPolicy="no-referrer" onLoad={() => setState("loaded")} onError={() => setState("error")} />}
       {state !== "loaded" && <span className="bk-media-status" role="status">{state === "error" ? "โหลดภาพไม่สำเร็จ" : "กำลังโหลดภาพ…"}</span>}
     </span>
   );
@@ -44,6 +50,32 @@ export function ShopGallery({ shop }) {
     </section>
   );
 }
+
+// The shop's photos as the top of the page (an app-like cover): one big picture across the screen,
+// the others as small thumbnails on it. compact = a lower strip while the customer fills in details.
+export function ShopHero({ shop, compact = false }) {
+  const media = safeMedia(shop.media);
+  const [selected, setSelected] = useState(0);
+  const item = media[selected] || media[0];
+  if (!item) return null;
+  return (
+    <section className="bk-hero" data-compact={compact || undefined} aria-label="แกลเลอรีภาพร้าน">
+      <MediaImage key={item.url} item={item} name={shop.name} eager />
+      {isDemo(item) && <span className="bk-hero-tag">ภาพประกอบ ไม่ใช่สถานที่จริง</span>}
+      {!compact && media.length > 1 && (
+        <div className="bk-hero-thumbs" aria-label="เลือกภาพร้าน">
+          {media.map((image, index) => (
+            <button key={`${image.url}-${index}`} type="button" aria-label={`ดูภาพที่ ${index + 1}: ${mediaAlt(image, shop.name)}`} aria-pressed={item === image} onClick={() => setSelected(index)}>
+              <MediaImage key={image.url} item={image} name={shop.name} />
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+export const withMedia = (thing) => safeMedia(thing?.media).length > 0;
 
 export function OfferingThumbnail({ offering }) {
   const item = safeMedia(offering.media)[0];
@@ -111,7 +143,7 @@ export function BookingReview({ items, onEdit, busy, price, id = "booking-review
           <li key={item.step}>
             <button type="button" className="bk-review-row" disabled={busy} onClick={() => onEdit(item.step)} aria-label={`เปลี่ยน${item.label}: ${item.value}`}>
               <span className="bk-review-label">{item.label}</span>
-              <strong>{item.value}</strong>
+              <strong>{item.display ?? item.value}</strong>
               <span className="bk-review-edit" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4z" /><path d="M13.5 6.5l4 4" /></svg>
               </span>
@@ -124,11 +156,18 @@ export function BookingReview({ items, onEdit, busy, price, id = "booking-review
   );
 }
 
-export function BookingSubmitBar({ formId, disabled, busy, price }) {
+// The total on the left, the button on the right (like an app's checkout bar)
+export function BookingSubmitBar({ formId, disabled, busy, price, label = "ราคารวม" }) {
   return (
-    <div className="bk-submit-bar">
-      <button type="submit" form={formId} className="bk-primary" disabled={disabled}>
-        {busy ? "กำลังยืนยัน…" : price ? `ยืนยันการจอง · ${price}` : "ยืนยันการจอง"}
+    <div className="bk-submit-bar" data-has-price={Boolean(price) || undefined}>
+      {price && (
+        <div className="bk-submit-total" aria-hidden="true">
+          <small>{label}</small>
+          <strong>{price}</strong>
+        </div>
+      )}
+      <button type="submit" form={formId} className="bk-primary" disabled={disabled} aria-label={busy ? undefined : price ? `ยืนยันการจอง · ${price}` : undefined}>
+        {busy ? "กำลังยืนยัน…" : "ยืนยันการจอง"}
       </button>
     </div>
   );

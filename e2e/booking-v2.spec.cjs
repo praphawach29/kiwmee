@@ -234,7 +234,7 @@ test("deposit: the booking is held, the customer sees the account and sends a sl
     await page.locator('[data-testid="option-offering"]', { hasText: "ทรีตเมนต์" }).click();
     await page.getByRole("button", { name: "ช่างบี" }).click();
     await enabled(page, "date").nth(7).click();
-    await enabled(page, "time").nth(3).click();
+    await enabled(page, "time").last().click(); // the times show one part of the day at a time
     await expect(page.getByText(/ร้านนี้ขอมัดจำ\s*200 บาท/)).toBeVisible();
     await fillAndConfirm(page, "ลูกค้ามัดจำ");
 

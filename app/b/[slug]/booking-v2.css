@@ -491,3 +491,8 @@ a.bk-booking-row:hover .bk-row-text strong { color: var(--grape-deep); }
 .bk-qr .bk-secondary { min-height: 44px; justify-self: stretch; text-decoration: none; }
 .bk-qr small { font-size: .74rem; line-height: 1.5; }
 .bk-options-resource[data-photos] .bk-resource-media img { object-position: center 25%; } /* faces sit in the upper part of a portrait */
+
+/* ---------- where the shop is + "นำทาง" (migration …002500) ---------- */
+.bk-place { display: grid; gap: 10px; }
+.bk-place p { margin: 0; display: flex; gap: 6px; align-items: flex-start; color: #3A3460; line-height: 1.6; overflow-wrap: anywhere; }
+.bk-directions { gap: 8px; text-decoration: none; min-height: 46px; }

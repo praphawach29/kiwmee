@@ -280,6 +280,8 @@ async function confirmDeposit(client, shop, id, input = {}) {
 async function lineCard(client, shop, id, kind, { previous = null, reason = null, link = null } = {}) {
   const { rows } = await client.query(
     `select b.start_at, b.end_at, (b.price_snapshot->>'total')::float8 as total, o.name as offering, c.line_user_id,
+            (select address from public.businesses where id = b.business_id) as address,
+            (select map_url from public.businesses where id = b.business_id) as map_url,
             coalesce((select array_agg(r.name order by r.sort_order, r.name) from public.booking_resources br
                         join public.resources r on r.id = br.resource_id
                        where br.booking_id = b.id and br.addon_id is null), '{}') as resources,
@@ -302,7 +304,8 @@ async function lineCard(client, shop, id, kind, { previous = null, reason = null
       kind,
       shop: { name: shop.name, timezone: shop.timezone },
       booking: { offering: b.offering, startAt: b.start_at, endAt: b.end_at, resources: b.resources, resourceKind: b.resource_kind, addons: b.addons, total: b.total ?? 0, deposit: null, previous, reason },
-      link
+      link,
+      directions: require("./directions").directionsLink({ address: b.address, mapUrl: b.map_url })
     })
   };
 }

@@ -6,7 +6,7 @@
 
 import { useState } from "react";
 import CustomerFrame from "../../customer-frame.jsx";
-import { DepositBox, ShopHeader, ResourceSummary } from "../../booking-presentation.jsx";
+import { DepositBox, DirectionsButton, ShopHeader, ResourceSummary } from "../../booking-presentation.jsx";
 
 const STATUS = {
   held: "รอโอนมัดจำ",
@@ -175,6 +175,7 @@ export default function ManageBookingClient({ token, initial }) {
             </div>
           )}
         </dl>
+        {!["cancelled", "no_show", "expired", "completed"].includes(booking.status) && <DirectionsButton href={shop.directions} />}
         {open && (
           <p className="bk-muted">
             {view.cancel.allowed && view.reschedule.allowed ? "เลื่อนหรือยกเลิก" : view.cancel.allowed ? "ยกเลิก" : "เลื่อนนัด"}เองได้ถึง {deadline} น.

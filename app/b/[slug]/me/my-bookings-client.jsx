@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from "react";
 import CustomerFrame from "../customer-frame.jsx";
-import { CustomerTabs, ShopHeader, ShopHero, withMedia } from "../booking-presentation.jsx";
+import { CustomerTabs, DirectionsButton, ShopHeader, ShopHero, withMedia } from "../booking-presentation.jsx";
 import { useLiff } from "../use-liff.jsx";
 
 const STATUS = {
@@ -32,7 +32,7 @@ function DateTile({ date, small = false }) {
   );
 }
 
-function NextBooking({ booking }) {
+function NextBooking({ booking, directions }) {
   const resource = booking.resources[0];
   return (
     <article className="bk-next" aria-label="นัดถัดไป">
@@ -53,6 +53,7 @@ function NextBooking({ booking }) {
         {booking.total > 0 && <div><dt>ราคา</dt><dd><strong>{money(booking.total)}</strong></dd></div>}
       </dl>
       {booking.link && <a className="bk-primary" href={booking.link}>{booking.status === "held" ? "แนบสลิปโอนมัดจำ" : "ดู เลื่อน หรือยกเลิกนัด"}</a>}
+      <DirectionsButton href={directions} />
     </article>
   );
 }
@@ -119,7 +120,7 @@ export default function MyBookingsClient({ shop, liffId }) {
         {data && (
           <>
             {next ? (
-              <NextBooking booking={next} />
+              <NextBooking booking={next} directions={data.shop?.directions} />
             ) : (
               <section className="bk-card bk-center-card">
                 <h2>ยังไม่มีนัดที่จะถึง</h2>

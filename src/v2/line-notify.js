@@ -58,8 +58,9 @@ const KINDS = {
  * booking: { offering, startAt, endAt, resources: [names], resourceKind, addons: [{ name, quantity }],
  *            total, deposit: { due, holdExpiresAt } | null }
  * link: where the button goes (the customer's own booking page), or null for no button
+ * directions: a map link to the shop (src/v2/directions.js), or null
  */
-function bookingCard({ kind, shop, booking, link }) {
+function bookingCard({ kind, shop, booking, link, directions = null }) {
   const k = KINDS[kind] ?? KINDS.booked;
   const when = whenText(booking.startAt, booking.endAt, shop.timezone);
 
@@ -140,6 +141,8 @@ function bookingCard({ kind, shop, booking, link }) {
       paddingAll: "md",
       contents: [
         ...(link ? [{ type: "button", style: "primary", color: GRAPE, height: "sm", action: { type: "uri", label: k.button, uri: link } }] : []),
+        // the way to the shop (its map link or address), on every card but a cancelled one
+        ...(directions && kind !== "cancelled" ? [{ type: "button", style: "secondary", height: "sm", action: { type: "uri", label: "📍 นำทางไปร้าน", uri: directions } }] : []),
         { type: "text", text: "จองผ่าน Kiwmee", size: "xxs", color: "#AAA6C3", align: "center", margin: link ? "sm" : "none" }
       ]
     }

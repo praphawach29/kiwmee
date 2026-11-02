@@ -9,6 +9,7 @@ const { findShop, loadCatalog } = require("./catalog-repository");
 const { REASON_TEXT } = require("./reason-text");
 const { getOptions, localToMs, msToLocal } = require("./options-engine");
 const { promptPayQr } = require("./promptpay");
+const { directionsLink } = require("./directions");
 
 const TOKEN = /^[A-Za-z0-9_-]{32}$/;
 const OPEN = ["held", "pending", "confirmed"];
@@ -85,7 +86,7 @@ async function findManaged(db, slug, token, now = new Date()) {
   // still to pay: a PromptPay QR with the deposit filled in, when the shop takes PromptPay
   const qr = b.deposit_due !== null && b.status === "held" && open ? await promptPayQr(b.payment_info?.promptPay, b.deposit_due).catch(() => null) : null;
   return {
-    shop: { slug: shop.slug, name: shop.name, timezone: shop.timezone },
+    shop: { slug: shop.slug, name: shop.name, timezone: shop.timezone, address: shop.address ?? "", directions: directionsLink({ address: shop.address, mapUrl: shop.map_url }) },
     booking: {
       status: b.status,
       date: start.date,

@@ -76,12 +76,24 @@ export function ShopHero({ shop, compact = false }) {
   );
 }
 
+// "นำทาง": the shop's map link, or a Google Maps search for its address (src/v2/directions.js)
+export function DirectionsButton({ href, className = "bk-secondary bk-directions" }) {
+  if (typeof href !== "string" || !href.startsWith("https://")) return null;
+  return (
+    <a className={className} href={href} target="_blank" rel="noopener noreferrer">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11A6.5 6.5 0 0 1 18.5 10c0 5.4-6.5 11-6.5 11z" /><circle cx="12" cy="10" r="2.4" /></svg>
+      นำทางไปร้าน
+    </a>
+  );
+}
+
 // About the venue and what it offers, as icons (the owner's "Facilities" reference)
 export function ShopAbout({ shop }) {
   const [open, setOpen] = useState(false);
   const amenities = amenityList(shop.amenities);
   const about = (shop.about ?? "").trim();
-  if (!about && amenities.length === 0) return null;
+  const address = (shop.address ?? "").trim();
+  if (!about && amenities.length === 0 && !address && !shop.directions) return null;
   const long = about.length > 120;
   return (
     <section className="bk-card bk-about" aria-label={`เกี่ยวกับ ${shop.name}`}>
@@ -89,6 +101,12 @@ export function ShopAbout({ shop }) {
         <div className="bk-about-text">
           <p data-open={open || !long || undefined}>{about}</p>
           {long && <button type="button" className="bk-text-button" onClick={() => setOpen(!open)} aria-expanded={open}>{open ? "ย่อ" : "อ่านต่อ"}</button>}
+        </div>
+      )}
+      {(address || shop.directions) && (
+        <div className="bk-place">
+          {address && <p><span aria-hidden="true">📍</span>{address}</p>}
+          <DirectionsButton href={shop.directions} />
         </div>
       )}
       {amenities.length > 0 && (

@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CustomerFrame from "./customer-frame.jsx";
 import { useLiff } from "./use-liff.jsx";
-import { BookingProgress, BookingReview, BookingSubmitBar, CustomerTabs, DepositBox, OfferingDetails, ShopAbout, ShopHeader, ShopHero, OfferingThumbnail, ResourceChoice, groupTimes, withMedia } from "./booking-presentation.jsx";
+import { BookingProgress, BookingReview, BookingSubmitBar, CustomerTabs, DepositBox, DirectionsButton, OfferingDetails, ShopAbout, ShopHeader, ShopHero, OfferingThumbnail, ResourceChoice, groupTimes, withMedia } from "./booking-presentation.jsx";
 
 const RESOURCE_WORD = { staff: "ช่าง", court: "สนาม", room: "ห้อง", equipment: "อุปกรณ์" };
 const STEP_TITLE = {
@@ -794,6 +794,7 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
             เพิ่มลงปฏิทิน
           </button>
         )}
+        <DirectionsButton href={shop.directions} />
       </div>
 
       {managePath && <ManageLink shop={shop} path={managePath} />}

@@ -54,8 +54,10 @@ function brandId(value) {
   return value;
 }
 
-/** The user's brands: plan, whether they own it, and the branches they work at. */
+/** The user's brands: plan, whether they own it, and the branches they work at (taking up open invites first). */
 async function listBrands(client) {
+  // invites to the caller's confirmed email (admin-team.js) become memberships before we list
+  await client.query("select public.accept_my_invites()");
   const { rows } = await client.query(
     `select br.id, br.name, public.brand_plan(br.id) as plan, public.is_brand_owner(br.id) as owner,
             public.brand_branch_limit(public.brand_plan(br.id)) as branch_limit,

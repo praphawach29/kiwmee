@@ -22,7 +22,8 @@ grant usage on schema public to anon, authenticated, service_role;
 
 create table if not exists auth.users (
   id uuid primary key,
-  email text
+  email text,
+  email_confirmed_at timestamptz default now()   -- Supabase sets this once the address is confirmed
 );
 
 create or replace function auth.uid()

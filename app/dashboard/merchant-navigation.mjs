@@ -9,6 +9,7 @@ const SETTINGS = [
   { id: "offerings", label: "บริการและราคา", icon: "◈" },
   { id: "resources", label: "ช่าง / สนาม", icon: "♧" },
   { id: "hours", label: "ร้านและเวลาทำการ", icon: "◷" },
+  { id: "team", label: "พนักงานและสิทธิ์", icon: "☺" },
 ];
 
 export function shopTabs(role) {

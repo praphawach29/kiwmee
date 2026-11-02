@@ -1,6 +1,6 @@
 # Kiwmee — สรุปสถานะสำหรับ session ถัดไป
 
-ปรับล่าสุด: 28 ต.ค. 2569 · อ่านคู่กับ `CLAUDE.md` (กติกาการทำงาน)
+ปรับล่าสุด: 2 พ.ย. 2569 · อ่านคู่กับ `CLAUDE.md` (กติกาการทำงาน) และ `docs/SALES_READINESS_ROADMAP.md` (แผนสู่การขายจริง)
 
 **Kiwmee** = ระบบจองคิวหลายร้านผ่านเว็บ/LINE ที่กำลังต่อยอดเป็น**ระบบสมาชิก + คะแนนสะสม** ในผลิตภัณฑ์เดียว
 Next.js 15 + Supabase · deploy บน Railway service `salon-booking-os-v1` → `https://kiwmee.up.railway.app` ทุกครั้งที่ merge เข้า `main`
@@ -26,10 +26,20 @@ Next.js 15 + Supabase · deploy บน Railway service `salon-booking-os-v1` →
 | #14 | `CLAUDE.md` + เอกสารนี้ |
 | #16 | **6c แบรนด์/สาขา**: หน้า `/dashboard` แสดงแบรนด์ → สาขา · เพิ่มสาขา (คัดลอกบริการ/ราคา/flow/เวลาทำการ ± ช่าง) · ย้ายร้านที่เปิดแยกไว้เข้าแบรนด์ · จำกัดสาขาตามแพ็กเกจ (ฟรี/เริ่มต้น 1, โปร/สมาชิก หลายสาขา) · migration `…001100` |
 | #15 | **6d บิล**: ปุ่ม "ปิดบิล" ในแท็บการจอง (แก้ยอดได้, แยกจ่ายหลายช่องทาง) · แท็บ "บิลและรายรับ" (รายรับรายวันแยกช่องทาง, ขายหน้าร้าน, คืนเงินเฉพาะเจ้าของ) · migration `…001000` |
-| (super admin) | **`/super`**: ผู้ดูแลแพลตฟอร์มตั้งค่า LINE (LIFF ID, Channel ID, access token, channel secret) เอง · ความลับเข้ารหัสในแอป (`SETTINGS_ENCRYPTION_KEY`) · `platform_admins` + `platform_settings` · migration `…001300` · ดู `supabase/README.md` |
+| #17 | ชื่อแพ็กเกจ `kiwmee` · repo เปลี่ยนชื่อเป็น `praphawach29/kiwmee` |
+| #18 | error หน้าจองเป็นภาษาไทย (`src/v2/reason-text.js`) · เก็บชื่อที่ลูกค้าพิมพ์ในแต่ละการจอง (migration `…001200`) |
+| #19–#20 | **`/super`**: ผู้ดูแลแพลตฟอร์มตั้งค่า LINE (LIFF ID, Channel ID, access token, channel secret) เอง · ความลับเข้ารหัสในแอป (`SETTINGS_ENCRYPTION_KEY`) · `platform_admins` + `platform_settings` · migration `…001300` · ดู `supabase/README.md` |
+| #21–#23 | หน้าจอเดสก์ท็อป/มือถือของร้านและลูกค้า · เมนูตามบทบาท · รายละเอียดร้าน · แม่แบบขั้นตอนจอง |
+| #24 | แกลเลอรีร้าน + ร้านตัวอย่าง JackShop (migration `…001400`) |
+| #25 | หน้าภาพรวมร้าน (dashboard overview) |
+| #26 | วันที่/เวลาแบบไทย (พ.ศ., 24 ชม.) |
+| #27–#28 | อัปโหลดรูปร้าน/บริการ/ช่าง/สนามจากเครื่อง (Supabase Storage `shop-media`, migration `…001500`–`…001600`) |
+| #29 | `docs/SALES_READINESS_ROADMAP.md` — แผนสู่การขายจริง (Phase 0–5) |
+| #30 | **หน้าเชิญพนักงาน**: แท็บ "พนักงานและสิทธิ์" (เจ้าของร้าน) · เชิญด้วยอีเมล (มีบัญชีแล้ว = เพิ่มทันที, ยังไม่มี = รอเขาเข้า `/dashboard` ด้วยอีเมลที่ยืนยันแล้ว) · เปลี่ยนสิทธิ์/เอาออก · ร้านต้องมีเจ้าของอย่างน้อย 1 คน · migration `…001700` |
+| #30 | **CI** (`.github/workflows/ci.yml`: unit, DB, build ทุก PR) · ปรับ roadmap ให้ตรงสถานะจริง |
 
-**Migration ล่าสุดที่รันบน booking-v2 แล้ว: `20261025001200_booking_customer_name.sql`** (เจ้าของยืนยัน 30 ต.ค. 2569) · `…001300_platform_settings.sql` รอเจ้าของรันก่อน merge
-ไฟล์ถัดไปตั้งชื่อ `20261025001400_…`
+**Migration ล่าสุดที่รันบน booking-v2 แล้ว: `20261025001600_resource_media.sql`** (merge แล้วใน #28)
+**`20261025001700_shop_team.sql` (PR #30) ต้องให้เจ้าของรันก่อน merge** · ไฟล์ถัดไปตั้งชื่อ `20261025001800_…`
 แพ็กเกจของแบรนด์ตั้งด้วย SQL (ยังไม่มีระบบเก็บเงิน): `supabase/README.md` → "ตั้งแพ็กเกจของแบรนด์"
 
 ตัวอย่างหน้าจอบัตรสมาชิก (ยังไม่ใช่โค้ดจริง): https://claude.ai/artifact/Whda2NEfEyUgwDL62cWfKz
@@ -68,7 +78,10 @@ Next.js 15 + Supabase · deploy บน Railway service `salon-booking-os-v1` →
 
 ---
 
-## 3. ขั้นต่อไป (ลำดับใน `docs/LOYALTY_DESIGN.md` §6)
+## 3. ขั้นต่อไป
+
+**ลำดับหลักอยู่ใน `docs/SALES_READINESS_ROADMAP.md`** (Phase 0 → 5) · ตอนนี้อยู่ **Phase 0**: ~~หน้าเชิญพนักงาน~~ (#30) → แจ้งร้านในแอดมิน + ประวัติการเลื่อน
+→ ลิงก์จัดการการจองของร้าน → ตรวจ backup · ตารางด้านล่างคือขั้นของ LINE/สมาชิก (Phase 1–4) ตาม `docs/LOYALTY_DESIGN.md` §6
 
 | ขั้น | งาน | รออะไร |
 |---|---|---|
@@ -84,14 +97,15 @@ Next.js 15 + Supabase · deploy บน Railway service `salon-booking-os-v1` →
 
 ## 4. ปัญหาที่รู้แล้ว ยังไม่ได้แก้
 
-1. **หน้าจอง `/b/<slug>` แสดง error เป็นรหัสอังกฤษ** (เช่น `NO_WORKING_WINDOW`) เพราะ `bookingError` ใน `src/v2/public-booking.js`
-   ส่ง message จาก RPC ตรง ๆ → ควรแปลเป็นไทยแบบ `REASON_TEXT` ใน `src/v2/manage-booking.js`
-2. **ลูกค้าที่ใช้เบอร์ซ้ำได้ชื่อคนแรก** (`create_booking` จับคู่ลูกค้าด้วยเบอร์) → ควรเก็บชื่อที่พิมพ์ในการจองแต่ละครั้ง
-3. ร้านไม่ได้รับแจ้งเมื่อมีการจองใหม่ / ลูกค้ายกเลิก / เลื่อน · การเลื่อนโดยลูกค้าไม่ลงประวัติสถานะ
-4. ยังไม่มีหน้าเชิญพนักงานเข้าร้าน (ตอนนี้ต้องใช้ SQL ใน `supabase/README.md`)
-5. การจองที่ร้านบันทึกเองไม่มีลิงก์จัดการการจองของลูกค้า
-6. ไม่มี CI (GitHub Actions) — เทสต์รันแค่ในเครื่อง
-7. โค้ด v1 ยังอยู่ใน repo (`/admin`, `/manage`, `src/` เดิม) — เก็บกวาดหลังย้าย LINE/ชำระเงินมา v2
+1. ร้านไม่ได้รับแจ้งเมื่อมีการจองใหม่ / ลูกค้ายกเลิก / เลื่อน · การเลื่อนโดยลูกค้าไม่ลงประวัติสถานะ (Phase 0)
+2. การจองที่ร้านบันทึกเองไม่มีลิงก์จัดการการจองของลูกค้า (Phase 0)
+3. ยังไม่ได้ตรวจ backup ของ booking-v2 (Phase 0)
+4. ยังไม่มีนโยบายความเป็นส่วนตัว/ข้อตกลงการใช้งาน (PDPA) (Phase 1)
+5. **`next dev` พังที่ `/dashboard/<ร้าน>`** ("Cannot use 'import.meta' outside a module" ใน `src/v2/booking-templates.js` ซึ่งเป็น CommonJS
+   แต่ถูก import ใน client component) — `next build`/production ไม่เป็น · ตรวจหน้าจอด้วย `next build && next start` ไปก่อน
+6. โค้ด v1 ยังอยู่ใน repo (`/admin`, `/manage`, `src/` เดิม) — เก็บกวาดหลังย้าย LINE/ชำระเงินมา v2 (Phase 5)
+
+แก้แล้ว: error ภาษาไทย + ชื่อลูกค้าเบอร์ซ้ำ (#18) · CI (#30) · หน้าเชิญพนักงาน (#30)
 
 ---
 
@@ -108,7 +122,7 @@ D=/var/lib/postgresql/kiwmee-test
 mkdir -p $D && chown postgres $D && chmod 700 $D
 [ -f $D/PG_VERSION ] || su postgres -c "/usr/lib/postgresql/16/bin/initdb -D $D -U postgres --auth=trust -E UTF8"
 su postgres -c "/usr/lib/postgresql/16/bin/pg_ctl -D $D -o '-p 54329 -k /tmp' -l $D/log start"
-SUPABASE_TEST_DB_URL=postgres://postgres@127.0.0.1:54329/booking_test npm run test:db   # ล่าสุด 63/63
+SUPABASE_TEST_DB_URL=postgres://postgres@127.0.0.1:54329/booking_test npm run test:db   # ล่าสุด 84/84
 ```
 - อย่าเก็บ data dir ไว้ใน scratchpad (`/tmp/claude-0/...`) — สิทธิ์โฟลเดอร์ถูกรีเซ็ตแล้ว Postgres เปิดไม่ได้
 - เครื่องรีสตาร์ตแล้ว server หยุด ต้องสั่ง `pg_ctl … start` ใหม่

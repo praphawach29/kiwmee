@@ -14,6 +14,7 @@ const { issueToken } = require("./manage-booking");
 const { getSetting } = require("./platform-settings");
 const { bookingCard, manageLink, pushLine, sealLink } = require("./line-notify");
 const { amenityList } = require("./amenities");
+const { promptPayQr } = require("./promptpay");
 
 const ASKABLE = ["offering", "resource", "date", "time", "duration", "party", "addons"];
 const SELECTED_KEYS = ["offeringId", "resourceId", "date", "time", "durationMinutes", "partySize"];
@@ -257,6 +258,11 @@ async function book(
     };
   } catch (error) {
     throw bookingError(error);
+  }
+  // a PromptPay QR with the deposit already filled in, when the shop takes PromptPay
+  if (result.deposit && result.status === "held") {
+    const qr = await promptPayQr(result.deposit.paymentInfo?.promptPay, result.deposit.due).catch(() => null);
+    if (qr) result.deposit.qr = qr;
   }
 
   // Booked inside LINE: the card goes to the customer's chat with Kiwmee's OA (never fails the booking)

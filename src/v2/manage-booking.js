@@ -8,6 +8,7 @@ const { AppError, badRequest, notFound } = require("../errors");
 const { findShop, loadCatalog } = require("./catalog-repository");
 const { REASON_TEXT } = require("./reason-text");
 const { getOptions, localToMs, msToLocal } = require("./options-engine");
+const { promptPayQr } = require("./promptpay");
 
 const TOKEN = /^[A-Za-z0-9_-]{32}$/;
 const OPEN = ["held", "pending", "confirmed"];
@@ -81,6 +82,8 @@ async function findManaged(db, slug, token, now = new Date()) {
     const reason = why(allowed);
     return { allowed: reason === null, reason, message: reason ? REASON_TEXT[reason] : null };
   };
+  // still to pay: a PromptPay QR with the deposit filled in, when the shop takes PromptPay
+  const qr = b.deposit_due !== null && b.status === "held" && open ? await promptPayQr(b.payment_info?.promptPay, b.deposit_due).catch(() => null) : null;
   return {
     shop: { slug: shop.slug, name: shop.name, timezone: shop.timezone },
     booking: {
@@ -98,7 +101,7 @@ async function findManaged(db, slug, token, now = new Date()) {
       addons: b.addons.map((a) => ({ name: a.name, quantity: a.quantity, total: Number(a.total) })),
       // a deposit to transfer (held), or a slip the shop has not looked at yet (pending)
       deposit: b.deposit_due !== null
-        ? { due: b.deposit_due, slips: b.slips, paymentInfo: ["held", "pending"].includes(b.status) ? b.payment_info : null }
+        ? { due: b.deposit_due, slips: b.slips, paymentInfo: ["held", "pending"].includes(b.status) ? b.payment_info : null, ...(qr ? { qr } : {}) }
         : null
     },
     cancel: policy(b.can_cancel),

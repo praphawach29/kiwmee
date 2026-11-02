@@ -288,6 +288,18 @@ export function DepositBox({ deposit, status, deadline, uploadUrl, onUploaded })
       </div>
       {waiting && deadline && <p className="bk-deposit-deadline">กรุณาโอนและส่งสลิปภายใน <b>{deadline}</b> ไม่อย่างนั้นคิวจะถูกปล่อยให้คนอื่น</p>}
       {!waiting && <p className="bk-muted">ร้านจะยืนยันคิวเมื่อตรวจยอดแล้ว · ส่งสลิปเพิ่มได้ถ้าโอนหลายครั้ง</p>}
+      {waiting && typeof deposit.qr === "string" && deposit.qr.startsWith("data:image/png;base64,") && (
+        <figure className="bk-qr">
+          <span className="bk-qr-brand" aria-hidden="true">PromptPay · พร้อมเพย์</span>
+          <img src={deposit.qr} alt={`QR พร้อมเพย์ ยอด ${baht(deposit.due)}`} width="220" height="220" />
+          <figcaption>
+            <strong>สแกนจ่ายด้วยแอปธนาคาร</strong>
+            <span>ยอด {baht(deposit.due)} ใส่ให้แล้ว{info.accountName ? ` · ${info.accountName}` : ""}</span>
+          </figcaption>
+          <a className="bk-secondary" href={deposit.qr} download="promptpay-qr.png">บันทึกรูป QR</a>
+          <small className="bk-muted">ในแอป LINE: กดค้างที่รูปเพื่อบันทึก แล้วเลือกจากอัลบั้มในแอปธนาคาร</small>
+        </figure>
+      )}
       {(info.accountNumber || info.promptPay) && (
         <dl className="bk-bank">
           {info.bank && <div className="bk-copy-row"><dt>ธนาคาร</dt><dd><strong>{info.bank}</strong></dd></div>}

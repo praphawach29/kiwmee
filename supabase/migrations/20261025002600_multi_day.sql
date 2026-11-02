@@ -13,13 +13,19 @@
 --   reschedule_booking       keeps the number of days when only the time moves
 --   add_branch               copies min_days / max_days to a new branch
 
-alter table public.offerings drop constraint offerings_duration_mode_check;
+-- Safe to run again (a run that stopped half way can simply be repeated).
+alter table public.offerings drop constraint if exists offerings_duration_mode_check;
 alter table public.offerings add constraint offerings_duration_mode_check check (duration_mode in ('fixed', 'customer_choice', 'days'));
-alter table public.offerings add column min_days int check (min_days between 1 and 90);
-alter table public.offerings add column max_days int check (max_days between 1 and 90);
+alter table public.offerings add column if not exists min_days int;
+alter table public.offerings add column if not exists max_days int;
+alter table public.offerings drop constraint if exists offerings_min_days_check;
+alter table public.offerings add constraint offerings_min_days_check check (min_days between 1 and 90);
+alter table public.offerings drop constraint if exists offerings_max_days_check;
+alter table public.offerings add constraint offerings_max_days_check check (max_days between 1 and 90);
+alter table public.offerings drop constraint if exists offerings_days_check;
 alter table public.offerings add constraint offerings_days_check check (duration_mode <> 'days' or (min_days is not null and max_days >= min_days));
 
-alter table public.price_rules drop constraint price_rules_unit_check;
+alter table public.price_rules drop constraint if exists price_rules_unit_check;
 alter table public.price_rules add constraint price_rules_unit_check check (unit in ('per_booking', 'per_hour', 'per_person', 'per_day'));
 
 -- Is the shop open at this local date and time? (a shop with no hours yet is open 10–19)

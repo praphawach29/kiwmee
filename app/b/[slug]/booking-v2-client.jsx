@@ -41,6 +41,8 @@ const KEY = {
   addons: "addons"
 };
 const SUMMARY_ORDER = ["date", "offering", "resource", "time", "duration", "party", "addons"];
+// labels in the summary (short, so the value keeps the room)
+const SUMMARY_LABEL = { date: "วัน", offering: "บริการ", time: "เวลา", duration: "ระยะเวลา", party: "จำนวน", addons: "เพิ่มเติม" };
 const ADDON_UNIT = { per_unit: "/ชิ้น", per_hour: "/ชม.", per_day: "/วัน", per_person: "/คน", per_booking: "" };
 
 function formatDate(date, { long = false } = {}) {
@@ -247,8 +249,8 @@ export default function BookingV2Client({ shop, liffId }) {
   const [category, setCategory] = useState(null);
   const summaryItems = SUMMARY_ORDER.filter((s) => selected[KEY[s]] !== undefined).map((s) => ({
     step: s,
-    label: s === "resource" ? resourceWord : s === "addons" ? "เพิ่มเติม" : STEP_TITLE[s]?.replace("เลือก", "") ?? s,
-    value: valueLabel(s, selected[KEY[s]])
+    label: s === "resource" ? resourceWord : SUMMARY_LABEL[s] ?? s,
+    value: s === "date" ? mediumDate(selected.date) : valueLabel(s, selected[KEY[s]])
   }));
   const estimate = priceEstimate(offerings.get(selected.offeringId), selected, addonInfo);
 
@@ -572,6 +574,12 @@ function DateStrip({ options, today, optionProps }) {
   );
 }
 
+// "อ. 3 พ.ย. 2569": the whole date on one line in a summary
+const mediumDate = (value) => {
+  const d = new Date(`${value}T00:00:00Z`);
+  return `${SHORT_DAYS[d.getUTCDay()]} ${new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" }).format(d)}`;
+};
+
 const shortDate = (value) => {
   const d = new Date(`${value}T00:00:00Z`);
   return `${SHORT_DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", month: "short" }).format(d)}`;
@@ -791,10 +799,13 @@ function OptionBody({ ask, option, offering, resource, resourceWord }) {
         <OfferingThumbnail offering={offering} />
         <span className="bk-option-text">
           <strong>{offering.name}</strong>
-          <span className="bk-muted">{length}</span>
+          {/* the price sits under the name, so a long name keeps the full width (LINE shows text larger) */}
+          <span className="bk-option-meta">
+            <span>{length}</span>
+            {offering.price && <b className="bk-option-price">{priceText(offering.price)}</b>}
+          </span>
           {offering.description && <span className="bk-option-desc">{offering.description}</span>}
         </span>
-        {offering.price && <span className="bk-option-price">{priceText(offering.price)}</span>}
         <span className="bk-choice-mark" aria-hidden="true" />
       </>
     );

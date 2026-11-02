@@ -269,6 +269,7 @@ async function book(
           startAt: result.startAt,
           endAt: result.endAt,
           resources: result.resources.map((r) => r.name).filter(Boolean),
+          resourceKind: catalog.resources.find((r) => r.id === result.resources[0]?.id)?.kind ?? null,
           addons: result.addons,
           total: Number(result.price?.total ?? 0),
           deposit: result.deposit ? { due: result.deposit.due, holdExpiresAt: result.holdExpiresAt } : null

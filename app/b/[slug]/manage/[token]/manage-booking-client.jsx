@@ -115,10 +115,7 @@ export default function ManageBookingClient({ token, initial }) {
   const blocked = [view.cancel, view.reschedule].find((p) => !p.allowed && p.reason !== "NOT_CHANGEABLE");
 
   return (
-    <CustomerFrame shop={shop} managing actions={[
-      ...(view.reschedule.allowed ? [{ label: "เลื่อนนัด", onClick: startReschedule, disabled: busy }] : []),
-      ...(view.cancel.allowed ? [{ label: "ยกเลิกการจอง", onClick: () => { setMode("cancel"); setNotice(null); }, disabled: busy }] : []),
-    ]}><main className="bk-shell" aria-busy={busy}>
+    <CustomerFrame><main className="bk-shell" aria-busy={busy}>
       <ShopHeader shop={shop} subtitle={`การจองของ ${booking.customerName}`} />
 
       {notice && <p className="bk-notice" role="status">{notice}</p>}

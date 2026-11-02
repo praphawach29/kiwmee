@@ -5,9 +5,9 @@
 // reason), and tapping an earlier step lets them change it without starting over.
 // The server decides what comes next (POST /api/b/{slug}/step); this page only shows it.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CustomerFrame from "./customer-frame.jsx";
-import { BookingProgress, BookingReview, BookingSubmitBar, ShopHeader, ShopGallery, OfferingThumbnail, ResourceChoice } from "./booking-presentation.jsx";
+import { BookingProgress, BookingReview, BookingSubmitBar, ShopHeader, ShopGallery, OfferingThumbnail, ResourceChoice, groupTimes } from "./booking-presentation.jsx";
 
 const RESOURCE_WORD = { staff: "ช่าง", court: "สนาม", room: "ห้อง", equipment: "อุปกรณ์" };
 const STEP_TITLE = {
@@ -60,6 +60,34 @@ function priceText(price) {
   if (!price) return "";
   const per = price.unit === "per_hour" ? "/ชม." : price.unit === "per_person" ? "/คน" : "";
   return `${price.varies ? "เริ่ม " : ""}${money(price.amount)}${per}`;
+}
+
+// What the customer will pay, as far as the page can tell before the server prices the booking.
+// A price that changes by day or time ("varies") is only ever shown as a starting price.
+function priceEstimate(offering, selected) {
+  const price = offering?.price;
+  if (!price) return null;
+  let amount = Number(price.amount);
+  const minutes = selected.durationMinutes ?? offering.durationMinutes;
+  if (price.unit === "per_hour") {
+    if (!minutes) return { label: "ราคา", value: priceText(price), short: null };
+    amount = (amount * minutes) / 60;
+  }
+  if (price.unit === "per_person") {
+    if (!selected.partySize) return { label: "ราคา", value: priceText(price), short: null };
+    amount *= selected.partySize;
+  }
+  if (price.varies) return { label: "ราคาเริ่มต้น", value: `เริ่ม ${money(amount)}`, short: null };
+  return { label: "ราคา", value: money(amount), short: money(amount) };
+}
+
+// YYYY-MM-DD for "now" in the shop's own time zone
+function todayIn(timezone) {
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  } catch {
+    return null;
+  }
 }
 
 async function post(url, body) {
@@ -174,6 +202,14 @@ export default function BookingV2Client({ shop, liffId }) {
     run({ selected: {} });
   }, [run]);
 
+  const [category, setCategory] = useState(null);
+  const summaryItems = SUMMARY_ORDER.filter((s) => selected[KEY[s]] !== undefined).map((s) => ({
+    step: s,
+    label: s === "resource" ? resourceWord : STEP_TITLE[s]?.replace("เลือก", "") ?? s,
+    value: valueLabel(s, selected[KEY[s]])
+  }));
+  const estimate = priceEstimate(offerings.get(selected.offeringId), selected);
+
   const choose = (step, value) => run({ selected: { ...selected, [KEY[step]]: value }, changed: step });
   const showStep = (step) => run({ selected, ask: step });
 
@@ -197,43 +233,15 @@ export default function BookingV2Client({ shop, liffId }) {
     }
   }
 
+
   if (booking) {
     return (
-      <CustomerFrame shop={shop} completed actions={booking.manageToken ? [{ label: "ดูการจองของฉัน", href: `/b/${shop.slug}/manage/${booking.manageToken}` }] : []}><main className="bk-shell">
-        <ShopHeader shop={shop} subtitle="รายละเอียดการจองของคุณ" />
-        <BookingProgress phase="complete" />
-        <section className="bk-card bk-done" data-testid="booking-done">
-          <h2>{booking.status === "held" ? "กันคิวไว้ให้แล้ว" : "จองสำเร็จ"}</h2>
-          <dl className="bk-summary">
-            {SUMMARY_ORDER.filter((s) => selected[KEY[s]] !== undefined).map((s) => (
-              <div key={s}>
-                <dt>{s === "resource" ? resourceWord : STEP_TITLE[s]?.replace("เลือก", "") ?? s}</dt>
-                <dd>{valueLabel(s, selected[KEY[s]])}</dd>
-              </div>
-            ))}
-            {booking.resources.length > 0 && selected.resourceId == null && (
-              <div>
-                <dt>{resourceWord}</dt>
-                <dd>{booking.resources.map((r) => r.name).filter(Boolean).join(", ") || "ร้านจัดให้"}</dd>
-              </div>
-            )}
-            {booking.price?.total > 0 && (
-              <div>
-                <dt>ราคา</dt>
-                <dd>{money(booking.price.total)}</dd>
-              </div>
-            )}
-          </dl>
-          {booking.status === "held" && booking.holdExpiresAt && (
-            <p className="bk-muted">
-              กรุณาชำระเงินภายใน{" "}
-              {new Intl.DateTimeFormat("th-TH", { timeZone: shop.timezone, hour: "2-digit", minute: "2-digit" }).format(new Date(booking.holdExpiresAt))} น.
-            </p>
-          )}
-          {booking.manageToken && <ManageLink shop={shop} token={booking.manageToken} />}
-        </section>
-        <PoweredBy />
-      </main></CustomerFrame>
+      <CustomerFrame>
+        <main className="bk-shell">
+          <BookingDone shop={shop} booking={booking} items={summaryItems} selected={selected} resourceWord={resourceWord} />
+          <PoweredBy />
+        </main>
+      </CustomerFrame>
     );
   }
 
@@ -241,119 +249,328 @@ export default function BookingV2Client({ shop, liffId }) {
   const ask = view?.ask;
   const atStart = next?.step === "start" && !ask;
   const atCustomer = next && !ask && !atStart;
+  const categories = ask === "offering" ? [...new Set((view?.options ?? []).map((o) => offerings.get(o.value)?.category).filter(Boolean))] : [];
+  const shownOptions = (view?.options ?? []).filter((o) => ask !== "offering" || !category || categories.length < 2 || offerings.get(o.value)?.category === category);
+  const optionProps = (o) => {
+    const chosen = selected[KEY[ask]] === o.value;
+    return {
+      type: "button",
+      className: "bk-option",
+      "data-testid": `option-${ask}`,
+      "data-value": o.value === null ? "any" : String(o.value),
+      "data-selected": chosen,
+      "aria-pressed": chosen,
+      disabled: busy || !o.available,
+      onClick: () => choose(ask, o.value)
+    };
+  };
+  const optionButton = (o) => (
+    <button key={String(o.value)} {...optionProps(o)}>
+      <OptionBody ask={ask} option={o} offering={offerings.get(o.value)} resource={resources.get(o.value)} resourceWord={resourceWord} />
+      {!o.available && <small className="bk-reason">{REASON_TEXT[o.reason] ?? "ไม่ว่าง"}</small>}
+    </button>
+  );
 
   return (
-    <CustomerFrame shop={shop}><main className="bk-shell" aria-busy={busy}>
-      <ShopHeader shop={shop} subtitle="จองคิวออนไลน์ · เลือกจากคิวว่างของร้าน" />
-      <ShopGallery shop={shop} />
-      <BookingProgress phase={atCustomer ? "customer" : "selection"} />
+    <CustomerFrame aside={<SummaryAside items={summaryItems} estimate={estimate} shop={shop} onEdit={showStep} busy={busy} />}>
+      <main className="bk-shell" aria-busy={busy}>
+        <ShopHeader shop={shop} subtitle="จองคิวออนไลน์ · เลือกจากคิวว่างของร้าน" />
+        <ShopGallery shop={shop} />
+        <BookingProgress phase={atCustomer ? "customer" : "selection"} />
 
-      {!atCustomer && SUMMARY_ORDER.some((s) => selected[KEY[s]] !== undefined) && (
-        <nav className="bk-chips" aria-label="ที่เลือกไว้">
-          {SUMMARY_ORDER.filter((s) => selected[KEY[s]] !== undefined).map((s) => (
-            <button key={s} type="button" className="bk-chip" data-active={ask === s} onClick={() => showStep(s)} disabled={busy}>
-              <span>{valueLabel(s, selected[KEY[s]])}</span>
-              <small>เปลี่ยน</small>
-            </button>
-          ))}
-        </nav>
-      )}
-
-      {notice && (
-        <p className="bk-notice" role="status">
-          {notice}
-        </p>
-      )}
-      {error && (
-        <p className="bk-error" role="alert">
-          {error}
-        </p>
-      )}
-
-      {atStart && (
-        <section className="bk-card">
-          <p className="bk-eyebrow">เริ่มต้นการจอง</p>
-          <h2>เริ่มจองจาก</h2>
-          <div className="bk-start">
-            {next.choices.map((c) => (
-              <button key={c} type="button" className="bk-start-button" onClick={() => showStep(c)} disabled={busy}>
-                <strong>{c === "date" ? "เลือกวันก่อน" : c === "offering" ? "เลือกบริการก่อน" : `เลือก${resourceWord}ก่อน`}</strong>
-                <span>
-                  {c === "date" ? "ดูว่าวันไหนว่าง แล้วเลือกบริการ" : c === "offering" ? "เลือกบริการ แล้วดูวันเวลาที่ว่าง" : `เลือก${resourceWord}ที่ต้องการ`}
-                </span>
+        {!atCustomer && summaryItems.length > 0 && (
+          <nav className="bk-chips" aria-label="ที่เลือกไว้">
+            {summaryItems.map((item) => (
+              <button key={item.step} type="button" className="bk-chip" data-active={ask === item.step} onClick={() => showStep(item.step)} disabled={busy}>
+                <span>{item.step === "date" ? shortDate(selected.date) : item.value}</span>
+                <small>เปลี่ยน</small>
               </button>
             ))}
-          </div>
-        </section>
-      )}
+          </nav>
+        )}
 
-      {ask && view.options && (
-        <section className="bk-card" data-step={ask}>
-          <p className="bk-eyebrow">{ask === "date" || ask === "time" ? "วันเวลาที่สะดวก" : "ตัวเลือกของคุณ"}</p>
-          <h2>{ask === "resource" ? `เลือก${resourceWord}` : STEP_TITLE[ask]}</h2>
-          <p className="bk-muted">{ask === "date" ? "แตะวันที่ต้องการเพื่อดูตัวเลือกต่อไป" : ask === "time" && selected.date ? `${formatDate(selected.date, { long: true })} · เวลาตามร้าน` : "แตะเพื่อเลือก · ตัวเลือกที่ไม่ว่างจะแสดงเหตุผล"}</p>
-          {view.options.length === 0 || !view.options.some((o) => o.available) ? (
-            <p className="bk-muted">{ask === "time" ? "วันนี้ไม่มีเวลาว่างแล้ว" : "ไม่มีตัวเลือกที่ว่าง"} {view.reason ? `(${REASON_TEXT[view.reason] ?? view.reason})` : ""} — ลองเปลี่ยนตัวเลือกด้านบน</p>
-          ) : null}
-          <div className={`bk-options bk-options-${ask}`}>
-            {view.options.map((o) => {
-              const chosen = selected[KEY[ask]] === o.value;
-              return (
-                <button
-                  key={String(o.value)}
-                  type="button"
-                  className="bk-option"
-                  data-testid={`option-${ask}`}
-                  data-value={o.value === null ? "any" : String(o.value)}
-                  data-selected={chosen}
-                  aria-pressed={chosen}
-                  disabled={busy || !o.available}
-                  onClick={() => choose(ask, o.value)}
-                >
-                  <OptionBody ask={ask} option={o} offering={offerings.get(o.value)} resource={resources.get(o.value)} resourceWord={resourceWord} />
-                  {!o.available && <small className="bk-reason">{REASON_TEXT[o.reason] ?? "ไม่ว่าง"}</small>}
+        {notice && (
+          <p className="bk-notice" role="status">
+            {notice}
+          </p>
+        )}
+        {error && (
+          <p className="bk-error" role="alert">
+            {error}
+          </p>
+        )}
+
+        {atStart && (
+          <section className="bk-card">
+            <h2>เริ่มจองจาก</h2>
+            <div className="bk-start">
+              {next.choices.map((c) => (
+                <button key={c} type="button" className="bk-start-button" onClick={() => showStep(c)} disabled={busy}>
+                  <span className="bk-start-icon" aria-hidden="true">{c === "date" ? "▦" : c === "offering" ? "✂" : "☺"}</span>
+                  <span className="bk-start-text">
+                    <strong>{c === "date" ? "เลือกวันก่อน" : c === "offering" ? "เลือกบริการก่อน" : `เลือก${resourceWord}ก่อน`}</strong>
+                    <span>
+                      {c === "date" ? "ดูว่าวันไหนว่าง แล้วเลือกบริการ" : c === "offering" ? "เลือกบริการ แล้วดูวันเวลาที่ว่าง" : `เลือก${resourceWord}ที่ต้องการ`}
+                    </span>
+                  </span>
                 </button>
-              );
-            })}
-          </div>
-        </section>
-      )}
+              ))}
+            </div>
+          </section>
+        )}
 
-      {atCustomer && (
+        {ask && view.options && (
+          <section className="bk-card" data-step={ask}>
+            <div className="bk-step-head">
+              <h2>{ask === "resource" ? `เลือก${resourceWord}` : STEP_TITLE[ask]}</h2>
+              {ask === "time" && selected.date && <p className="bk-muted">{formatDate(selected.date, { long: true })} · เวลาตามร้าน</p>}
+            </div>
+            {view.options.length === 0 || !view.options.some((o) => o.available) ? (
+              <p className="bk-empty">{ask === "time" ? "วันนี้ไม่มีเวลาว่างแล้ว" : "ไม่มีตัวเลือกที่ว่าง"} {view.reason ? `(${REASON_TEXT[view.reason] ?? view.reason})` : ""} — ลองเปลี่ยนตัวเลือกด้านบน</p>
+            ) : null}
+            {categories.length > 1 && (
+              <div className="bk-filter" role="group" aria-label="หมวดบริการ">
+                {[null, ...categories].map((c) => (
+                  <button key={c ?? "all"} type="button" aria-pressed={category === c} onClick={() => setCategory(c)}>
+                    {c ?? "ทั้งหมด"}
+                  </button>
+                ))}
+              </div>
+            )}
+            {ask === "date" ? (
+              <DateStrip options={view.options} today={todayIn(shop.timezone)} optionProps={optionProps} />
+            ) : ask === "time" ? (
+              <div className="bk-time-groups">
+                {groupTimes(view.options).map((part) => (
+                  <div key={part.key} className="bk-time-group">
+                    <h3>
+                      {part.label} <span>· ว่าง {part.options.filter((o) => o.available).length} เวลา</span>
+                    </h3>
+                    <div className="bk-options bk-options-time">{part.options.map(optionButton)}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className={`bk-options bk-options-${ask}`}>{shownOptions.map(optionButton)}</div>
+            )}
+          </section>
+        )}
+
+        {atCustomer && (
+          <>
+            <BookingReview items={summaryItems} onEdit={showStep} busy={busy} price={estimate} />
+            <form id="booking-customer" className="bk-card" onSubmit={submit}>
+              <h2>ข้อมูลผู้จอง</h2>
+              <label className="bk-field">
+                <span>ชื่อ</span>
+                <input name="name" required maxLength={100} autoComplete="name" value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} />
+              </label>
+              <label className="bk-field">
+                <span>เบอร์โทร{liff.idToken ? " (ไม่บังคับ)" : ""}</span>
+                <input
+                  name="phone"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  required={!liff.idToken}
+                  pattern="0[0-9\- ]{8,11}"
+                  value={customer.phone}
+                  onChange={(e) => setCustomer({ ...customer, phone: e.target.value })}
+                />
+              </label>
+              <p className="bk-fine">
+                <SelfServiceNote shop={shop} /> ร้านใช้ชื่อและเบอร์นี้เพื่อติดต่อเรื่องนัดหมายนี้เท่านั้น
+              </p>
+            </form>
+          </>
+        )}
+        {atCustomer && <BookingSubmitBar formId="booking-customer" disabled={busy || !liff.ready} busy={busy} price={estimate?.short} />}
+        <PoweredBy />
+      </main>
+    </CustomerFrame>
+  );
+}
+
+// All dates the server offers in one swipeable row, a week's worth on screen at a time.
+function DateStrip({ options, today, optionProps }) {
+  const strip = useRef(null);
+  useEffect(() => {
+    strip.current?.querySelector('[data-selected="true"]')?.scrollIntoView?.({ inline: "center", block: "nearest" });
+  }, []);
+  const month = (value, opts) => new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", ...opts }).format(new Date(`${value}T00:00:00Z`));
+  const first = options[0]?.value;
+  const last = options[options.length - 1]?.value;
+  const range = first ? (month(first, { month: "long" }) === month(last, { month: "long" }) ? month(first, { month: "long", year: "numeric" }) : `${month(first, { month: "short" })} – ${month(last, { month: "short", year: "numeric" })}`) : "";
+  const scroll = (direction) => strip.current?.scrollBy({ left: direction * strip.current.clientWidth, behavior: "smooth" });
+  return (
+    <div className="bk-dates">
+      <div className="bk-dates-head">
+        <strong>{range}</strong>
+        <div>
+          <button type="button" className="bk-icon-button" aria-label="วันก่อนหน้า" onClick={() => scroll(-1)}>‹</button>
+          <button type="button" className="bk-icon-button" aria-label="วันถัดไป" onClick={() => scroll(1)}>›</button>
+        </div>
+      </div>
+      <div className="bk-date-strip" ref={strip}>
+        {options.map((o) => (
+          <button key={o.value} {...optionProps(o)}>
+            <DateBody value={o.value} today={today} />
+            {!o.available && <small className="bk-reason">{REASON_TEXT[o.reason] ?? "ไม่ว่าง"}</small>}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const shortDate = (value) => {
+  const d = new Date(`${value}T00:00:00Z`);
+  return `${SHORT_DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", month: "short" }).format(d)}`;
+};
+
+// spelled out here: Node and browsers abbreviate Thai weekdays differently (docs/HANDOFF.md §5)
+const SHORT_DAYS = ["อา.", "จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส."];
+
+function DateBody({ value, today }) {
+  const d = new Date(`${value}T00:00:00Z`);
+  const part = (opts) => new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", ...opts }).format(d);
+  return (
+    <>
+      <span className="bk-day-label">{value === today ? "วันนี้" : SHORT_DAYS[d.getUTCDay()]}</span>
+      <strong>{part({ day: "numeric" })}</strong>
+      <span className="bk-day-month">{part({ month: "short" })}</span>
+    </>
+  );
+}
+
+function SelfServiceNote({ shop }) {
+  const { cancel, reschedule, cutoffHours } = shop.selfService ?? {};
+  const can = cancel && reschedule ? "เลื่อนหรือยกเลิก" : cancel ? "ยกเลิก" : reschedule ? "เลื่อน" : null;
+  if (!can) return null;
+  return <>{can}เองได้{cutoffHours > 0 ? `ถึง ${cutoffHours} ชม. ก่อนนัด` : ""} จากลิงก์ที่ได้หลังจอง ·</>;
+}
+
+// Wide screens: what has been picked so far, beside the step being answered.
+function SummaryAside({ items, estimate, shop, onEdit, busy }) {
+  return (
+    <div className="bk-aside-card">
+      {items.length === 0 ? (
         <>
-        <BookingReview items={SUMMARY_ORDER.filter((s) => selected[KEY[s]] !== undefined).map((s) => ({ step: s, label: s === "resource" ? resourceWord : STEP_TITLE[s]?.replace("เลือก", "") ?? s, value: valueLabel(s, selected[KEY[s]]) }))} onEdit={showStep} busy={busy} />
-        <form id="booking-customer" className="bk-card" onSubmit={submit}>
-          <h2>ข้อมูลผู้จอง</h2>
-          <p className="bk-muted">ใช้สำหรับติดต่อเรื่องนัดหมายนี้</p>
-          <label className="bk-field">
-            <span>ชื่อ</span>
-            <input name="name" required maxLength={100} autoComplete="name" value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} />
-          </label>
-          <label className="bk-field">
-            <span>เบอร์โทร{liff.idToken ? " (ไม่บังคับ)" : ""}</span>
-            <input
-              name="phone"
-              inputMode="tel"
-              autoComplete="tel"
-              required={!liff.idToken}
-              pattern="0[0-9\- ]{8,11}"
-              value={customer.phone}
-              onChange={(e) => setCustomer({ ...customer, phone: e.target.value })}
-            />
-          </label>
-        </form>
+          <h2>สรุปการจอง</h2>
+          <p className="bk-muted">ยังไม่ได้เลือก · ทุกตัวเลือกแสดงตามคิวว่างจริงของร้าน</p>
         </>
+      ) : (
+        <BookingReview id="booking-aside-title" items={items} onEdit={onEdit} busy={busy} price={estimate} />
       )}
-      <PoweredBy />
-      {atCustomer && <BookingSubmitBar formId="booking-customer" disabled={busy || !liff.ready} busy={busy} />}
-    </main></CustomerFrame>
+      <p className="bk-fine">
+        <SelfServiceNote shop={shop} /> จองกับ {shop.name}
+      </p>
+    </div>
+  );
+}
+
+function icsText(value) {
+  return String(value).replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/[,;]/g, (c) => `\\${c}`);
+}
+const icsTime = (iso) => new Date(iso).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+
+function BookingDone({ shop, booking, items, selected, resourceWord }) {
+  const timeFormat = (iso) => new Intl.DateTimeFormat("th-TH", { timeZone: shop.timezone, hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
+  const dayPart = (opts) => new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", ...opts }).format(new Date(`${selected.date}T00:00:00Z`));
+  const when = booking.startAt && booking.endAt ? `${timeFormat(booking.startAt)}–${timeFormat(booking.endAt)} น.` : selected.time ? `${selected.time} น.` : "";
+  const assigned = booking.resources?.map((r) => r.name).filter(Boolean).join(", ");
+  const rows = items.filter((item) => item.step !== "date" && item.step !== "time");
+  const managePath = booking.manageToken ? `/b/${shop.slug}/manage/${booking.manageToken}` : null;
+  const held = booking.status === "held";
+
+  function addToCalendar() {
+    const service = rows.find((r) => r.step === "offering")?.value ?? "นัดหมาย";
+    const link = managePath ? new URL(managePath, window.location.origin).toString() : window.location.href;
+    const ics = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//Kiwmee//Booking//TH",
+      "BEGIN:VEVENT",
+      `UID:${booking.manageToken || booking.id || Date.now()}@kiwmee`,
+      `DTSTAMP:${icsTime(new Date().toISOString())}`,
+      `DTSTART:${icsTime(booking.startAt)}`,
+      `DTEND:${icsTime(booking.endAt)}`,
+      `SUMMARY:${icsText(`${service} · ${shop.name}`)}`,
+      `DESCRIPTION:${icsText(`ดูหรือเปลี่ยนนัด: ${link}`)}`,
+      "END:VEVENT",
+      "END:VCALENDAR"
+    ].join("\r\n");
+    const url = URL.createObjectURL(new Blob([ics], { type: "text/calendar;charset=utf-8" }));
+    const a = Object.assign(document.createElement("a"), { href: url, download: `${shop.slug}-booking.ics` });
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  return (
+    <section className="bk-done" data-testid="booking-done">
+      <div className="bk-done-head">
+        <span className="bk-done-icon" aria-hidden="true">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7" /></svg>
+        </span>
+        <h1>{held ? "กันคิวไว้ให้แล้ว" : "จองสำเร็จ"}</h1>
+        <p className="bk-muted">{shop.name} รอพบคุณ</p>
+      </div>
+
+      <div className="bk-card bk-done-card">
+        {selected.date && (
+          <div className="bk-when">
+            <span className="bk-date-tile" aria-hidden="true">
+              <small>{dayPart({ month: "short" })}</small>
+              <strong>{dayPart({ day: "numeric" })}</strong>
+            </span>
+            <div>
+              <strong>{formatDate(selected.date, { long: true })}</strong>
+              <span>{when}</span>
+            </div>
+          </div>
+        )}
+        <dl className="bk-summary">
+          {rows.map((item) => (
+            <div key={item.step}>
+              <dt>{item.label}</dt>
+              <dd>{item.value}</dd>
+            </div>
+          ))}
+          {booking.resources?.length > 0 && selected.resourceId == null && (
+            <div>
+              <dt>{resourceWord}</dt>
+              <dd>{assigned || "ร้านจัดให้"}</dd>
+            </div>
+          )}
+          {booking.price?.total > 0 && (
+            <div>
+              <dt>ราคา</dt>
+              <dd>
+                <strong>{money(booking.price.total)}</strong>
+              </dd>
+            </div>
+          )}
+        </dl>
+        {held && booking.holdExpiresAt && <p className="bk-notice">กรุณาชำระเงินภายใน {timeFormat(booking.holdExpiresAt)} น.</p>}
+        {booking.startAt && booking.endAt && (
+          <button type="button" className="bk-secondary" onClick={addToCalendar}>
+            เพิ่มลงปฏิทิน
+          </button>
+        )}
+      </div>
+
+      {managePath && <ManageLink shop={shop} path={managePath} />}
+      <a className="bk-text-button bk-center" href={`/b/${shop.slug}`}>
+        จองคิวอีกครั้ง
+      </a>
+    </section>
   );
 }
 
 // The customer's own link to see, move or cancel this booking later (/b/<slug>/manage/<token>)
-function ManageLink({ shop, token }) {
+function ManageLink({ shop, path }) {
   const [copied, setCopied] = useState(false);
-  const path = `/b/${shop.slug}/manage/${token}`;
   const { cancel, reschedule, cutoffHours } = shop.selfService ?? {};
   const can = cancel && reschedule ? "เลื่อนหรือยกเลิก" : cancel ? "ยกเลิก" : reschedule ? "เลื่อน" : null;
 
@@ -368,12 +585,18 @@ function ManageLink({ shop, token }) {
 
   return (
     <div className="bk-link-box">
+      <strong>{can ? `${can}นัดเองได้` : "ดูการจองนี้ได้ทุกเมื่อ"}</strong>
       <p>
-        {can ? `${can}นัดเองได้จากลิงก์นี้` : "ดูการจองนี้ได้จากลิงก์นี้"}
-        {can && cutoffHours > 0 ? ` (ถึง ${cutoffHours} ชม. ก่อนนัด)` : ""} · เก็บลิงก์ไว้ เพราะลิงก์นี้เป็นของคุณคนเดียว
+        {can && cutoffHours > 0 ? `ถึง ${cutoffHours} ชม. ก่อนนัด ` : ""}ผ่านลิงก์ของการจองนี้ · เก็บลิงก์ไว้ เพราะเป็นของคุณคนเดียว
       </p>
-      <a className="bk-secondary" href={path} data-testid="manage-link">ดูการจองของฉัน</a>
-      <button type="button" className="bk-text-button" onClick={copy}>{copied ? "คัดลอกลิงก์แล้ว" : "คัดลอกลิงก์"}</button>
+      <div className="bk-link-actions">
+        <a className="bk-primary" href={path} data-testid="manage-link">
+          ดูการจองของฉัน
+        </a>
+        <button type="button" className="bk-secondary" onClick={copy}>
+          {copied ? "คัดลอกแล้ว" : "คัดลอกลิงก์"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -393,25 +616,18 @@ function OptionBody({ ask, option, offering, resource, resourceWord }) {
     return (
       <>
         <OfferingThumbnail offering={offering} />
-        <span className="bk-option-title"><strong>{offering.name}</strong><span className="bk-choice-mark" aria-hidden="true" /></span>
-        <span className="bk-muted">
-          {length}
-          {offering.price ? ` · ${priceText(offering.price)}` : ""}
+        <span className="bk-option-text">
+          <strong>{offering.name}</strong>
+          <span className="bk-muted">{length}</span>
+          {offering.description && <span className="bk-option-desc">{offering.description}</span>}
         </span>
+        {offering.price && <span className="bk-option-price">{priceText(offering.price)}</span>}
+        <span className="bk-choice-mark" aria-hidden="true" />
       </>
     );
   }
   if (ask === "resource") return <ResourceChoice resource={resource} label={option.label} resourceWord={resourceWord} any={option.value === null} />;
-  if (ask === "date") {
-    const d = new Date(`${option.value}T00:00:00Z`);
-    const part = (opts) => new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", ...opts }).format(d);
-    return (
-      <>
-        <span className="bk-day-label">{part({ weekday: "long" })}</span>
-        <strong>{part({ day: "numeric", month: "short", year: "numeric" })}</strong>
-      </>
-    );
-  }
+  if (ask === "date") return <DateBody value={option.value} />;
   if (ask === "time") return <strong>{option.value}</strong>;
   if (ask === "duration") return <strong>{formatMinutes(option.value)}</strong>;
   if (ask === "party") return <strong>{option.value} คน</strong>;

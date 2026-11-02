@@ -53,8 +53,9 @@ test('resource choice has honest missing-image and system-assigned states', () =
   const { ResourceChoice } = loadComponents();
   for (const media of [undefined, [], [{ url: 'javascript:alert(1)' }]]) {
     const html = render(ResourceChoice, { resource: { name: 'สนาม A', media }, label: 'สนาม A' });
-    assert.match(html, /ยังไม่มีภาพจากร้าน/);
-    assert.doesNotMatch(html, /<img/);
+    assert.match(html, /class="bk-avatar" aria-hidden="true">A</);
+    assert.match(html, /สนาม A/);
+    assert.doesNotMatch(html, /<img|ยังไม่มีภาพ/);
   }
   const any = render(ResourceChoice, { any: true, resourceWord: 'สนาม', resource: { name: 'สนาม A', media: [{ url: 'https://example.com/court.jpg' }] } });
   assert.match(any, /สนามใดก็ได้/);
@@ -136,11 +137,10 @@ test('owner media editor retains URLs and alt labels until explicit form save', 
   assert.match(html, /type="file"/);
 });
 
-test('shop gallery uses a branded empty state and rejects unsafe media', () => {
+test('shop gallery shows nothing without safe media (the header already names the shop)', () => {
   const { ShopGallery } = loadComponents();
   const html = render(ShopGallery, { shop: { name: 'JackShop', media: [{ url: 'javascript:alert(1)' }, { url: '//elsewhere.test/a.jpg' }] } });
-  assert.match(html, /ยังไม่มีภาพจากร้าน/);
-  assert.doesNotMatch(html, /<img|javascript:|elsewhere/);
+  assert.equal(html, '');
 });
 
 test('offering thumbnail uses its own media and discloses demo illustrations', () => {
@@ -148,10 +148,9 @@ test('offering thumbnail uses its own media and discloses demo illustrations', (
   const html = render(OfferingThumbnail, { offering: { name: 'แบดมินตัน', media: [{ url: '/demo-media/badminton.svg', alt: 'ภาพประกอบแบดมินตัน' }] } });
   assert.match(html, /src="\/demo-media\/badminton.svg"/);
   assert.match(html, /alt="ILLUSTRATION/);
-  assert.match(html, /bk-media-caption[^>]*>ILLUSTRATION/);
+  assert.match(html, /bk-media-caption[^>]*>ภาพประกอบ/);
   const empty = render(OfferingThumbnail, { offering: { name: 'ไม่มีภาพ' } });
-  assert.match(empty, /ยังไม่มีภาพจากร้าน/);
-  assert.doesNotMatch(empty, /<img/);
+  assert.equal(empty, '');
 });
 
 test('gallery caps media at eight and URL editor disables additional entries', () => {
@@ -194,7 +193,11 @@ test('review renders only supplied selections and makes each selection editable'
   assert.match(html, /สนาม A/);
   assert.equal((html.match(/<button/g) || []).length, 2);
   assert.equal((html.match(/disabled=""/g) || []).length, 2);
+  assert.match(html, /aria-label="เปลี่ยนจำนวนคน: 4 คน"/);
   assert.doesNotMatch(html, /บาท|ยอดรวม/);
+  const priced = render(BookingReview, { items: [], onEdit() {}, busy: false, price: { label: 'ราคาเริ่มต้น', value: 'เริ่ม 300 บาท' } });
+  assert.match(priced, /ราคาเริ่มต้น/);
+  assert.match(priced, /เริ่ม 300 บาท/);
 });
 
 test('mobile confirmation submits the real booking form and reflects loading readiness', () => {
@@ -204,4 +207,25 @@ test('mobile confirmation submits the real booking form and reflects loading rea
   assert.match(html, /form="booking-customer"/);
   assert.match(html, /disabled=""/);
   assert.match(html, /กำลังยืนยัน/);
+  const ready = render(BookingSubmitBar, { formId: 'booking-customer', disabled: false, busy: false, price: '450 บาท' });
+  assert.match(ready, /ยืนยันการจอง · 450 บาท/);
+  assert.doesNotMatch(render(BookingSubmitBar, { formId: 'f', disabled: false, busy: false }), /บาท/);
+});
+
+test('times are grouped into morning, afternoon and evening, keeping server order and dropping empty parts', () => {
+  const { groupTimes } = loadComponents();
+  const groups = groupTimes([{ value: '10:00' }, { value: '11:45' }, { value: '12:00' }, { value: '16:59' }, { value: '17:00' }]);
+  assert.deepEqual(groups.map((g) => [g.label, g.options.map((o) => o.value)]), [
+    ['ช่วงเช้า', ['10:00', '11:45']], ['ช่วงบ่าย', ['12:00', '16:59']], ['ช่วงเย็น', ['17:00']],
+  ]);
+  assert.deepEqual(groupTimes([{ value: '18:30' }]).map((g) => g.key), ['evening']);
+});
+
+test('initials skip the kind word and keep a Thai leading vowel with its consonant', () => {
+  const { initial } = loadComponents();
+  assert.equal(initial('ช่างแนน'), 'แน');
+  assert.equal(initial('ช่างบี'), 'บ');
+  assert.equal(initial('สนาม A'), 'A');
+  assert.equal(initial('ช่าง'), 'ช');
+  assert.equal(initial(''), '◇');
 });

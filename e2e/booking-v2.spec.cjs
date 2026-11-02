@@ -23,7 +23,7 @@ test("salon: start from a date, then offering, anyone, time", async ({ page }) =
   await page.getByRole("button", { name: /เลือกวันก่อน/ }).click();
 
   await expect(page.getByRole("heading", { name: "เลือกวัน" })).toBeVisible();
-  await expect(page.locator('[data-testid="option-date"]').first()).toContainText(/วันนี้|วันจันทร์|วันอังคาร|วันพุธ|วันพฤหัสบดี|วันศุกร์|วันเสาร์|วันอาทิตย์/);
+  await expect(page.locator('[data-testid="option-date"]').first()).toContainText(/วันนี้|จ\.|อ\.|พ\.|พฤ\.|ศ\.|ส\.|อา\./);
   await enabled(page, "date").nth(2).click();
 
   await expect(page.getByRole("heading", { name: "เลือกบริการ" })).toBeVisible();
@@ -99,7 +99,7 @@ test("two customers on one slot: the second is told it was just taken and picks 
   for (const page of [a, b]) {
     await page.goto("/b/bloom-hair");
     await page.getByRole("button", { name: /เลือกบริการก่อน/ }).click();
-    await page.getByRole("button", { name: /ทรีตเมนต์/ }).click();
+    await page.locator('[data-testid="option-offering"]', { hasText: "ทรีตเมนต์" }).click();
     await page.getByRole("button", { name: "ช่างแนน" }).click();
     await enabled(page, "date").nth(5).click();
     await enabled(page, "time").first().click();
@@ -121,7 +121,7 @@ test("the customer opens their link, moves the booking, then cancels it", async 
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/b/bloom-hair");
   await page.getByRole("button", { name: /เลือกบริการก่อน/ }).click();
-  await page.getByRole("button", { name: /ทรีตเมนต์/ }).click();
+  await page.locator('[data-testid="option-offering"]', { hasText: "ทรีตเมนต์" }).click();
   await page.getByRole("button", { name: "ช่างบี" }).click();
   await enabled(page, "date").nth(4).click();
   await enabled(page, "time").first().click();

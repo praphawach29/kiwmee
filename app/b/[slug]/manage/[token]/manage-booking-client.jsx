@@ -146,10 +146,23 @@ export default function ManageBookingClient({ token, initial }) {
             <dt>วัน</dt>
             <dd>{longDate(booking.date)}</dd>
           </div>
-          <div>
-            <dt>เวลา</dt>
-            <dd>{booking.start}–{booking.end} น.</dd>
-          </div>
+          {booking.endDate && booking.endDate !== booking.date ? (
+            <>
+              <div>
+                <dt>รับ</dt>
+                <dd>{booking.start} น.</dd>
+              </div>
+              <div>
+                <dt>คืน</dt>
+                <dd>{longDate(booking.endDate)} {booking.end} น.</dd>
+              </div>
+            </>
+          ) : (
+            <div>
+              <dt>เวลา</dt>
+              <dd>{booking.start}–{booking.end} น.</dd>
+            </div>
+          )}
           {booking.resources.length > 0 && (
             <div>
               <dt>{booking.resources[0].kind === "staff" ? "ช่าง" : "ที่"}</dt>

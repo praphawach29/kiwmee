@@ -30,7 +30,8 @@ const REASONS = {
   NOT_OFFERED: "NOT_OFFERED", // the chosen resource does not do this offering (or the reverse)
   RESOURCE_BUSY: "RESOURCE_BUSY", // an add-on's racket / driver is all taken at that time
   NOT_ENOUGH_TIME: "NOT_ENOUGH_TIME", // an add-on's extra minutes run past the working hours or into the next booking
-  ADDON_GROUP_RULE: "ADDON_GROUP_RULE" // more picks than the group allows
+  ADDON_GROUP_RULE: "ADDON_GROUP_RULE", // more picks than the group allows
+  RETURN_CLOSED: "RETURN_CLOSED" // a rental by the day: the shop is closed when it would come back
 };
 
 // When several days/offerings fail for different reasons, tell the customer the most useful one
@@ -40,6 +41,7 @@ const REASON_PRIORITY = [
   REASONS.STAFF_OFF,
   REASONS.NO_WORKING_WINDOW,
   REASONS.BUSINESS_CLOSED,
+  REASONS.RETURN_CLOSED,
   REASONS.NO_AVAILABLE_SLOTS,
   REASONS.NOT_OFFERED,
   REASONS.OUTSIDE_BOOKING_WINDOW
@@ -48,6 +50,7 @@ const REASON_PRIORITY = [
 const ASKS = ["offering", "resource", "date", "time", "duration", "party", "addons"];
 // Order of the steps after the starting one (design §5)
 const STEP_ORDER = ["offering", "resource", "date", "time", "duration", "party"];
+const RENTAL_ORDER = ["offering", "date", "duration", "time", "resource", "party"];
 const SELECTED_KEY = {
   offering: "offeringId",
   resource: "resourceId",
@@ -238,7 +241,16 @@ function canDo(ctx, resourceId, offeringId) {
     resourcesFor(ctx, offeringId, resource.kind).some((r) => r.id === resourceId);
 }
 
+const DAY_MINUTES = 1440;
+const byDays = (offering) => offering.duration_mode === "days";
+
 function durationsOf(offering) {
+  // rented by the day: 24-hour periods, back at the same time of day
+  if (byDays(offering)) {
+    const out = [];
+    for (let d = offering.min_days; d <= offering.max_days; d++) out.push(d * DAY_MINUTES);
+    return out;
+  }
   if (offering.duration_mode !== "customer_choice") return [offering.duration_minutes];
   const out = [];
   for (let m = offering.min_minutes; m <= offering.max_minutes; m += offering.step_minutes) out.push(m);
@@ -333,9 +345,39 @@ function freeUnits(ctx, resource, date, start, end, endWithBuffer) {
   return Math.max(resource.capacity - peak, 0);
 }
 
+// ---------- rentals over several days (design 11.7) ----------
+
+// Is the shop open at this moment of its local date? (pick-up and return of a rental by the day)
+function shopOpenAt(ctx, date, ms) {
+  const day = shopDay(ctx, date);
+  if (day.closed || ms < day.open || ms > day.close) return false;
+  return !day.blocked.some((b) => ms >= b.start && ms < b.end);
+}
+
+// How many more units a resource can lend over [start, endWithBuffer) across days: not when it is marked
+// off on any day of it; working hours do not matter (the item is with the customer)
+function spanFreeUnits(ctx, resource, start, endWithBuffer) {
+  const first = msToLocal(start, ctx.timezone).date;
+  const last = msToLocal(endWithBuffer, ctx.timezone).date;
+  if (ctx.timeOff.some((t) => t.resource_id === resource.id && String(t.date).slice(0, 10) >= first && String(t.date).slice(0, 10) <= last)) return 0;
+  const clashing = ctx.busy.filter((b) => b.resource_id === resource.id && overlaps(start, endWithBuffer, b.start, b.end));
+  if (clashing.length === 0) return resource.capacity;
+  const points = [start, ...clashing.map((b) => b.start).filter((t) => t > start && t < endWithBuffer)];
+  const peak = Math.max(...points.map((t) => clashing.filter((b) => b.start <= t && t < b.end).reduce((sum, b) => sum + b.units, 0)));
+  return Math.max(resource.capacity - peak, 0);
+}
+
+function spanFree(ctx, resource, start, endWithBuffer, units) {
+  const first = msToLocal(start, ctx.timezone).date;
+  const last = msToLocal(endWithBuffer, ctx.timezone).date;
+  if (ctx.timeOff.some((t) => t.resource_id === resource.id && String(t.date).slice(0, 10) >= first && String(t.date).slice(0, 10) <= last)) return "outside";
+  return spanFreeUnits(ctx, resource, start, endWithBuffer) >= units ? "ok" : "booked";
+}
+
 // Spread each add-on's quantity over the free resources of its kind (as booking_plan does).
 // Returns the extra takes, or null when one runs out. `skip` = resources the booking already holds.
-function takeAddonResources(ctx, picks, date, start, end, endWithBuffer, skip) {
+// span = a rental by the day (the add-on goes along for all of it).
+function takeAddonResources(ctx, picks, date, start, end, endWithBuffer, skip, span = false) {
   const used = new Set(skip);
   const taken = [];
   for (const { addon, quantity } of picks) {
@@ -344,7 +386,7 @@ function takeAddonResources(ctx, picks, date, start, end, endWithBuffer, skip) {
     for (const res of ctx.resources) {
       if (need <= 0) break;
       if (res.kind !== addon.uses_kind || used.has(res.id)) continue;
-      const take = Math.min(need, freeUnits(ctx, res, date, start, end, endWithBuffer));
+      const take = Math.min(need, span ? spanFreeUnits(ctx, res, start, endWithBuffer) : freeUnits(ctx, res, date, start, end, endWithBuffer));
       if (take <= 0) continue;
       used.add(res.id);
       taken.push({ resourceId: res.id, kind: res.kind, units: take, addonId: addon.id });
@@ -371,6 +413,7 @@ function evaluateDay(ctx, { offering, date, durationMinutes, partySize, resource
     return { req, pool, units: req.units_per_booking === "party_size" ? partySize : 1 };
   });
   if (reqs.length === 0 || reqs.some((r) => r.pool.length === 0)) return { starts: [], reason: REASONS.NOT_OFFERED };
+  if (byDays(offering)) return evaluateRental(ctx, { offering, date, durationMinutes, reqs, time, firstOnly, addons, shop });
   if (reqs.some((r) => r.pool.every((res) => !resourceDay(ctx, res.id, date).working))) {
     return { starts: [], reason: pinned ? REASONS.STAFF_OFF : REASONS.NO_WORKING_WINDOW };
   }
@@ -421,6 +464,64 @@ function evaluateDay(ctx, { offering, date, durationMinutes, partySize, resource
   if (starts.length > 0) return { starts, reason: null };
   if (candidates > 0 && future === 0) return { starts, reason: REASONS.PAST_WORKING_HOURS };
   if (sawBooked) return { starts, reason: REASONS.FULLY_BOOKED };
+  return { starts, reason: REASONS.NO_AVAILABLE_SLOTS };
+}
+
+// A rental by the day: picked up at a time the shop is open on `date`, back at the same time of day
+// `days` later (the shop must be open then too); the items must be free all the way through.
+function evaluateRental(ctx, { offering, date, durationMinutes, reqs, time, firstOnly, addons, shop }) {
+  const step = ctx.settings.slot_interval_minutes * MINUTE;
+  const picks = picksFor(ctx, offering.id, addons);
+  const length = durationMinutes * MINUTE;
+  const buffer = (offering.buffer_after_minutes || 0) * MINUTE;
+  const only = time ? localToMs(date, time, ctx.timezone) : null;
+  const starts = [];
+  let candidates = 0;
+  let future = 0;
+  let sawBooked = false;
+  let returnClosed = false;
+
+  for (let start = shop.open; start < shop.close; start += step) {
+    if (only !== null && start !== only) continue;
+    if (!shopOpenAt(ctx, date, start)) continue;
+    candidates++;
+    if (start <= ctx.cutoffMs) continue;
+    future++;
+    // whole 24-hour periods, as booking_plan adds them
+    const end = start + length;
+    if (!shopOpenAt(ctx, msToLocal(end, ctx.timezone).date, end)) {
+      returnClosed = true;
+      continue;
+    }
+    const taken = [];
+    for (const { req, pool, units } of reqs) {
+      let found = null;
+      for (const res of pool) {
+        const verdict = spanFree(ctx, res, start, end + buffer, units);
+        if (verdict === "ok") {
+          found = res;
+          break;
+        }
+        if (verdict === "booked") sawBooked = true;
+      }
+      if (!found) break;
+      taken.push({ resourceId: found.id, kind: req.kind, units });
+    }
+    if (taken.length === reqs.length) {
+      const extras = takeAddonResources(ctx, picks, date, start, end, end + buffer, taken.map((t) => t.resourceId), true);
+      if (!extras) {
+        sawBooked = true;
+        continue;
+      }
+      starts.push({ start, end, endWithBuffer: end + buffer, resources: [...taken, ...extras] });
+      if (firstOnly) break;
+    }
+  }
+
+  if (starts.length > 0) return { starts, reason: null };
+  if (candidates > 0 && future === 0) return { starts, reason: REASONS.PAST_WORKING_HOURS };
+  if (sawBooked) return { starts, reason: REASONS.FULLY_BOOKED };
+  if (returnClosed) return { starts, reason: REASONS.RETURN_CLOSED };
   return { starts, reason: REASONS.NO_AVAILABLE_SLOTS };
 }
 
@@ -640,7 +741,7 @@ function addonOptions(ctx, sel) {
 function stepApplies(ctx, step, sel) {
   const offering = sel.offeringId ? ctx.offeringById.get(sel.offeringId) : null;
   if (step === "resource") return pickableResources(ctx, sel.offeringId).length > 0;
-  if (step === "duration") return offering ? offering.duration_mode === "customer_choice" : true;
+  if (step === "duration") return offering ? offering.duration_mode === "customer_choice" || byDays(offering) : true;
   if (step === "party") return offering ? offering.max_party_size > 1 : true;
   return true;
 }
@@ -655,13 +756,17 @@ function nextStep(catalog, { selected, now }) {
   const sel = normalizeSelected(ctx, selected);
   const flow = ctx.flow;
   const steps = [...(flow.require || ["offering", "date", "time"]), ...(flow.optional || [])];
+  // a rental by the day always asks how many days, whatever the shop's flow lists
+  if (sel.offeringId && byDays(ctx.offeringById.get(sel.offeringId)) && !steps.includes("duration")) steps.push("duration");
   const chosen = (step) => {
     const v = sel[SELECTED_KEY[step]];
     return step === "resource" ? v !== undefined : v !== undefined && v !== null;
   };
   const entry = flow.entry || ["date", "offering"];
   if (!steps.some(chosen)) return entry.length > 1 ? { step: "start", choices: entry } : { step: entry[0] };
-  for (const step of STEP_ORDER) {
+  // a rental by the day: when to pick up and for how long first, then the time, then which one
+  const order = sel.offeringId && byDays(ctx.offeringById.get(sel.offeringId)) ? RENTAL_ORDER : STEP_ORDER;
+  for (const step of order) {
     if (steps.includes(step) && !chosen(step) && stepApplies(ctx, step, sel)) return { step };
   }
   // add-ons come after the time (their resources and extra minutes depend on it), before the customer

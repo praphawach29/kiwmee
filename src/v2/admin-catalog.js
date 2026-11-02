@@ -14,7 +14,7 @@ const { AMENITY_CODES } = require("./amenities");
 const { validMapUrl } = require("./directions");
 
 const SHOP_KINDS = ["salon", "barber", "spa", "court", "other"];
-const UNITS = ["per_booking", "per_hour", "per_person"];
+const UNITS = ["per_booking", "per_hour", "per_person", "per_day"];
 const FLOW_STEPS = ["offering", "resource", "date", "time", "duration", "party"];
 const ENTRY_STEPS = ["date", "offering", "resource"];
 const OPTIONAL_STEPS = ["resource", "duration", "party"];
@@ -196,7 +196,7 @@ async function getCatalog(client, shop) {
     "select resource_id, day_of_week, is_working, start_time, end_time from public.resource_schedules where business_id = $1",
     `select id, resource_id, date::text as date, is_full_day, start_time, end_time, reason from public.resource_time_off
         where business_id = $1 and date >= current_date - 1 order by date, start_time nulls first`,
-    `select id, category, name, description, duration_mode, duration_minutes, min_minutes, max_minutes, step_minutes,
+    `select id, category, name, description, duration_mode, duration_minutes, min_minutes, max_minutes, step_minutes, min_days, max_days,
               buffer_after_minutes, max_party_size, sort_order, active, media
          from public.offerings where business_id = $1 order by active desc, sort_order, name`,
     "select offering_id, kind, customer_picks, units_per_booking from public.offering_requirements where business_id = $1 order by kind",
@@ -289,6 +289,8 @@ async function getCatalog(client, shop) {
       minMinutes: o.min_minutes,
       maxMinutes: o.max_minutes,
       stepMinutes: o.step_minutes,
+      minDays: o.min_days,
+      maxDays: o.max_days,
       bufferAfterMinutes: o.buffer_after_minutes,
       maxPartySize: o.max_party_size,
       sortOrder: o.sort_order,
@@ -556,7 +558,7 @@ const deleteResource = (client, shop, id) => removeOrArchive(client, "resources"
 // ---------- offerings and prices ----------
 
 function offeringRow(input) {
-  const durationMode = oneOf(input.durationMode ?? "fixed", ["fixed", "customer_choice"], "แบบระยะเวลา");
+  const durationMode = oneOf(input.durationMode ?? "fixed", ["fixed", "customer_choice", "days"], "แบบระยะเวลา");
   const row = {
     category: text(input.category, "หมวด", { max: 60, required: false }),
     name: text(input.name, "ชื่อบริการ"),
@@ -566,6 +568,8 @@ function offeringRow(input) {
     minMinutes: null,
     maxMinutes: null,
     stepMinutes: null,
+    minDays: null,
+    maxDays: null,
     bufferAfterMinutes: int(input.bufferAfterMinutes ?? 0, "เวลาพักหลังจบ (นาที)", { min: 0, max: 480 }),
     maxPartySize: int(input.maxPartySize ?? 1, "จำนวนคนสูงสุดต่อการจอง", { min: 1, max: 1000 }),
     sortOrder: int(input.sortOrder ?? 0, "ลำดับ", { min: -1000, max: 1000 }),
@@ -573,6 +577,10 @@ function offeringRow(input) {
   };
   if (durationMode === "fixed") {
     row.durationMinutes = int(input.durationMinutes, "ระยะเวลา (นาที)", { min: 5, max: 1440 });
+  } else if (durationMode === "days") {
+    // rented by the day (design 11.7): 24-hour periods
+    row.minDays = int(input.minDays, "เช่าอย่างน้อย (วัน)", { min: 1, max: 90 });
+    row.maxDays = int(input.maxDays, "เช่าได้นานสุด (วัน)", { min: row.minDays, max: 90 });
   } else {
     row.minMinutes = int(input.minMinutes, "ระยะเวลาต่ำสุด (นาที)", { min: 5, max: 1440 });
     row.maxMinutes = int(input.maxMinutes, "ระยะเวลาสูงสุด (นาที)", { min: row.minMinutes, max: 1440 });
@@ -611,7 +619,7 @@ async function saveOffering(client, shop, id, input = {}) {
   const o = offeringRow(input);
   const media = validateMedia(input.media);
   const values = [o.category, o.name, o.description, o.durationMode, o.durationMinutes, o.minMinutes, o.maxMinutes, o.stepMinutes,
-    o.bufferAfterMinutes, o.maxPartySize, o.sortOrder, o.active, media === undefined ? null : JSON.stringify(media)];
+    o.bufferAfterMinutes, o.maxPartySize, o.sortOrder, o.active, media === undefined ? null : JSON.stringify(media), o.minDays, o.maxDays];
 
   let offeringId = id;
   if (id) {
@@ -619,7 +627,7 @@ async function saveOffering(client, shop, id, input = {}) {
     const { rowCount } = await client.query(
       `update public.offerings set category = $3, name = $4, description = $5, duration_mode = $6, duration_minutes = $7,
               min_minutes = $8, max_minutes = $9, step_minutes = $10, buffer_after_minutes = $11, max_party_size = $12,
-              sort_order = $13, active = $14, media = coalesce($15::jsonb, media)
+              sort_order = $13, active = $14, media = coalesce($15::jsonb, media), min_days = $16, max_days = $17
         where id = $1 and business_id = $2`,
       [id, shop.id, ...values]
     );
@@ -627,8 +635,8 @@ async function saveOffering(client, shop, id, input = {}) {
   } else {
     const { rows } = await client.query(
       `insert into public.offerings (business_id, category, name, description, duration_mode, duration_minutes, min_minutes, max_minutes,
-              step_minutes, buffer_after_minutes, max_party_size, sort_order, active, media)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, coalesce($14::jsonb, '[]'::jsonb)) returning id`,
+              step_minutes, buffer_after_minutes, max_party_size, sort_order, active, media, min_days, max_days)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, coalesce($14::jsonb, '[]'::jsonb), $15, $16) returning id`,
       [shop.id, ...values]
     );
     offeringId = rows[0].id;

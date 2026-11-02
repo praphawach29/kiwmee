@@ -123,6 +123,9 @@ async function shopInfo(db, slug) {
       durationMinutes: o.duration_mode === "fixed" ? o.duration_minutes : null,
       minMinutes: o.duration_mode === "customer_choice" ? o.min_minutes : null,
       maxMinutes: o.duration_mode === "customer_choice" ? o.max_minutes : null,
+      // rented by the day (design 11.7)
+      minDays: o.duration_mode === "days" ? o.min_days : null,
+      maxDays: o.duration_mode === "days" ? o.max_days : null,
       maxPartySize: o.max_party_size,
       price: priceFrom(catalog.prices, o.id)
     })),
@@ -257,7 +260,7 @@ async function book(
       price: b.price,
       manageToken: link.token,
       addons: (b.addons ?? []).map((a) => ({ id: a.addon_id, name: a.name, quantity: a.quantity, total: Number(a.total) })),
-      resources: ids.map((id) => ({ id, name: names.find((n) => n.id === id)?.name ?? null }))
+      resources: ids.map((id) => ({ id, name: names.find((n) => n.id === id)?.name ?? null, kind: catalog.resources.find((r) => r.id === id)?.kind ?? null }))
     };
   } catch (error) {
     throw bookingError(error);

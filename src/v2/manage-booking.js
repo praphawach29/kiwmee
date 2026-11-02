@@ -92,6 +92,7 @@ async function findManaged(db, slug, token, now = new Date()) {
       date: start.date,
       start: start.time,
       end: end.time,
+      endDate: end.date, // a rental over several days comes back on a later day
       startAt: b.start_at,
       partySize: b.party_size,
       price: b.price,
@@ -119,7 +120,7 @@ function selectedFrom(b) {
   const selected = { offeringId: b.offering_id, partySize: b.party_size };
   if (picked) selected.resourceId = picked.id;
   const extra = b.addons.reduce((sum, a) => sum + (a.adds_minutes || 0) * a.quantity, 0);
-  if (b.duration_mode === "customer_choice") selected.durationMinutes = Math.round((new Date(b.end_at) - new Date(b.start_at)) / 60000) - extra;
+  if (["customer_choice", "days"].includes(b.duration_mode)) selected.durationMinutes = Math.round((new Date(b.end_at) - new Date(b.start_at)) / 60000) - extra;
   // the add-ons move with the booking, so the new time must have room for them too
   if (b.addons.length) selected.addons = Object.fromEntries(b.addons.map((a) => [a.id, a.quantity]));
   return selected;

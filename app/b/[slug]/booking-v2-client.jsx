@@ -19,6 +19,9 @@ const STEP_TITLE = {
   party: "จำนวนคน",
   addons: "ตัวเลือกเพิ่มเติม"
 };
+// a rental by the day (design 11.7) asks the same steps in its own words
+const RENTAL_TITLE = { date: "เลือกวันรับ", duration: "เช่ากี่วัน", time: "เลือกเวลารับ" };
+const RENTAL_LABEL = { date: "วันรับ", time: "เวลารับ", duration: "เช่า" };
 const REASON_TEXT = {
   FULLY_BOOKED: "เต็ม",
   BUSINESS_CLOSED: "ร้านปิด",
@@ -30,7 +33,8 @@ const REASON_TEXT = {
   NOT_OFFERED: "ไม่มีบริการนี้",
   RESOURCE_BUSY: "หมดในเวลานี้",
   NOT_ENOUGH_TIME: "เวลาไม่พอ",
-  ADDON_GROUP_RULE: "เลือกเกินจำนวน"
+  ADDON_GROUP_RULE: "เลือกเกินจำนวน",
+  RETURN_CLOSED: "วันคืนร้านปิด"
 };
 // a day's tile is narrow: one short word under the date
 const DAY_REASON_TEXT = { ...REASON_TEXT, PAST_WORKING_HOURS: "ปิดแล้ว", OUTSIDE_BOOKING_WINDOW: "ยังไม่เปิด" };
@@ -65,11 +69,20 @@ function formatMinutes(minutes) {
   return m ? `${h} ชม. ${m} นาที` : `${h} ชม.`;
 }
 
+// whole days for a rental by the day, else hours and minutes
+const formatDuration = (minutes) => (minutes >= 1440 && minutes % 1440 === 0 ? `${minutes / 1440} วัน` : formatMinutes(minutes));
+// "พฤ. 5 พ.ย." for the day a rental comes back
+const returnDay = (date, minutes) => {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + Math.round(minutes / 1440));
+  return new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" }).format(d);
+};
+
 const money = (amount) => `${Number(amount).toLocaleString("th-TH")} บาท`;
 
 function priceText(price) {
   if (!price) return "";
-  const per = price.unit === "per_hour" ? "/ชม." : price.unit === "per_person" ? "/คน" : "";
+  const per = price.unit === "per_hour" ? "/ชม." : price.unit === "per_person" ? "/คน" : price.unit === "per_day" ? "/วัน" : "";
   return `${price.varies ? "เริ่ม " : ""}${money(price.amount)}${per}`;
 }
 
@@ -115,6 +128,10 @@ function offeringEstimate(offering, selected) {
   if (price.unit === "per_person") {
     if (!selected.partySize) return { label: "ราคา", value: priceText(price), short: null, amount: null };
     amount *= selected.partySize;
+  }
+  if (price.unit === "per_day") {
+    if (!minutes) return { label: "ราคา", value: priceText(price), short: null, amount: null };
+    amount *= Math.max(Math.ceil(minutes / 1440), 1);
   }
   if (price.varies) return { label: "ราคาเริ่มต้น", value: `เริ่ม ${money(amount)}`, short: null, amount };
   return { label: "ราคา", value: money(amount), short: money(amount), amount };
@@ -177,7 +194,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
       if (step === "resource") return value === null ? `${resourceWord}คนไหนก็ได้` : resources.get(value)?.name ?? resourceWord;
       if (step === "date") return formatDate(value, { long: true });
       if (step === "time") return `${value} น.`;
-      if (step === "duration") return formatMinutes(value);
+      if (step === "duration") return formatDuration(value);
       if (step === "party") return `${value} คน`;
       if (step === "addons") {
         // a single add-on id (a cleared one), or the picks { id: quantity }
@@ -222,10 +239,15 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
   }, [run, initialView]);
 
   const [category, setCategory] = useState(null);
+  const rental = offerings.get(selected.offeringId)?.minDays != null;
   const summaryItems = SUMMARY_ORDER.filter((s) => selected[KEY[s]] !== undefined).map((s) => ({
     step: s,
-    label: s === "resource" ? resourceWord : SUMMARY_LABEL[s] ?? s,
-    value: s === "date" ? mediumDate(selected.date) : valueLabel(s, selected[KEY[s]]),
+    label: s === "resource" ? resourceWord : (rental && RENTAL_LABEL[s]) || SUMMARY_LABEL[s] || s,
+    value: s === "date"
+      ? mediumDate(selected.date)
+      : rental && s === "duration" && selected.date
+        ? `${formatDuration(selected.durationMinutes)} · คืน ${returnDay(selected.date, selected.durationMinutes)}${selected.time ? ` ${selected.time} น.` : ""}`
+        : valueLabel(s, selected[KEY[s]]),
     // the day on its own line, the date below it
     display: s === "date" ? <>{dayName(selected.date)}<br />{dateOnly(selected.date)}</> : null
   }));
@@ -312,7 +334,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
   const optionButton = (o) => {
     const button = (
       <button key={String(o.value)} {...optionProps(o)}>
-        <OptionBody ask={ask} option={o} offering={offerings.get(o.value)} resource={resources.get(o.value)} resourceWord={resourceWord} />
+        <OptionBody ask={ask} option={o} offering={offerings.get(o.value)} resource={resources.get(o.value)} resourceWord={resourceWord} date={selected.date} />
         {!o.available && <small className="bk-reason">{REASON_TEXT[o.reason] ?? "ไม่ว่าง"}</small>}
       </button>
     );
@@ -384,8 +406,14 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
         {ask && view.options && (
           <section className="bk-card" data-step={ask}>
             <div className="bk-step-head">
-              <h2>{ask === "resource" ? `เลือก${resourceWord}` : STEP_TITLE[ask]}</h2>
-              {ask === "time" && selected.date && <p className="bk-muted">{formatDate(selected.date, { long: true })} · เวลาตามร้าน</p>}
+              <h2>{ask === "resource" ? `เลือก${resourceWord}` : (rental && RENTAL_TITLE[ask]) || STEP_TITLE[ask]}</h2>
+              {ask === "time" && selected.date && (
+                <p className="bk-muted">
+                  {formatDate(selected.date, { long: true })} · {rental ? "คืนเวลาเดียวกัน" : "เวลาตามร้าน"}
+                  {rental && selected.durationMinutes ? ` วัน${returnDay(selected.date, selected.durationMinutes)}` : ""}
+                </p>
+              )}
+              {ask === "duration" && rental && <p className="bk-muted">เช่าเป็นรอบ 24 ชม. คืนเวลาเดียวกับที่รับ</p>}
             </div>
             {ask !== "addons" && (view.options.length === 0 || !view.options.some((o) => o.available)) ? (
               <p className="bk-empty">{ask === "time" ? "วันนี้ไม่มีเวลาว่างแล้ว" : "ไม่มีตัวเลือกที่ว่าง"} {view.reason ? `(${REASON_TEXT[view.reason] ?? view.reason})` : ""} — ลองเปลี่ยนตัวเลือกด้านบน</p>
@@ -465,7 +493,9 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
 }
 
 const offeringLength = (offering) =>
-  offering.durationMinutes ? formatMinutes(offering.durationMinutes) : `${formatMinutes(offering.minMinutes)}–${formatMinutes(offering.maxMinutes)}`;
+  offering.minDays != null
+    ? offering.minDays === offering.maxDays ? `${offering.minDays} วัน` : `${offering.minDays}–${offering.maxDays} วัน`
+    : offering.durationMinutes ? formatMinutes(offering.durationMinutes) : `${formatMinutes(offering.minMinutes)}–${formatMinutes(offering.maxMinutes)}`;
 
 // The extras for the chosen offering at the chosen time, grouped as the shop set them up. The engine
 // says which can still be taken (and how many); the customer picks, then goes on.
@@ -702,8 +732,18 @@ const icsTime = (iso) => new Date(iso).toISOString().replace(/[-:]/g, "").replac
 function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
   const timeFormat = (iso) => new Intl.DateTimeFormat("th-TH", { timeZone: shop.timezone, hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
   const dayPart = (opts) => new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", ...opts }).format(new Date(`${selected.date}T00:00:00Z`));
-  const when = booking.startAt && booking.endAt ? `${timeFormat(booking.startAt)}–${timeFormat(booking.endAt)} น.` : selected.time ? `${selected.time} น.` : "";
+  const dateOf = (iso) => new Intl.DateTimeFormat("en-CA", { timeZone: shop.timezone }).format(new Date(iso));
+  const shortDay = (iso) => new Intl.DateTimeFormat("th-TH", { timeZone: shop.timezone, weekday: "short", day: "numeric", month: "short" }).format(new Date(iso));
+  // a rental over several days: when to pick up and when to bring it back
+  const when = booking.startAt && booking.endAt
+    ? dateOf(booking.startAt) !== dateOf(booking.endAt)
+      ? `รับ ${timeFormat(booking.startAt)} น. · คืน ${shortDay(booking.endAt)} ${timeFormat(booking.endAt)} น.`
+      : `${timeFormat(booking.startAt)}–${timeFormat(booking.endAt)} น.`
+    : selected.time ? `${selected.time} น.` : "";
   const assigned = booking.resources?.map((r) => r.name).filter(Boolean).join(", ");
+  // what the shop gave: its own kind's word (a car is "รถ", not "ช่าง")
+  const givenKind = booking.resources?.[0]?.kind;
+  const givenWord = givenKind ? RESOURCE_WORD[givenKind] ?? givenKind : resourceWord;
   const rows = items.filter((item) => item.step !== "date" && item.step !== "time");
   const managePath = booking.manageToken ? `/b/${shop.slug}/manage/${booking.manageToken}` : null;
   const held = booking.status === "held";
@@ -775,7 +815,7 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
           ))}
           {booking.resources?.length > 0 && selected.resourceId == null && (
             <div>
-              <dt>{resourceWord}</dt>
+              <dt>{givenWord}</dt>
               <dd>{assigned || "ร้านจัดให้"}</dd>
             </div>
           )}
@@ -847,7 +887,7 @@ function PoweredBy() {
   );
 }
 
-function OptionBody({ ask, option, offering, resource, resourceWord }) {
+function OptionBody({ ask, option, offering, resource, resourceWord, date }) {
   if (ask === "offering" && offering) {
     const length = offeringLength(offering);
     return (
@@ -868,7 +908,15 @@ function OptionBody({ ask, option, offering, resource, resourceWord }) {
   if (ask === "resource") return <ResourceChoice resource={resource} label={option.label} resourceWord={resourceWord} any={option.value === null} />;
   if (ask === "date") return <DateBody value={option.value} />;
   if (ask === "time") return <strong>{option.value}</strong>;
-  if (ask === "duration") return <strong>{formatMinutes(option.value)}</strong>;
+  if (ask === "duration") {
+    const days = option.value >= 1440 && option.value % 1440 === 0;
+    return (
+      <>
+        <strong>{formatDuration(option.value)}</strong>
+        {days && date && <small className="bk-day-month">คืน {returnDay(date, option.value)}</small>}
+      </>
+    );
+  }
   if (ask === "party") return <strong>{option.value} คน</strong>;
   return <strong>{String(option.value)}</strong>;
 }

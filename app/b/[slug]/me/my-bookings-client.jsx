@@ -44,7 +44,12 @@ function NextBooking({ booking, directions }) {
         <DateTile date={booking.date} />
         <div>
           <strong>{part(booking.date, { weekday: "long" })}</strong>
-          <span>{part(booking.date, { day: "numeric", month: "short", year: "numeric" })} · {booking.start}–{booking.end} น.</span>
+          <span>
+            {part(booking.date, { day: "numeric", month: "short", year: "numeric" })} ·{" "}
+            {booking.endDate && booking.endDate !== booking.date
+              ? `รับ ${booking.start} น. · คืน ${part(booking.endDate, { weekday: "short", day: "numeric", month: "short" })} ${booking.end} น.`
+              : `${booking.start}–${booking.end} น.`}
+          </span>
         </div>
       </div>
       <dl className="bk-summary">
@@ -64,7 +69,7 @@ function BookingRow({ booking }) {
       <DateTile date={booking.date} small />
       <span className="bk-row-text">
         <strong>{booking.offering}</strong>
-        <small>{part(booking.date, { weekday: "short" })} {booking.start}–{booking.end} น.{booking.resources.length ? ` · ${booking.resources.map((r) => r.name).join(", ")}` : ""}</small>
+        <small>{part(booking.date, { weekday: "short" })} {booking.endDate && booking.endDate !== booking.date ? `${booking.start} น. → คืน ${part(booking.endDate, { day: "numeric", month: "short" })}` : `${booking.start}–${booking.end} น.`}{booking.resources.length ? ` · ${booking.resources.map((r) => r.name).join(", ")}` : ""}</small>
       </span>
       <span className="bk-status" data-status={booking.status}>{STATUS[booking.status] ?? booking.status}</span>
     </>

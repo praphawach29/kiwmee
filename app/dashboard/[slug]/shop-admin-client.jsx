@@ -8,6 +8,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { api } from "../api.mjs";
 import OwnerMediaEditor from "../media-editor.jsx";
+import { isSafeMediaUrl } from "../media-upload.mjs";
 import MerchantSidebar from "../merchant-sidebar.jsx";
 import { shopNavigation, shopTabs, resolveShopTab } from "../merchant-navigation.mjs";
 import { bookingFlowDraft, bookingFlowFromDraft, catalogWarnings, kindWord, previewPaths, resourceWord } from "./flow-preview.mjs";
@@ -1400,12 +1401,20 @@ function emptyResource(catalog) {
     id: null,
     kind: catalog.shop.kind === "court" ? "court" : "staff",
     name: "",
+    media: [],
     capacity: 1,
     sortOrder: catalog.resources.length + 1,
     active: true,
     schedule: [0, 1, 2, 3, 4, 5, 6].map((d) => ({ dayOfWeek: d, isWorking: true, start: null, end: null, custom: false })),
     offeringIds: catalog.offerings.filter((o) => o.active).map((o) => o.id)
   };
+}
+
+function ResourceListThumbnail({ resource }) {
+  const item = (Array.isArray(resource.media) ? resource.media : []).find((image) => isSafeMediaUrl(image?.url));
+  const [failed, setFailed] = useState(false);
+  const demo = item?.url.startsWith("/demo-media/");
+  return <span className="ad-resource-thumbnail">{item && !failed ? <img src={item.url} alt={`${demo ? "ILLUSTRATION · ภาพประกอบ ไม่ใช่ภาพสถานที่จริง · " : ""}${item.alt || resource.name}`} loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(true)} /> : <span className="ad-muted">{failed ? "โหลดภาพไม่สำเร็จ" : "ยังไม่มีภาพ"}</span>}</span>;
 }
 
 function ResourcesTab({ slug, catalog, onSaved }) {
@@ -1425,10 +1434,13 @@ function ResourcesTab({ slug, catalog, onSaved }) {
         <ul className="ad-list">
           {catalog.resources.map((r) => (
             <li key={r.id}>
-              <button className="ad-list-item" data-active={editing?.id === r.id} data-off={!r.active} onClick={() => setEditing(structuredClone(r))}>
+              <button className="ad-list-item ad-resource-item" data-active={editing?.id === r.id} data-off={!r.active} onClick={() => setEditing(structuredClone(r))}>
+                <ResourceListThumbnail key={r.media?.[0]?.url || "empty"} resource={r} />
+                <span className="ad-resource-details">
                 <strong>{r.name}{!r.active && " (ปิดอยู่)"}</strong>
                 <span className="ad-muted">
                   {RESOURCE_KINDS[r.kind] ?? r.kind}{r.capacity > 1 ? ` · ${r.capacity} ที่` : ""} · ทำ {r.offeringIds.length} บริการ
+                </span>
                 </span>
               </button>
             </li>
@@ -1490,6 +1502,7 @@ function ResourceEditor({ slug, catalog, initial, onSaved, onClose }) {
           <label className="ad-field">ความจุ (คนพร้อมกัน)<input type="number" min={1} value={r.capacity} onChange={(e) => set({ capacity: e.target.value })} /></label>
           <label className="ad-field">ลำดับที่แสดง<input type="number" value={r.sortOrder} onChange={(e) => set({ sortOrder: e.target.value })} /></label>
         </div>
+        <MediaEditor slug={slug} disabled={save.busy} label="ภาพช่าง / สนาม / ห้อง" value={r.media ?? []} onChange={(media) => set({ media })} />
 
         <div className="ad-field">
           วันและเวลาทำงาน

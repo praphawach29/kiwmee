@@ -9,7 +9,8 @@ const { transformSync } = require('next/dist/build/swc');
 
 function loadComponents(file = 'booking-presentation.jsx') {
   const filename = path.join(__dirname, file);
-  const { code } = transformSync(fs.readFileSync(filename, 'utf8'), {
+  const source = fs.readFileSync(filename, 'utf8') + (file.includes('shop-admin-client') ? '\nexport { ResourceEditor, ResourcesTab, emptyResource, ReadOnly };' : file === 'booking-v2-client.jsx' ? '\nexport { OptionBody };' : '');
+  const { code } = transformSync(source, {
     filename,
     jsc: { parser: { syntax: 'ecmascript', jsx: true }, transform: { react: { runtime: 'automatic' } } },
     module: { type: 'commonjs' },
@@ -17,12 +18,102 @@ function loadComponents(file = 'booking-presentation.jsx') {
   const mod = new Module(filename, module);
   mod.filename = filename;
   mod.paths = module.paths;
-  if (file.includes('shop-admin-client')) mod.require = (name) => name === '../media-editor.jsx' ? loadComponents('../../dashboard/media-editor.jsx') : name.startsWith('.') ? {} : require(name);
+  if (file.includes('shop-admin-client')) mod.require = (name) => name === '../media-editor.jsx' ? loadComponents('../../dashboard/media-editor.jsx') : name === '../media-upload.mjs' ? require(path.join(__dirname, '../../dashboard/media-upload.mjs')) : name.startsWith('.') ? {} : require(name);
+  else mod.require = (name) => name.endsWith('.jsx') ? loadComponents(path.relative(__dirname, path.resolve(path.dirname(filename), name))) : Module.prototype.require.call(mod, name);
   mod._compile(code, filename);
   return mod.exports;
 }
 
 const render = (Component, props) => renderToStaticMarkup(React.createElement(Component, props));
+
+test('booking resource option uses catalog resource media, never option or offering photos', () => {
+  const { OptionBody } = loadComponents('booking-v2-client.jsx');
+  const props = { ask: 'resource', option: { value: 'a', label: 'สนาม A', media: [{ url: 'https://example.com/wrong.jpg' }] }, resource: { id: 'a', name: 'สนาม A', media: [{ url: 'https://example.com/resource.jpg', alt: 'สนาม A' }] }, offering: { media: [{ url: 'https://example.com/offering.jpg' }] }, resourceWord: 'สนาม' };
+  const html = render(OptionBody, props);
+  assert.match(html, /src="https:\/\/example.com\/resource.jpg"/);
+  assert.doesNotMatch(html, /wrong.jpg|offering.jpg/);
+  const any = render(OptionBody, { ...props, option: { value: null } });
+  assert.match(any, /สนามใดก็ได้/);
+  assert.doesNotMatch(any, /<img/);
+  const source = fs.readFileSync(path.join(__dirname, 'booking-v2-client.jsx'), 'utf8');
+  assert.match(source, /resource=\{resources.get\(o.value\)\}/);
+});
+
+test('resource choice renders only the matched resource media with accessible alt', () => {
+  const { ResourceChoice } = loadComponents();
+  const html = render(ResourceChoice, { resource: { name: 'สนาม A', media: [{ url: 'https://example.com/court.jpg', alt: 'สนาม A ในร่ม' }] }, label: 'สนาม A', resourceWord: 'สนาม' });
+  assert.match(html, /src="https:\/\/example.com\/court.jpg"/);
+  assert.match(html, /alt="สนาม A ในร่ม"/);
+  assert.match(html, /referrerPolicy="no-referrer"/);
+  const unnamed = render(ResourceChoice, { resource: { name: 'ช่างแนน', media: [{ url: 'https://example.com/staff.jpg', alt: '' }] }, label: 'ช่างแนน' });
+  assert.match(unnamed, /alt="ช่างแนน"/);
+});
+
+test('resource choice has honest missing-image and system-assigned states', () => {
+  const { ResourceChoice } = loadComponents();
+  for (const media of [undefined, [], [{ url: 'javascript:alert(1)' }]]) {
+    const html = render(ResourceChoice, { resource: { name: 'สนาม A', media }, label: 'สนาม A' });
+    assert.match(html, /ยังไม่มีภาพจากร้าน/);
+    assert.doesNotMatch(html, /<img/);
+  }
+  const any = render(ResourceChoice, { any: true, resourceWord: 'สนาม', resource: { name: 'สนาม A', media: [{ url: 'https://example.com/court.jpg' }] } });
+  assert.match(any, /สนามใดก็ได้/);
+  assert.match(any, /ระบบเลือกที่ว่างให้/);
+  assert.doesNotMatch(any, /<img|สนาม A|ยังไม่มีภาพ/);
+});
+
+test('resource editor initializes empty media and retains existing gallery in the shared upload editor', () => {
+  const { ResourceEditor, emptyResource, ReadOnly } = loadComponents('../../dashboard/[slug]/shop-admin-client.jsx');
+  const catalog = { shop: { kind: 'court' }, resources: [], offerings: [], hours: Array.from({ length: 7 }, () => ({ isOpen: true, open: '09:00', close: '18:00' })), timeOff: [] };
+  assert.deepEqual(emptyResource(catalog).media, []);
+  const initial = { ...emptyResource(catalog), name: 'สนาม A', media: [{ url: 'https://example.com/existing.jpg', alt: 'รูปเดิม' }] };
+  const props = { slug: 'my-shop', catalog, initial, onSaved() {}, onClose() {} };
+  const html = render(ResourceEditor, props);
+  assert.match(html, /ภาพช่าง \/ สนาม \/ ห้อง/);
+  assert.match(html, /value="https:\/\/example.com\/existing.jpg"/);
+  assert.match(html, /value="รูปเดิม"/);
+  assert.match(html, /type="file"/);
+  assert.match(html, /\+ เพิ่ม URL ภาพ/);
+  const readOnly = renderToStaticMarkup(React.createElement(ReadOnly.Provider, { value: true }, React.createElement(ResourceEditor, props)));
+  assert.doesNotMatch(readOnly, /type="file"|\+ เพิ่ม URL ภาพ/);
+  const source = fs.readFileSync(path.join(__dirname, '../../dashboard/[slug]/shop-admin-client.jsx'), 'utf8');
+  assert.match(source, /<MediaEditor slug=\{slug\} disabled=\{save.busy\} label="ภาพช่าง \/ สนาม \/ ห้อง" value=\{r.media \?\? \[\]\} onChange=\{\(media\) => set\(\{ media \}\)\}/);
+});
+
+test('resource list shows its saved thumbnail without pretending an empty gallery has a photo', () => {
+  const { ResourcesTab } = loadComponents('../../dashboard/[slug]/shop-admin-client.jsx');
+  const html = render(ResourcesTab, { slug: 'shop', catalog: { resources: [{ id: 'a', name: 'สนาม A', active: true, kind: 'court', offeringIds: [], media: [{ url: 'https://example.com/a.jpg', alt: 'สนาม A ในร่ม' }] }, { id: 'b', name: 'สนาม B', active: true, kind: 'court', offeringIds: [] }] }, onSaved() {} });
+  assert.match(html, /src="https:\/\/example.com\/a.jpg"/);
+  assert.match(html, /alt="สนาม A ในร่ม"/);
+  assert.match(html, /ยังไม่มีภาพ/);
+  assert.equal((html.match(/<img /g) || []).length, 1);
+});
+
+test('manage resource summary shows provided media and preserves names for older payloads', () => {
+  const { ResourceSummary } = loadComponents();
+  const html = render(ResourceSummary, { resources: [{ id: 'a', name: 'สนาม A', media: [{ url: 'https://example.com/a.jpg', alt: 'สนาม A' }] }, { id: 'b', name: 'สนาม B' }] });
+  assert.match(html, /src="https:\/\/example.com\/a.jpg"/);
+  assert.match(html, /สนาม B/);
+  assert.equal((html.match(/<img /g) || []).length, 1);
+});
+
+test('resource image failure removes the broken image and exposes a readable fallback', () => {
+  const { MediaImage } = loadComponents();
+  const original = React.useState;
+  let state = 'loading';
+  React.useState = () => [state, (next) => { state = next; }];
+  try {
+    const props = { item: { url: 'https://example.com/broken.jpg', alt: 'สนาม A' }, name: 'สนาม A' };
+    const tree = MediaImage(props);
+    tree.props.children[0].props.onError();
+    const html = renderToStaticMarkup(MediaImage(props));
+    assert.match(html, /โหลดภาพไม่สำเร็จ/);
+    assert.match(html, /role="status"/);
+    assert.doesNotMatch(html, /<img/);
+  } finally {
+    React.useState = original;
+  }
+});
 
 test('shop gallery renders supplied media with explicit illustration disclosure', () => {
   const { ShopGallery } = loadComponents();

@@ -493,6 +493,14 @@ a.bk-secondary {
 .bk-offering-placeholder > span { font-family: var(--font-display); font-size: 24px; }
 .bk-offering-placeholder small { color: var(--muted); }
 .bk-options-offering .bk-option { align-content: start; }
+.bk-options-resource .bk-option { align-content: start; min-width: 0; }
+.bk-resource-media { display: grid; gap: 6px; min-width: 0; margin-bottom: 6px; }
+.bk-resource-media > .bk-media-image { height: auto; aspect-ratio: 4 / 3; border-radius: 8px; }
+.bk-resource-placeholder { display: flex; align-items: center; gap: 10px; min-height: 64px; padding: 12px; border-radius: 8px; background: var(--selected); color: var(--grape-deep); }
+.bk-resource-placeholder > span { font-family: var(--font-display); font-size: 24px; }
+.bk-resource-placeholder small { color: var(--muted); }
+.bk-manage-resources { display: flex; flex-wrap: wrap; gap: 12px; }
+.bk-manage-resource { display: grid; gap: 6px; width: 150px; max-width: 100%; min-width: 0; overflow-wrap: anywhere; }
 
 @media (prefers-reduced-motion: reduce) {
   .bk-option { transition: none; }

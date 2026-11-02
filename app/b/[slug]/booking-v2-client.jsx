@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CustomerFrame from "./customer-frame.jsx";
-import { BookingProgress, BookingReview, BookingSubmitBar, ShopHeader, ShopGallery, OfferingThumbnail } from "./booking-presentation.jsx";
+import { BookingProgress, BookingReview, BookingSubmitBar, ShopHeader, ShopGallery, OfferingThumbnail, ResourceChoice } from "./booking-presentation.jsx";
 
 const RESOURCE_WORD = { staff: "ช่าง", court: "สนาม", room: "ห้อง", equipment: "อุปกรณ์" };
 const STEP_TITLE = {
@@ -310,7 +310,7 @@ export default function BookingV2Client({ shop, liffId }) {
                   disabled={busy || !o.available}
                   onClick={() => choose(ask, o.value)}
                 >
-                  <OptionBody ask={ask} option={o} offering={offerings.get(o.value)} resourceWord={resourceWord} />
+                  <OptionBody ask={ask} option={o} offering={offerings.get(o.value)} resource={resources.get(o.value)} resourceWord={resourceWord} />
                   {!o.available && <small className="bk-reason">{REASON_TEXT[o.reason] ?? "ไม่ว่าง"}</small>}
                 </button>
               );
@@ -387,7 +387,7 @@ function PoweredBy() {
   );
 }
 
-function OptionBody({ ask, option, offering, resourceWord }) {
+function OptionBody({ ask, option, offering, resource, resourceWord }) {
   if (ask === "offering" && offering) {
     const length = offering.durationMinutes ? formatMinutes(offering.durationMinutes) : `${formatMinutes(offering.minMinutes)}–${formatMinutes(offering.maxMinutes)}`;
     return (
@@ -401,7 +401,7 @@ function OptionBody({ ask, option, offering, resourceWord }) {
       </>
     );
   }
-  if (ask === "resource") return <strong>{option.value === null ? `${resourceWord}คนไหนก็ได้` : option.label}</strong>;
+  if (ask === "resource") return <ResourceChoice resource={resource} label={option.label} resourceWord={resourceWord} any={option.value === null} />;
   if (ask === "date") {
     const d = new Date(`${option.value}T00:00:00Z`);
     const part = (opts) => new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", ...opts }).format(d);

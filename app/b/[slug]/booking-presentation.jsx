@@ -41,6 +41,20 @@ export function OfferingThumbnail({ offering }) {
   const item = safeMedia(offering.media)[0];
   return <span className="bk-offering-media">{item ? <><MediaImage key={item.url} item={item} name={offering.name} />{isDemo(item) && <span className="bk-media-caption">ILLUSTRATION · ภาพประกอบ ไม่ใช่ภาพสถานที่จริง</span>}</> : <span className="bk-offering-placeholder"><span aria-hidden="true">{offering.name?.[0]}</span><small>ยังไม่มีภาพจากร้าน</small></span>}</span>;
 }
+export function ResourceThumbnail({ resource }) {
+  const item = safeMedia(resource?.media)[0];
+  return <span className="bk-resource-media">{item ? <><MediaImage key={item.url} item={item} name={resource.name} />{isDemo(item) && <span className="bk-media-caption">ILLUSTRATION · ภาพประกอบ ไม่ใช่ภาพสถานที่จริง</span>}</> : <span className="bk-resource-placeholder"><span aria-hidden="true">{resource?.name?.[0] || "◇"}</span><small>ยังไม่มีภาพจากร้าน</small></span>}</span>;
+}
+
+export function ResourceChoice({ resource, label, resourceWord = "ช่าง", any = false }) {
+  if (any) return <><span className="bk-resource-placeholder bk-resource-any"><span aria-hidden="true">◇</span><small>ระบบเลือกที่ว่างให้</small></span><span className="bk-option-title"><strong>{resourceWord}{resourceWord === "ช่าง" ? "คนไหนก็ได้" : "ใดก็ได้"}</strong><span className="bk-choice-mark" aria-hidden="true" /></span></>;
+  return <><ResourceThumbnail resource={resource} /><span className="bk-option-title"><strong>{resource?.name || label}</strong><span className="bk-choice-mark" aria-hidden="true" /></span></>;
+}
+
+export function ResourceSummary({ resources }) {
+  return <span className="bk-manage-resources">{resources.map((resource) => <span className="bk-manage-resource" key={resource.id || resource.name}>{safeMedia(resource.media).length > 0 && <ResourceThumbnail resource={resource} />}<span>{resource.name}</span></span>)}</span>;
+}
+
 export function ShopHeader({ shop, subtitle }) {
   return (
     <header className="bk-header bk-shop-header">

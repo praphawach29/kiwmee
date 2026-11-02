@@ -189,7 +189,7 @@ async function getCatalog(client, shop) {
     "select day_of_week, is_open, open_time, close_time from public.business_hours where business_id = $1",
     `select id, date::text as date, is_full_day, start_time, end_time, reason from public.business_closures
         where business_id = $1 and date >= current_date - 1 order by date, start_time nulls first`,
-    "select id, kind, name, capacity, sort_order, active from public.resources where business_id = $1 order by active desc, sort_order, name",
+    "select id, kind, name, capacity, sort_order, active, media from public.resources where business_id = $1 order by active desc, sort_order, name",
     "select resource_id, day_of_week, is_working, start_time, end_time from public.resource_schedules where business_id = $1",
     `select id, resource_id, date::text as date, is_full_day, start_time, end_time, reason from public.resource_time_off
         where business_id = $1 and date >= current_date - 1 order by date, start_time nulls first`,
@@ -244,6 +244,7 @@ async function getCatalog(client, shop) {
       capacity: r.capacity,
       sortOrder: r.sort_order,
       active: r.active,
+      media: r.media,
       // no row for a day = works the shop's hours that day
       schedule: [0, 1, 2, 3, 4, 5, 6].map((d) => {
         const row = schedules.find((x) => x.resource_id === r.id && x.day_of_week === d);
@@ -365,19 +366,20 @@ async function saveResource(client, shop, id, input = {}) {
   const capacity = int(input.capacity ?? 1, "ความจุ", { min: 1, max: 1000 });
   const sortOrder = int(input.sortOrder ?? 0, "ลำดับ", { min: -1000, max: 1000 });
   const active = input.active !== false;
+  const media = validateMedia(input.media);
 
   let resourceId = id;
   if (id) {
     uuid(id);
     const { rowCount } = await client.query(
-      "update public.resources set kind = $3, name = $4, capacity = $5, sort_order = $6, active = $7 where id = $1 and business_id = $2",
-      [id, shop.id, kind, name, capacity, sortOrder, active]
+      "update public.resources set kind = $3, name = $4, capacity = $5, sort_order = $6, active = $7, media = coalesce($8::jsonb, media) where id = $1 and business_id = $2",
+      [id, shop.id, kind, name, capacity, sortOrder, active, media === undefined ? null : JSON.stringify(media)]
     );
     if (!rowCount) throw notFound("ไม่พบรายการนี้");
   } else {
     const { rows } = await client.query(
-      "insert into public.resources (business_id, kind, name, capacity, sort_order, active) values ($1, $2, $3, $4, $5, $6) returning id",
-      [shop.id, kind, name, capacity, sortOrder, active]
+      "insert into public.resources (business_id, kind, name, capacity, sort_order, active, media) values ($1, $2, $3, $4, $5, $6, coalesce($7::jsonb, '[]'::jsonb)) returning id",
+      [shop.id, kind, name, capacity, sortOrder, active, media === undefined ? null : JSON.stringify(media)]
     );
     resourceId = rows[0].id;
   }

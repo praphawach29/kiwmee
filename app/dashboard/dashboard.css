@@ -821,3 +821,17 @@
 .ad-link-card { scroll-margin-top: 80px; border-color: var(--grape); background: linear-gradient(0deg, var(--surface), var(--surface)) padding-box; box-shadow: 0 0 0 3px var(--selected); }
 .ad-link-message { width: 100%; min-width: 0; resize: none; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); font: inherit; font-size: 14px; line-height: 1.6; }
 .ad-link-card a.ad-secondary { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+
+/* Add-ons in a group (the offerings tab) */
+.ad-addon { min-width: 0; margin: 0; padding: 12px; border: 1px solid var(--line-soft); border-radius: 12px; display: grid; gap: 10px; background: var(--surface); }
+.ad-addon[data-off="true"] { background: var(--bg); }
+.ad-addon-main { display: grid; grid-template-columns: minmax(0, 1fr) 110px minmax(0, 150px); gap: 8px; }
+.ad-addon-main > *, .ad-addon-more input, .ad-addon-more select { min-width: 0; }
+.ad-addon-more { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; font-size: 13px; color: var(--muted); }
+.ad-addon-more label { display: inline-flex; align-items: center; gap: 6px; }
+.ad-addon-more input[type="number"] { width: 72px; }
+.ad-sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); border: 0; }
+@media (max-width: 559px) {
+  .ad-addon-main { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .ad-addon-main > input:first-child { grid-column: 1 / -1; }
+}

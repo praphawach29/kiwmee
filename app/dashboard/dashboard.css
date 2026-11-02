@@ -223,28 +223,6 @@
   color: var(--accent-strong);
 }
 
-.ad-tabs {
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  border-bottom: 1px solid var(--line);
-}
-
-.ad-tabs button {
-  background: none;
-  padding: 10px 14px;
-  border-bottom: 3px solid transparent;
-  color: var(--muted);
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.ad-tabs button[data-active="true"] {
-  color: var(--ink);
-  border-bottom-color: var(--accent);
-  font-weight: 600;
-}
-
 .ad-list {
   list-style: none;
   margin: 0;
@@ -437,8 +415,7 @@
 
 .ad-shell .ad-primary,
 .ad-shell .ad-secondary,
-.ad-shell .ad-danger,
-.ad-tabs button {
+.ad-shell .ad-danger {
   font-family: var(--font-display);
   font-weight: 500;
 }
@@ -670,8 +647,7 @@
   .merchant-layout .merchant-page-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
   .merchant-layout .merchant-page-heading h1 { margin: 4px 0; font-size: 24px; font-weight: 500; }
   .merchant-layout .merchant-page-heading p { margin: 0; font-size: 13px; color: var(--muted); }
-  .merchant-layout .merchant-mobile-header,
-  .merchant-layout .ad-tabs { display: none; }
+  .merchant-layout .merchant-mobile-header { display: none; }
   .merchant-layout .ad-card { padding: 24px; border-color: var(--line-soft); box-shadow: 0 2px 8px rgba(27, 22, 64, .025); gap: 18px; }
   .merchant-layout .ad-stack { gap: 20px; }
   .merchant-layout .ad-list-item { padding: 16px; border-color: var(--line-soft); }
@@ -782,4 +758,61 @@
 .ad-activity-at {
   font-size: 12px;
   color: var(--muted);
+}
+
+/* Today's numbers: big enough to read at a glance */
+.ad-metric { gap: 2px; align-content: start; }
+.ad-metric strong { font-family: var(--font-display); font-weight: 500; font-size: 30px; line-height: 1.25; color: var(--ink); font-variant-numeric: tabular-nums; }
+.ad-metric > .ad-muted:last-child { font-size: 12px; }
+
+/* A booking's next step, with the rest behind "⋯" */
+.ad-booking-actions { flex-wrap: nowrap; justify-content: flex-end; }
+.ad-more { position: relative; }
+.ad-more summary { display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; list-style: none; }
+.ad-more summary::-webkit-details-marker { display: none; }
+.ad-more[open] summary { background: var(--selected); color: var(--grape-deep); border-color: var(--grape); }
+.ad-more-menu { position: absolute; left: 0; top: calc(100% + 6px); z-index: 20; min-width: 168px; display: grid; padding: 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); }
+@media (min-width: 760px) and (max-width: 1099px), (min-width: 1400px) {
+  /* actions sit at the card's right edge here, so the menu opens leftwards */
+  .ad-more-menu { left: auto; right: 0; }
+}
+.ad-more-menu button { min-height: 44px; padding: 8px 12px; border: 0; border-radius: 8px; background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.ad-more-menu button:hover:not(:disabled) { background: var(--selected); }
+.ad-more-menu button[data-danger] { color: var(--danger); }
+@media (max-width: 759px) {
+  /* phone: the details keep the full width; the next step sits under them */
+  .ad-booking { grid-template-columns: 56px minmax(0, 1fr); }
+  .ad-booking-actions { grid-column: 2; justify-content: flex-start; }
+}
+
+.merchant-create-open { justify-self: start; }
+
+/* Phone navigation for one shop (merchant-mobile.jsx) */
+.merchant-mobile-top { position: sticky; top: 0; z-index: 25; display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--line-soft); }
+.merchant-mobile-mark { display: grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: 12px; background: var(--ink); color: #fff; font-family: var(--font-display); font-size: 18px; text-decoration: none; }
+.merchant-mobile-title { display: grid; min-width: 0; flex: 1; }
+.merchant-mobile-title strong { font-family: var(--font-display); font-weight: 500; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.merchant-mobile-title span { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.merchant-mobile-top .ad-activity-button { position: relative; width: 44px; height: 44px; padding: 0; justify-content: center; border-radius: 12px; border: 0; background: var(--bg); }
+.merchant-mobile-top .ad-activity-button > span:not(.ad-activity-count) { display: none; }
+.merchant-mobile-top .ad-activity-count { position: absolute; top: 4px; right: 2px; min-width: 18px; padding: 0 4px; font-size: 11px; line-height: 18px; }
+
+.merchant-tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; padding: 6px 4px max(8px, env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--line-soft); box-shadow: 0 -6px 20px rgba(27, 22, 64, .05); }
+.merchant-tabbar button { display: grid; justify-items: center; gap: 2px; min-height: 52px; padding: 4px 0; border: 0; background: none; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
+.merchant-tabbar-icon { position: relative; display: grid; place-items: center; width: 52px; height: 30px; border-radius: 15px; }
+.merchant-tabbar button[aria-current="page"] { color: var(--grape-deep); font-weight: 600; }
+.merchant-tabbar button[aria-current="page"] .merchant-tabbar-icon { background: var(--selected); }
+.merchant-tabbar-badge { position: absolute; top: -2px; right: 4px; min-width: 18px; padding: 0 4px; border-radius: 9px; background: var(--danger); color: #fff; font-size: 11px; font-weight: 600; line-height: 18px; text-align: center; }
+.merchant-tabbar button:focus-visible, .merchant-sheet-item:focus-visible { outline: 3px solid var(--grape); outline-offset: -3px; }
+.merchant-sheet-backdrop { position: fixed; inset: 0; z-index: 31; border: 0; background: rgba(27, 22, 64, .35); cursor: pointer; }
+.merchant-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 32; display: grid; gap: 2px; max-height: 80vh; overflow: auto; padding: 12px 12px max(16px, env(safe-area-inset-bottom)); border-radius: 20px 20px 0 0; background: var(--surface); box-shadow: 0 -10px 30px rgba(27, 22, 64, .15); }
+.merchant-sheet-label { margin: 8px 12px 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.merchant-sheet-item { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 8px 12px; border: 0; border-radius: 12px; background: none; color: var(--ink); font: inherit; text-align: left; text-decoration: none; cursor: pointer; }
+.merchant-sheet-item > span { width: 22px; text-align: center; color: var(--grape-deep); }
+.merchant-sheet-item[aria-current="page"] { background: var(--selected); color: var(--grape-deep); font-weight: 600; }
+@media (max-width: 1099px) {
+  .merchant-layout:has(.merchant-tabbar) .merchant-content { padding-bottom: 104px; }
+}
+@media (min-width: 1100px) {
+  .merchant-mobile-top, .merchant-tabbar, .merchant-sheet, .merchant-sheet-backdrop { display: none; }
 }

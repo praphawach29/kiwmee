@@ -10,6 +10,7 @@ import { api } from "../api.mjs";
 import OwnerMediaEditor from "../media-editor.jsx";
 import { isSafeMediaUrl } from "../media-upload.mjs";
 import MerchantSidebar from "../merchant-sidebar.jsx";
+import { MobileShopHeader, MobileTabBar } from "../merchant-mobile.jsx";
 import { shopNavigation, shopTabs, resolveShopTab } from "../merchant-navigation.mjs";
 import { bookingFlowDraft, bookingFlowFromDraft, catalogWarnings, kindWord, previewPaths, resourceWord } from "./flow-preview.mjs";
 import { BOOKING_TEMPLATES, previewBookingTemplate } from "../../../src/v2/booking-templates.js";
@@ -164,30 +165,16 @@ export default function ShopAdmin({ slug }) {
             <a className="merchant-booking-link" href={`/b/${slug}`} target="_blank" rel="noreferrer">เปิดหน้าจองลูกค้า ↗</a>
           </div>
         </header>
+        <MobileShopHeader
+          name={catalog.shop.name}
+          subtitle={`${activeLabel} · ${roleLabel}`}
+          bell={<ActivityBell activity={activity} onPick={pickActivity} />}
+        />
         <main className="ad-shell merchant-content">
           <div className="merchant-page-heading"><div><p>{catalog.shop.name}</p><h1>{activeLabel}</h1></div><span className="ad-status" data-tone="info">{roleLabel}</span></div>
-      <header className="ad-header merchant-mobile-header">
-        <div className="ad-brand">
-          <a href="/dashboard" aria-label="ร้านทั้งหมด"><img src="/brand/kiwmee-logo.svg" alt="kiwmee" /></a>
-          <a className="ad-link" href="/dashboard">← ร้านทั้งหมด</a>
-        </div>
-        <h1>{catalog.shop.name}</h1>
-        <ActivityBell activity={activity} onPick={pickActivity} />
-        <button type="button" className="ad-link" disabled={signingOut} onClick={signOut}>{signingOut ? "กำลังออกจากระบบ…" : "ออกจากระบบ"}</button>
-        <p className="ad-muted">
-          หน้าจองของลูกค้า: <a className="ad-link" href={`/b/${slug}`} target="_blank" rel="noreferrer">/b/{slug}</a>
-        </p>
-      </header>
       {signOutError && <p className="ad-error" role="alert">{signOutError}</p>}
       {role === "staff" && <p className="ad-notice">พนักงานจัดการการจอง ขายหน้าร้าน และปิดบิลได้ · การตั้งค่าร้านและคืนเงินเฉพาะเจ้าของร้าน</p>}
       {!tab && <p className="ad-error" role="alert">คุณไม่มีสิทธิ์เข้าถึงเมนูจัดการร้านนี้ กรุณาติดต่อเจ้าของร้าน</p>}
-      <nav className="ad-tabs" role="tablist" aria-label="เมนูจัดการร้าน">
-        {tabs.map(({ id: key, label }) => (
-          <button type="button" key={key} role="tab" aria-selected={tab === key} data-active={tab === key} onClick={() => show(key)}>
-            {label}
-          </button>
-        ))}
-      </nav>
       <ReadOnly.Provider value={readOnly}>
         {tab === "overview" && <OverviewTab slug={slug} catalog={catalog} onNavigate={show} />}
         {tab === "bookings" && <BookingsTab key={bookingDay ?? "today"} slug={slug} catalog={catalog} initialDay={bookingDay} />}
@@ -199,6 +186,13 @@ export default function ShopAdmin({ slug }) {
         {tab === "team" && <TeamTab slug={slug} />}
       </ReadOnly.Provider>
         </main>
+        <MobileTabBar
+          groups={shopNavigation(role)}
+          active={tab} onSelect={show}
+          badges={{ bookings: activity.data?.unread ?? 0 }}
+          bookingHref={`/b/${slug}`}
+          onSignOut={signOut} signingOut={signingOut}
+        />
       </div>
     </div>
   );
@@ -248,8 +242,9 @@ function OverviewTab({ slug, catalog, onNavigate }) {
   const offerings = catalog.offerings ?? [];
   const activeOfferings = offerings.filter((o) => o.active).length;
 
+  // still to serve: done, cancelled and no-show bookings are not "next"
   const nextBookings = active
-    .slice()
+    .filter((b) => b.status !== "completed")
     .sort((a, b) => `${a.date ?? day} ${a.start}`.localeCompare(`${b.date ?? day} ${b.start}`))
     .slice(0, 5);
 
@@ -298,7 +293,7 @@ function OverviewTab({ slug, catalog, onNavigate }) {
       <div className="ad-split">
         <section className="ad-card">
           <div className="ad-row ad-between">
-            <h2>การจองถัดไป</h2>
+            <h2>คิวถัดไป</h2>
             <button type="button" className="ad-link" onClick={() => onNavigate?.("bookings")}>ดูทั้งหมด</button>
           </div>
           {!bookings && !error && <p className="ad-muted">กำลังโหลด…</p>}
@@ -515,26 +510,19 @@ function BookingsTab({ slug, catalog, initialDay }) {
                   {b.notes && <p className="ad-booking-notes">{b.notes}</p>}
                   {b.statusReason && ["cancelled", "no_show"].includes(b.status) && <p className="ad-booking-notes">{b.statusReason}</p>}
                 </div>
-                <div className="ad-booking-actions">
-                  {open && b.status !== "held" && (
-                    <button type="button" className="ad-primary" disabled={save.busy} onClick={() => act(b, "status", { status: "checked_in" }, `${b.customer.name} มาถึงแล้ว`)}>มาถึงแล้ว</button>
-                  )}
-                  {billable && (
-                    <button type="button" className={["checked_in", "completed"].includes(b.status) ? "ad-primary" : "ad-secondary"} disabled={save.busy} onClick={() => setCheckout(b)}>ปิดบิล</button>
-                  )}
-                  {b.status === "checked_in" && (
-                    <button type="button" className="ad-secondary" disabled={save.busy} onClick={() => act(b, "status", { status: "completed" }, "บันทึกว่าเสร็จแล้ว")}>เสร็จแล้ว</button>
-                  )}
-                  {open && <button type="button" className="ad-secondary" disabled={save.busy} onClick={() => setForm({ booking: b })}>เลื่อน</button>}
-                  {open && <button type="button" className="ad-link" disabled={save.busy} onClick={() => cancel(b)}>ยกเลิก</button>}
-                  {open && b.status !== "held" && <button type="button" className="ad-link" disabled={save.busy} onClick={() => noShow(b)}>ไม่มา</button>}
-                  {b.status === "checked_in" && (
-                    <button type="button" className="ad-link" disabled={save.busy} onClick={() => act(b, "status", { status: "confirmed" }, "ย้อนกลับแล้ว")}>ย้อนกลับ</button>
-                  )}
-                  {b.status === "completed" && !paid && (
-                    <button type="button" className="ad-link" disabled={save.busy} onClick={() => act(b, "status", { status: "checked_in" }, "ย้อนกลับแล้ว")}>ย้อนกลับ</button>
-                  )}
-                </div>
+                <BookingActions
+                  busy={save.busy}
+                  actions={[
+                    open && b.status !== "held" && { label: "มาถึงแล้ว", run: () => act(b, "status", { status: "checked_in" }, `${b.customer.name} มาถึงแล้ว`) },
+                    billable && { label: "ปิดบิล", run: () => setCheckout(b), primary: ["checked_in", "completed"].includes(b.status) },
+                    b.status === "checked_in" && { label: "เสร็จแล้ว", run: () => act(b, "status", { status: "completed" }, "บันทึกว่าเสร็จแล้ว") },
+                    open && { label: "เลื่อน", run: () => setForm({ booking: b }) },
+                    open && { label: "ยกเลิก", run: () => cancel(b), danger: true },
+                    open && b.status !== "held" && { label: "ไม่มา", run: () => noShow(b) },
+                    b.status === "checked_in" && { label: "ย้อนกลับ", run: () => act(b, "status", { status: "confirmed" }, "ย้อนกลับแล้ว") },
+                    b.status === "completed" && !paid && { label: "ย้อนกลับ", run: () => act(b, "status", { status: "checked_in" }, "ย้อนกลับแล้ว") }
+                  ]}
+                />
               </li>
             );
           })}
@@ -566,6 +554,35 @@ function BookingsTab({ slug, catalog, initialDay }) {
             else load();
           }}
         />
+      )}
+    </div>
+  );
+}
+
+// One clear next step per booking; the rest wait behind "⋯" so a phone row stays one line.
+// actions: in order of preference; falsy entries are skipped. `primary` forces the main button.
+function BookingActions({ actions, busy }) {
+  const list = actions.filter(Boolean);
+  if (list.length === 0) return null;
+  const main = list.find((a) => a.primary) ?? list[0];
+  const more = list.filter((a) => a !== main);
+  const run = (action, event) => {
+    const menu = event.currentTarget.closest("details");
+    if (menu) menu.open = false;
+    action.run();
+  };
+  return (
+    <div className="ad-booking-actions">
+      <button type="button" className="ad-primary" disabled={busy} onClick={(e) => run(main, e)}>{main.label}</button>
+      {more.length > 0 && (
+        <details className="ad-more">
+          <summary aria-label="ตัวเลือกเพิ่มเติม">⋯</summary>
+          <div className="ad-more-menu">
+            {more.map((a) => (
+              <button key={a.label} type="button" data-danger={a.danger || undefined} disabled={busy} onClick={(e) => run(a, e)}>{a.label}</button>
+            ))}
+          </div>
+        </details>
       )}
     </div>
   );

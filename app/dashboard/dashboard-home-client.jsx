@@ -211,6 +211,14 @@ function Shops() {
   const [form, setForm] = useState({ name: "", slug: "", kind: "salon" });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    const open = () => window.location.hash === "#merchant-create" && setCreating(true);
+    open();
+    window.addEventListener("hashchange", open);
+    return () => window.removeEventListener("hashchange", open);
+  }, []);
 
   const load = useCallback(() => api("GET", "/api/dashboard/brands").then(setBrands, (e) => setError(e.message)), []);
   useEffect(() => {
@@ -232,12 +240,19 @@ function Shops() {
 
   if (!brands) return <p className={error ? "ad-error" : "ad-muted"}>{error || "กำลังโหลด…"}</p>;
   const hasShops = brands.some((b) => b.shops.length > 0);
+  // with shops already open, the new-brand form waits behind a button (the sidebar link opens it too)
+  const showCreate = !hasShops || creating;
   return (
     <div id="merchant-shops" className="merchant-shops ad-stack">
       {brands.map((b) => (
         <BrandCard key={b.id} brand={b} brands={brands} onChanged={load} />
       ))}
-      <form id="merchant-create" className="ad-card merchant-create" onSubmit={create}>
+      {!showCreate && (
+        <button type="button" id="merchant-create" className="ad-secondary merchant-create-open" onClick={() => setCreating(true)}>
+          + เปิดแบรนด์ใหม่
+        </button>
+      )}
+      {showCreate && <form id="merchant-create" className="ad-card merchant-create" onSubmit={create}>
         <h2>{hasShops ? "เปิดแบรนด์ใหม่" : "เริ่มจากเปิดร้านของคุณ"}</h2>
         {hasShops && <p className="ad-muted">ร้านที่ไม่เกี่ยวกับแบรนด์เดิม · ถ้าเป็นสาขาของแบรนด์เดิม ใช้ "เพิ่มสาขา" ด้านบน</p>}
         <label className="ad-field">
@@ -252,8 +267,11 @@ function Shops() {
           </select>
         </label>
         {error && <p className="ad-error">{error}</p>}
-        <button className="ad-primary" disabled={busy}>เปิดร้าน</button>
-      </form>
+        <div className="ad-row ad-wrap">
+          <button className="ad-primary" disabled={busy}>เปิดร้าน</button>
+          {hasShops && <button type="button" className="ad-link" onClick={() => setCreating(false)}>ยกเลิก</button>}
+        </div>
+      </form>}
     </div>
   );
 }

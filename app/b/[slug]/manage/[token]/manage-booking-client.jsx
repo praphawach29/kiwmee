@@ -147,6 +147,12 @@ export default function ManageBookingClient({ token, initial }) {
               <dd>{booking.partySize} คน</dd>
             </div>
           )}
+          {booking.addons?.length > 0 && (
+            <div>
+              <dt>เพิ่มเติม</dt>
+              <dd>{booking.addons.map((x) => `${x.name}${x.quantity > 1 ? ` ×${x.quantity}` : ""}`).join(", ")}</dd>
+            </div>
+          )}
           {booking.price > 0 && (
             <div>
               <dt>ราคา</dt>

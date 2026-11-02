@@ -15,7 +15,8 @@ const STEP_TITLE = {
   date: "เลือกวัน",
   time: "เลือกเวลา",
   duration: "ใช้เวลานานเท่าไหร่",
-  party: "จำนวนคน"
+  party: "จำนวนคน",
+  addons: "ตัวเลือกเพิ่มเติม"
 };
 const REASON_TEXT = {
   FULLY_BOOKED: "เต็ม",
@@ -25,7 +26,10 @@ const REASON_TEXT = {
   NO_AVAILABLE_SLOTS: "ไม่มีคิว",
   PAST_WORKING_HOURS: "หมดเวลาจอง",
   OUTSIDE_BOOKING_WINDOW: "ยังไม่เปิดจอง",
-  NOT_OFFERED: "ไม่มีบริการนี้"
+  NOT_OFFERED: "ไม่มีบริการนี้",
+  RESOURCE_BUSY: "หมดในเวลานี้",
+  NOT_ENOUGH_TIME: "เวลาไม่พอ",
+  ADDON_GROUP_RULE: "เลือกเกินจำนวน"
 };
 const KEY = {
   offering: "offeringId",
@@ -33,9 +37,11 @@ const KEY = {
   date: "date",
   time: "time",
   duration: "durationMinutes",
-  party: "partySize"
+  party: "partySize",
+  addons: "addons"
 };
-const SUMMARY_ORDER = ["date", "offering", "resource", "time", "duration", "party"];
+const SUMMARY_ORDER = ["date", "offering", "resource", "time", "duration", "party", "addons"];
+const ADDON_UNIT = { per_unit: "/ชิ้น", per_hour: "/ชม.", per_day: "/วัน", per_person: "/คน", per_booking: "" };
 
 function formatDate(date, { long = false } = {}) {
   return new Intl.DateTimeFormat("th-TH", {
@@ -64,21 +70,49 @@ function priceText(price) {
 
 // What the customer will pay, as far as the page can tell before the server prices the booking.
 // A price that changes by day or time ("varies") is only ever shown as a starting price.
-function priceEstimate(offering, selected) {
+// What the chosen add-ons add, as create_booking prices them (booking_plan): per_hour on the whole
+// booking's minutes, per_day on its days (a booking within one day = 1)
+function addonTotal(addons, selected, minutes) {
+  let total = 0;
+  for (const [id, quantity] of Object.entries(selected.addons ?? {})) {
+    const a = addons.get(id);
+    if (!a || !quantity) continue;
+    const amount = Number(a.amount);
+    if (a.priceUnit === "per_hour") total += (amount * (minutes ?? 0) * quantity) / 60;
+    else if (a.priceUnit === "per_day") total += amount * Math.max(Math.ceil((minutes ?? 0) / 1440), 1) * quantity;
+    else if (a.priceUnit === "per_person") total += amount * (selected.partySize ?? 1);
+    else total += amount * quantity;
+  }
+  return Math.round(total * 100) / 100;
+}
+
+function priceEstimate(offering, selected, addons = new Map()) {
+  const base = offeringEstimate(offering, selected);
+  if (!base) return null;
+  const extraMinutes = Object.entries(selected.addons ?? {}).reduce((sum, [id, q]) => sum + (addons.get(id)?.addsMinutes ?? 0) * q, 0);
+  const minutes = (selected.durationMinutes ?? offering.durationMinutes ?? 0) + extraMinutes;
+  const more = addonTotal(addons, selected, minutes);
+  if (!more) return base;
+  if (base.amount === null) return { label: base.label, value: `${base.value} + ${money(more)}`, short: null };
+  const total = base.amount + more;
+  return base.short ? { label: base.label, value: money(total), short: money(total), amount: total } : { label: base.label, value: `เริ่ม ${money(total)}`, short: null, amount: total };
+}
+
+function offeringEstimate(offering, selected) {
   const price = offering?.price;
   if (!price) return null;
   let amount = Number(price.amount);
   const minutes = selected.durationMinutes ?? offering.durationMinutes;
   if (price.unit === "per_hour") {
-    if (!minutes) return { label: "ราคา", value: priceText(price), short: null };
+    if (!minutes) return { label: "ราคา", value: priceText(price), short: null, amount: null };
     amount = (amount * minutes) / 60;
   }
   if (price.unit === "per_person") {
-    if (!selected.partySize) return { label: "ราคา", value: priceText(price), short: null };
+    if (!selected.partySize) return { label: "ราคา", value: priceText(price), short: null, amount: null };
     amount *= selected.partySize;
   }
-  if (price.varies) return { label: "ราคาเริ่มต้น", value: `เริ่ม ${money(amount)}`, short: null };
-  return { label: "ราคา", value: money(amount), short: money(amount) };
+  if (price.varies) return { label: "ราคาเริ่มต้น", value: `เริ่ม ${money(amount)}`, short: null, amount };
+  return { label: "ราคา", value: money(amount), short: money(amount), amount };
 }
 
 // YYYY-MM-DD for "now" in the shop's own time zone
@@ -101,6 +135,7 @@ async function post(url, body) {
     const error = new Error(payload?.error?.message || "ระบบขัดข้อง กรุณาลองใหม่");
     error.status = response.status;
     error.code = payload?.error?.code;
+    error.reason = payload?.error?.details?.reason;
     throw error;
   }
   return payload.data;
@@ -152,6 +187,7 @@ export default function BookingV2Client({ shop, liffId }) {
 
   const offerings = useMemo(() => new Map(shop.offerings.map((o) => [o.id, o])), [shop.offerings]);
   const resources = useMemo(() => new Map(shop.resources.map((r) => [r.id, r])), [shop.resources]);
+  const addonInfo = useMemo(() => new Map((shop.addonGroups ?? []).flatMap((g) => g.addons.map((a) => [a.id, a]))), [shop.addonGroups]);
   // a kind the shop named itself ("เก้าอี้นวด") is its own word
   const kind = shop.resources[0]?.kind;
   const resourceWord = RESOURCE_WORD[kind] ?? kind ?? "ช่าง";
@@ -168,9 +204,15 @@ export default function BookingV2Client({ shop, liffId }) {
       if (step === "time") return `${value} น.`;
       if (step === "duration") return formatMinutes(value);
       if (step === "party") return `${value} คน`;
+      if (step === "addons") {
+        // a single add-on id (a cleared one), or the picks { id: quantity }
+        if (typeof value === "string") return addonInfo.get(value)?.name ?? "ตัวเลือกเสริม";
+        const picked = Object.entries(value ?? {}).filter(([, q]) => q > 0);
+        return picked.length ? picked.map(([id, q]) => `${addonInfo.get(id)?.name ?? "ตัวเลือก"}${q > 1 ? ` ×${q}` : ""}`).join(", ") : "ไม่เพิ่ม";
+      }
       return String(value);
     },
-    [offerings, resources, resourceWord]
+    [offerings, resources, resourceWord, addonInfo]
   );
 
   const run = useCallback(
@@ -205,10 +247,10 @@ export default function BookingV2Client({ shop, liffId }) {
   const [category, setCategory] = useState(null);
   const summaryItems = SUMMARY_ORDER.filter((s) => selected[KEY[s]] !== undefined).map((s) => ({
     step: s,
-    label: s === "resource" ? resourceWord : STEP_TITLE[s]?.replace("เลือก", "") ?? s,
+    label: s === "resource" ? resourceWord : s === "addons" ? "เพิ่มเติม" : STEP_TITLE[s]?.replace("เลือก", "") ?? s,
     value: valueLabel(s, selected[KEY[s]])
   }));
-  const estimate = priceEstimate(offerings.get(selected.offeringId), selected);
+  const estimate = priceEstimate(offerings.get(selected.offeringId), selected, addonInfo);
 
   const choose = (step, value) => run({ selected: { ...selected, [KEY[step]]: value }, changed: step });
   const showStep = (step) => run({ selected, ask: step });
@@ -221,6 +263,12 @@ export default function BookingV2Client({ shop, liffId }) {
       const result = await post(`${api}/bookings`, { selected, customer, lineIdToken: liff.idToken || undefined });
       setBooking(result);
     } catch (e) {
+      if (e.status === 409 && e.reason === "ADDON_UNAVAILABLE") {
+        setBusy(false);
+        await run({ selected, ask: "addons" });
+        setNotice("ตัวเลือกเสริมที่เลือกเพิ่งหมดไป กรุณาเลือกใหม่");
+        return;
+      }
       if (e.status === 409) {
         setBusy(false);
         await run({ selected: { ...selected, time: undefined }, ask: "time" });
@@ -325,7 +373,7 @@ export default function BookingV2Client({ shop, liffId }) {
               <h2>{ask === "resource" ? `เลือก${resourceWord}` : STEP_TITLE[ask]}</h2>
               {ask === "time" && selected.date && <p className="bk-muted">{formatDate(selected.date, { long: true })} · เวลาตามร้าน</p>}
             </div>
-            {view.options.length === 0 || !view.options.some((o) => o.available) ? (
+            {ask !== "addons" && (view.options.length === 0 || !view.options.some((o) => o.available)) ? (
               <p className="bk-empty">{ask === "time" ? "วันนี้ไม่มีเวลาว่างแล้ว" : "ไม่มีตัวเลือกที่ว่าง"} {view.reason ? `(${REASON_TEXT[view.reason] ?? view.reason})` : ""} — ลองเปลี่ยนตัวเลือกด้านบน</p>
             ) : null}
             {categories.length > 1 && (
@@ -337,7 +385,9 @@ export default function BookingV2Client({ shop, liffId }) {
                 ))}
               </div>
             )}
-            {ask === "date" ? (
+            {ask === "addons" ? (
+              <AddonsStep key={`${selected.date}-${selected.time}`} view={view} info={addonInfo} initial={selected.addons} busy={busy} onDone={(picks) => choose("addons", picks)} />
+            ) : ask === "date" ? (
               <DateStrip options={view.options} today={todayIn(shop.timezone)} optionProps={optionProps} />
             ) : ask === "time" ? (
               <div className="bk-time-groups">
@@ -387,6 +437,104 @@ export default function BookingV2Client({ shop, liffId }) {
         <PoweredBy />
       </main>
     </CustomerFrame>
+  );
+}
+
+// The extras for the chosen offering at the chosen time, grouped as the shop set them up. The engine
+// says which can still be taken (and how many); the customer picks, then goes on.
+function addonRule(g) {
+  if (g.maxSelect === 1) return g.minSelect >= 1 ? "ต้องเลือก 1 อย่าง" : "เลือกได้ 1 อย่าง";
+  if (g.minSelect > 0) return `ต้องเลือกอย่างน้อย ${g.minSelect} อย่าง`;
+  if (g.maxSelect) return `เลือกได้ไม่เกิน ${g.maxSelect} อย่าง`;
+  return "เลือกได้หลายอย่าง";
+}
+
+function addonPrice(a) {
+  if (!a) return "";
+  const amount = Number(a.amount);
+  const parts = [amount ? `+${money(amount)}${ADDON_UNIT[a.priceUnit] ?? ""}` : "ไม่มีค่าใช้จ่าย"];
+  if (a.addsMinutes) parts.push(`+${formatMinutes(a.addsMinutes)}`);
+  return parts.join(" · ");
+}
+
+function AddonsStep({ view, info, initial, busy, onDone }) {
+  const [picks, setPicks] = useState(() => Object.fromEntries(Object.entries(initial ?? {}).filter(([, q]) => q > 0)));
+  const groups = view.groups ?? [];
+  const inGroup = (id) => view.options.filter((o) => o.groupId === id);
+  const count = (id, from = picks) => inGroup(id).filter((o) => from[o.value] > 0).length;
+  const unmet = groups.filter((g) => count(g.id) < g.minSelect);
+
+  function toggle(g, o) {
+    setPicks((p) => {
+      const next = { ...p };
+      if (next[o.value] > 0) {
+        delete next[o.value];
+        return next;
+      }
+      if (g.maxSelect === 1) for (const x of inGroup(g.id)) delete next[x.value];
+      else if (g.maxSelect && count(g.id, p) >= g.maxSelect) return p;
+      next[o.value] = 1;
+      return next;
+    });
+  }
+
+  const setQuantity = (o, quantity) =>
+    setPicks((p) => {
+      const next = { ...p };
+      if (quantity <= 0) delete next[o.value];
+      else next[o.value] = Math.min(quantity, o.maxQuantity);
+      return next;
+    });
+
+  const chosen = Object.keys(picks).length;
+  return (
+    <div className="bk-addons">
+      {groups.map((g) => (
+        <fieldset key={g.id} className="bk-addon-group">
+          <legend>
+            {g.name} <small>{addonRule(g)}</small>
+          </legend>
+          {inGroup(g.id).map((o) => {
+            const a = info.get(o.value);
+            const on = picks[o.value] > 0;
+            const single = g.maxSelect === 1;
+            return (
+              <div key={o.value} className="bk-addon" data-selected={on} data-off={!o.available}>
+                <button
+                  type="button"
+                  role={single ? "radio" : "checkbox"}
+                  aria-checked={on}
+                  className="bk-addon-pick"
+                  data-testid="option-addons"
+                  data-value={o.value}
+                  disabled={busy || (!o.available && !on)}
+                  onClick={() => toggle(g, o)}
+                >
+                  <span className={single ? "bk-choice-mark bk-choice-round" : "bk-choice-mark"} aria-hidden="true" />
+                  <span className="bk-option-text">
+                    <strong>{o.label}</strong>
+                    {a?.description && <span className="bk-option-desc">{a.description}</span>}
+                    <span className="bk-muted">{addonPrice(a)}</span>
+                  </span>
+                  {!o.available && <small className="bk-reason">{REASON_TEXT[o.reason] ?? "ไม่ว่าง"}</small>}
+                </button>
+                {on && o.maxQuantity > 1 && (
+                  <span className="bk-stepper" role="group" aria-label={`จำนวน${o.label}`}>
+                    <button type="button" aria-label="ลดจำนวน" disabled={busy} onClick={() => setQuantity(o, picks[o.value] - 1)}>−</button>
+                    <output aria-live="polite">{picks[o.value]}</output>
+                    <button type="button" aria-label="เพิ่มจำนวน" disabled={busy || picks[o.value] >= o.maxQuantity} onClick={() => setQuantity(o, picks[o.value] + 1)}>+</button>
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </fieldset>
+      ))}
+      {unmet.length > 0 && <p className="bk-muted">ยังต้องเลือก: {unmet.map((g) => `${g.name} (${addonRule(g)})`).join(" · ")}</p>}
+      <button type="button" className="bk-primary" disabled={busy || unmet.length > 0} onClick={() => onDone(picks)}>
+        {chosen ? `ต่อไป · เพิ่ม ${chosen} อย่าง` : "ไม่เพิ่ม ไปต่อ"}
+      </button>
+    </div>
   );
 }
 

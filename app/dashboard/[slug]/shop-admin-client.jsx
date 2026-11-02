@@ -512,6 +512,7 @@ function BookingsTab({ slug, catalog, initialDay }) {
                     {b.partySize > 1 ? ` · ${b.partySize} คน` : ""}
                     {b.price ? ` · ${money(b.price)}` : ""}
                   </div>
+                  {b.addons?.length > 0 && <div className="ad-muted">+ {b.addons.map((a) => `${a.name}${a.quantity > 1 ? ` ×${a.quantity}` : ""}`).join(", ")}</div>}
                   <div className="ad-muted">
                     {b.customer.phone && <a className="ad-link" href={`tel:${b.customer.phone}`}>{b.customer.phone}</a>}
                     {b.customer.phone ? " · " : ""}
@@ -1388,7 +1389,7 @@ function AddonGroupEditor({ slug, catalog, initial, onSaved, onClose }) {
         <h2>{g.id ? "แก้กลุ่มตัวเลือกเสริม" : "กลุ่มตัวเลือกเสริมใหม่"}</h2>
         <button type="button" className="ad-link" onClick={onClose}>ปิด</button>
       </div>
-      <p className="ad-notice">ตั้งไว้ได้เลย · หน้าจองของลูกค้าจะเริ่มแสดงตัวเลือกเสริมในอัปเดตถัดไป</p>
+      <p className="ad-muted">ลูกค้าเห็นตัวเลือกเหล่านี้หลังเลือกเวลา · ตัวเลือกที่ใช้ของ/คน ระบบเช็กให้ว่ายังว่างพอ</p>
       <Locked>
       <div className="ad-grid">
         <label className="ad-field">ชื่อกลุ่ม<input required maxLength={80} placeholder="เช่น อุปกรณ์, ประกันภัย" value={g.name} onChange={(e) => set({ name: e.target.value })} /></label>

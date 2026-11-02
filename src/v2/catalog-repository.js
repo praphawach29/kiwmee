@@ -14,7 +14,7 @@ const localDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart
 async function loadCatalog(db, shop) {
   const id = shop.id;
   const q = async (sql) => (await db.query(sql, [id])).rows;
-  const [settings, flows, hours, closures, resources, schedules, timeOff, offerings, requirements, offeringResources, prices, busy] =
+  const [settings, flows, hours, closures, resources, schedules, timeOff, offerings, requirements, offeringResources, prices, busy, addonGroups, addonLinks, addons] =
     await Promise.all([
       q(`select min_lead_minutes, slot_interval_minutes, max_advance_days, hold_minutes,
                 customer_can_cancel, customer_can_reschedule, customer_change_cutoff_hours
@@ -33,7 +33,11 @@ async function loadCatalog(db, shop) {
       q("select offering_id, unit, amount::float8 as amount from public.price_rules where business_id = $1"),
       q(`select br.booking_id, br.resource_id, br.units, lower(br.range) as start_at, upper(br.range) as end_at, b.hold_expires_at
            from public.booking_resources br join public.bookings b on b.id = br.booking_id
-          where br.business_id = $1 and br.active and upper(br.range) > now()`)
+          where br.business_id = $1 and br.active and upper(br.range) > now()`),
+      q("select id, name, min_select, max_select, sort_order, active from public.addon_groups where business_id = $1 and active"),
+      q("select offering_id, group_id from public.offering_addon_groups where business_id = $1"),
+      q(`select id, group_id, name, description, media, price_unit, amount::float8 as amount, max_quantity, adds_minutes, uses_kind, sort_order, active
+           from public.addons where business_id = $1 and active`)
     ]);
 
   const withTimes = (rows) => rows.map((r) => ({ ...r, start_time: timeText(r.start_time), end_time: timeText(r.end_time) }));
@@ -50,7 +54,10 @@ async function loadCatalog(db, shop) {
     requirements,
     offeringResources,
     prices,
-    busy
+    busy,
+    addonGroups,
+    addonLinks,
+    addons
   };
 }
 

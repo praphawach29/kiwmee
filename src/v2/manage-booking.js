@@ -47,7 +47,11 @@ async function loadBooking(db, shop, token) {
                                                                            where q.offering_id = b.offering_id and q.kind = r.kind and q.customer_picks))
                                       order by r.sort_order, r.name)
                         from public.booking_resources br join public.resources r on r.id = br.resource_id
-                       where br.booking_id = b.id), '[]'::json) as resources,
+                       where br.booking_id = b.id and br.addon_id is null), '[]'::json) as resources,
+            coalesce((select json_agg(json_build_object('id', ba.addon_id, 'name', ba.name, 'quantity', ba.quantity,
+                                                        'total', ba.total, 'adds_minutes', ad.adds_minutes) order by ba.name)
+                        from public.booking_addons ba join public.addons ad on ad.id = ba.addon_id
+                       where ba.booking_id = b.id), '[]'::json) as addons,
             coalesce(s.customer_can_cancel, true) as can_cancel, coalesce(s.customer_can_reschedule, true) as can_reschedule,
             coalesce(s.customer_change_cutoff_hours, 2) as cutoff_hours
        from public.bookings b
@@ -88,7 +92,8 @@ async function findManaged(db, slug, token, now = new Date()) {
       holdExpiresAt: b.hold_expires_at,
       offering: { id: b.offering_id, name: b.offering_name },
       customerName: b.customer_name,
-      resources: b.resources.map((r) => ({ name: r.name, kind: r.kind }))
+      resources: b.resources.map((r) => ({ name: r.name, kind: r.kind })),
+      addons: b.addons.map((a) => ({ name: a.name, quantity: a.quantity, total: Number(a.total) }))
     },
     cancel: policy(b.can_cancel),
     reschedule: policy(b.can_reschedule),
@@ -103,7 +108,10 @@ function selectedFrom(b) {
   const picked = b.resources.find((r) => r.picked);
   const selected = { offeringId: b.offering_id, partySize: b.party_size };
   if (picked) selected.resourceId = picked.id;
-  if (b.duration_mode === "customer_choice") selected.durationMinutes = Math.round((new Date(b.end_at) - new Date(b.start_at)) / 60000);
+  const extra = b.addons.reduce((sum, a) => sum + (a.adds_minutes || 0) * a.quantity, 0);
+  if (b.duration_mode === "customer_choice") selected.durationMinutes = Math.round((new Date(b.end_at) - new Date(b.start_at)) / 60000) - extra;
+  // the add-ons move with the booking, so the new time must have room for them too
+  if (b.addons.length) selected.addons = Object.fromEntries(b.addons.map((a) => [a.id, a.quantity]));
   return selected;
 }
 
@@ -120,6 +128,10 @@ async function manageOptions(db, slug, token, body = {}, now = new Date()) {
   const catalog = await loadCatalog(db, shop);
   if (!catalog.offerings.some((o) => o.id === b.offering_id)) return { ask: body.ask, options: [], reason: "NOT_OFFERED" };
   if (selected.resourceId && !catalog.resources.some((r) => r.id === selected.resourceId)) delete selected.resourceId;
+  // an add-on the shop has since switched off still moves with the booking, but cannot be checked here
+  if (selected.addons) {
+    selected.addons = Object.fromEntries(Object.entries(selected.addons).filter(([id]) => catalog.addons.some((a) => a.id === id)));
+  }
   const result = getOptions(catalog, { ask: body.ask, selected, now, excludeBookingId: b.id });
   return {
     ask: body.ask,

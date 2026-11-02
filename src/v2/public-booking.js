@@ -13,7 +13,7 @@ const { getOptions, nextStep, reconcile, localToMs } = require("./options-engine
 const { issueToken } = require("./manage-booking");
 const { getSetting } = require("./platform-settings");
 
-const ASKABLE = ["offering", "resource", "date", "time", "duration", "party"];
+const ASKABLE = ["offering", "resource", "date", "time", "duration", "party", "addons"];
 const SELECTED_KEYS = ["offeringId", "resourceId", "date", "time", "durationMinutes", "partySize"];
 
 async function requireShop(db, slug) {
@@ -41,6 +41,16 @@ function cleanSelected(input) {
       throw badRequest(`${key} must be text`);
     }
     out[key] = value;
+  }
+  // add-ons: { "<addon id>": quantity }
+  const addons = input?.addons;
+  if (addons !== undefined && addons !== null) {
+    if (typeof addons !== "object" || Array.isArray(addons) || Object.keys(addons).length > 50) throw badRequest("addons must be an object");
+    out.addons = {};
+    for (const [id, quantity] of Object.entries(addons)) {
+      if (!/^[0-9a-f-]{36}$/i.test(id) || !Number.isInteger(quantity) || quantity < 0 || quantity > 1000) throw badRequest("addons must map ids to whole numbers");
+      if (quantity > 0) out.addons[id] = quantity;
+    }
   }
   return out;
 }
@@ -107,7 +117,33 @@ async function shopInfo(db, slug) {
     resources: catalog.resources
       .filter((r) => pickable.has(r.id))
       .sort(bySort)
-      .map((r) => ({ id: r.id, name: r.name, kind: r.kind, media: gallery.resource_media[r.id] ?? [] }))
+      .map((r) => ({ id: r.id, name: r.name, kind: r.kind, media: gallery.resource_media[r.id] ?? [] })),
+    // optional extras (design §11) for the page to show and price; which ones can be taken at the
+    // chosen time comes from step() (ask "addons")
+    addonGroups: [...catalog.addonGroups]
+      .sort(bySort)
+      .map((g) => ({
+        id: g.id,
+        name: g.name,
+        minSelect: g.min_select,
+        maxSelect: g.max_select,
+        sortOrder: g.sort_order,
+        offeringIds: catalog.addonLinks.filter((l) => l.group_id === g.id).map((l) => l.offering_id),
+        addons: catalog.addons
+          .filter((a) => a.group_id === g.id)
+          .sort(bySort)
+          .map((a) => ({
+            id: a.id,
+            name: a.name,
+            description: a.description,
+            media: a.media,
+            priceUnit: a.price_unit,
+            amount: a.amount,
+            maxQuantity: a.max_quantity,
+            addsMinutes: a.adds_minutes
+          }))
+      }))
+      .filter((g) => g.addons.length > 0 && g.offeringIds.length > 0)
   };
 }
 
@@ -138,7 +174,7 @@ async function step(db, slug, body = {}, now = new Date()) {
   // reason) once the customer picks.
   const narrowBy = body.ask !== undefined && (ask === "offering" || ask === "date") ? { ...selected, resourceId: undefined } : selected;
   const result = ask ? getOptions(catalog, { ask, selected: narrowBy, now }) : { options: null, reason: null };
-  return { selected, cleared, next, ask, options: result.options, reason: result.reason };
+  return { selected, cleared, next, ask, options: result.options, reason: result.reason, ...(result.groups ? { groups: result.groups } : {}) };
 }
 
 const THAI_PHONE = /^0\d{8,9}$/;
@@ -174,7 +210,7 @@ async function book(db, slug, body = {}, { now = new Date(), verifyLineToken = (
   const link = issueToken();
   try {
     const { rows } = await db.query(
-      "select public.booking_attach_manage_token(public.create_booking($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9), $10) as booking",
+      "select public.booking_attach_manage_token(public.create_booking($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, null, $11::jsonb), $10) as booking",
       [
         shop.id,
         selected.offeringId,
@@ -185,11 +221,12 @@ async function book(db, slug, body = {}, { now = new Date(), verifyLineToken = (
         selected.partySize ?? 1,
         hold,
         line ? "liff" : "web",
-        link.hash
+        link.hash,
+        JSON.stringify(selected.addons ?? {})
       ]
     );
     const b = rows[0].booking;
-    const ids = b.resources.map((r) => r.resource_id);
+    const ids = b.resources.filter((r) => !r.addon_id).map((r) => r.resource_id); // a rented racket is not "the stylist"
     const names = (await db.query("select id, name from public.resources where business_id = $1 and id = any($2::uuid[])", [shop.id, ids])).rows;
     return {
       id: b.id,
@@ -199,6 +236,7 @@ async function book(db, slug, body = {}, { now = new Date(), verifyLineToken = (
       holdExpiresAt: b.hold_expires_at,
       price: b.price,
       manageToken: link.token,
+      addons: (b.addons ?? []).map((a) => ({ id: a.addon_id, name: a.name, quantity: a.quantity, total: Number(a.total) })),
       resources: ids.map((id) => ({ id, name: names.find((n) => n.id === id)?.name ?? null }))
     };
   } catch (error) {

@@ -34,7 +34,10 @@ const REASON_TEXT = {
   NOT_IN_PAST: "เวลานี้ยังไม่ถึง บันทึกเป็นการจองปกติแทน",
   BILL_CLOSED: "การจองนี้ปิดบิลแล้ว ย้อนสถานะไม่ได้ (ใช้คืนเงินแทน)",
   NOT_CHANGEABLE: "การจองนี้เปลี่ยนสถานะแบบนี้ไม่ได้แล้ว",
-  NOT_FOUND: "ไม่พบการจองนี้"
+  NOT_FOUND: "ไม่พบการจองนี้",
+  ADDON_UNAVAILABLE: "ของ/คนที่ตัวเลือกเสริมต้องใช้ไม่ว่างในเวลานั้น",
+  ADDON_INVALID: "ตัวเลือกเสริมนี้ใช้กับบริการนี้ไม่ได้ หรือเลือกเกินจำนวน",
+  ADDON_GROUP_RULE: "จำนวนตัวเลือกเสริมที่เลือกเกินที่กลุ่มกำหนด"
 };
 
 function rpcError(error) {
@@ -100,7 +103,9 @@ async function listBookings(client, shop, { from, days = 1 } = {}) {
                from public.bills bl where bl.booking_id = b.id and bl.status <> 'void') as bill,
             coalesce((select json_agg(json_build_object('id', r.id, 'name', r.name, 'kind', r.kind) order by r.sort_order, r.name)
                         from public.booking_resources br join public.resources r on r.id = br.resource_id
-                       where br.booking_id = b.id), '[]'::json) as resources
+                       where br.booking_id = b.id and br.addon_id is null), '[]'::json) as resources,
+            coalesce((select json_agg(json_build_object('name', ba.name, 'quantity', ba.quantity, 'total', ba.total) order by ba.name)
+                        from public.booking_addons ba where ba.booking_id = b.id), '[]'::json) as addons
        from public.bookings b
        join public.offerings o on o.id = b.offering_id
        join public.customers c on c.id = b.customer_id
@@ -129,6 +134,7 @@ async function listBookings(client, shop, { from, days = 1 } = {}) {
       offering: { id: b.offering_id, name: b.offering_name },
       customer: { name: b.customer_name, phone: b.customer_phone, fromLine: b.from_line },
       resources: b.resources,
+      addons: b.addons.map((a) => ({ name: a.name, quantity: a.quantity, total: Number(a.total) })),
       // the customer already has a link (from booking online, or one the shop sent)
       hasLink: b.has_link
     };

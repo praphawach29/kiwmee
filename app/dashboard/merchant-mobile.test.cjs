@@ -80,6 +80,6 @@ test('add-on group editor: pick rule, offerings to tick, and each add-on with pr
   assert.match(html, /value="เช่าไม้"/);
   assert.match(html, /<option value="per_unit" selected="">บาท ต่อชิ้น/);
   assert.match(html, /<option value="ไม้แบด" selected="">ไม้แบด/);
-  assert.match(html, /หน้าจองของลูกค้าจะเริ่มแสดงตัวเลือกเสริมในอัปเดตถัดไป/);
+  assert.match(html, /ลูกค้าเห็นตัวเลือกเหล่านี้หลังเลือกเวลา/);
   assert.doesNotMatch(html, /ยังไม่มีไม้แบดที่เปิดอยู่/);
 });

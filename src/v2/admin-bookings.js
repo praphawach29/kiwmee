@@ -269,6 +269,38 @@ async function confirmDeposit(client, shop, id, input = {}) {
   return { id, status: "confirmed" };
 }
 
+/**
+ * The LINE card for a booking whose customer booked inside LINE: { to, card } or null (no LINE id).
+ * Read as the signed-in member; sending is the caller's job (it needs the platform's token).
+ */
+async function lineCard(client, shop, id, kind) {
+  const { rows } = await client.query(
+    `select b.start_at, b.end_at, (b.price_snapshot->>'total')::float8 as total, o.name as offering, c.line_user_id,
+            coalesce((select array_agg(r.name order by r.sort_order, r.name) from public.booking_resources br
+                        join public.resources r on r.id = br.resource_id
+                       where br.booking_id = b.id and br.addon_id is null), '{}') as resources,
+            coalesce((select json_agg(json_build_object('name', ba.name, 'quantity', ba.quantity) order by ba.name)
+                        from public.booking_addons ba where ba.booking_id = b.id), '[]'::json) as addons
+       from public.bookings b
+       join public.offerings o on o.id = b.offering_id
+       join public.customers c on c.id = b.customer_id
+      where b.id = $1 and b.business_id = $2`,
+    [id, shop.id]
+  );
+  const b = rows[0];
+  if (!b?.line_user_id) return null;
+  const { bookingCard } = require("./line-notify");
+  return {
+    to: b.line_user_id,
+    card: bookingCard({
+      kind,
+      shop: { name: shop.name, timezone: shop.timezone },
+      booking: { offering: b.offering, startAt: b.start_at, endAt: b.end_at, resources: b.resources, addons: b.addons, total: b.total ?? 0, deposit: null },
+      link: null
+    })
+  };
+}
+
 /** A slip the customer sent (newest first: n = 0), as stored: WebP bytes, or null */
 async function getSlip(client, shop, id, n = 0) {
   await ownBooking(client, shop, id);
@@ -280,4 +312,4 @@ async function getSlip(client, shop, id, n = 0) {
   return rows[0] ? { image: rows[0].image, createdAt: rows[0].created_at, total: rows[0].total } : null;
 }
 
-module.exports = { listBookings, freeTimes, createBooking, rescheduleBooking, cancelBooking, setStatus, issueManageLink, confirmDeposit, getSlip, REASON_TEXT };
+module.exports = { listBookings, freeTimes, createBooking, rescheduleBooking, cancelBooking, setStatus, issueManageLink, confirmDeposit, getSlip, lineCard, REASON_TEXT };

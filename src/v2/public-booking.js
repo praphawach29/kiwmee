@@ -12,6 +12,7 @@ const { findShop, loadCatalog } = require("./catalog-repository");
 const { getOptions, nextStep, reconcile, localToMs } = require("./options-engine");
 const { issueToken } = require("./manage-booking");
 const { getSetting } = require("./platform-settings");
+const { bookingCard, manageLink, pushLine } = require("./line-notify");
 
 const ASKABLE = ["offering", "resource", "date", "time", "duration", "party", "addons"];
 const SELECTED_KEYS = ["offeringId", "resourceId", "date", "time", "durationMinutes", "partySize"];
@@ -187,7 +188,12 @@ const THAI_PHONE = /^0\d{8,9}$/;
  * body = { selected, customer: { name, phone }, lineIdToken? }
  * verifyLineToken(idToken) → { sub, name } | null, injected so tests need no network.
  */
-async function book(db, slug, body = {}, { now = new Date(), verifyLineToken = (token) => verifyLineIdToken(token, db) } = {}) {
+async function book(
+  db,
+  slug,
+  body = {},
+  { now = new Date(), verifyLineToken = (token) => verifyLineIdToken(token, db), notifyLine = (to, messages) => pushLine(db, to, messages), origin = null } = {}
+) {
   const shop = await requireShop(db, slug);
   const catalog = await loadCatalog(db, shop);
   const selected = cleanSelected(body.selected);
@@ -213,6 +219,7 @@ async function book(db, slug, body = {}, { now = new Date(), verifyLineToken = (
   const hold = (catalog.flow.then || []).includes("payment") || (catalog.settings?.deposit_mode ?? "none") !== "none";
   // the customer's link to see, cancel or move this booking (/b/<slug>/manage/<token>)
   const link = issueToken();
+  let result;
   try {
     const { rows } = await db.query(
       "select public.booking_attach_manage_token(public.create_booking($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, null, $11::jsonb), $10) as booking",
@@ -233,7 +240,7 @@ async function book(db, slug, body = {}, { now = new Date(), verifyLineToken = (
     const b = rows[0].booking;
     const ids = b.resources.filter((r) => !r.addon_id).map((r) => r.resource_id); // a rented racket is not "the stylist"
     const names = (await db.query("select id, name from public.resources where business_id = $1 and id = any($2::uuid[])", [shop.id, ids])).rows;
-    return {
+    result = {
       id: b.id,
       status: b.status,
       startAt: b.start_at,
@@ -250,6 +257,31 @@ async function book(db, slug, body = {}, { now = new Date(), verifyLineToken = (
   } catch (error) {
     throw bookingError(error);
   }
+
+  // Booked inside LINE: the card goes to the customer's chat with Kiwmee's OA (never fails the booking)
+  if (line) {
+    try {
+      const card = bookingCard({
+        kind: result.status === "held" ? "held" : "booked",
+        shop: { name: shop.name, timezone: shop.timezone },
+        booking: {
+          offering: catalog.offerings.find((o) => o.id === selected.offeringId)?.name ?? "นัดหมาย",
+          startAt: result.startAt,
+          endAt: result.endAt,
+          resources: result.resources.map((r) => r.name).filter(Boolean),
+          addons: result.addons,
+          total: Number(result.price?.total ?? 0),
+          deposit: result.deposit ? { due: result.deposit.due, holdExpiresAt: result.holdExpiresAt } : null
+        },
+        link: await manageLink(db, { slug: shop.slug, token: result.manageToken, origin })
+      });
+      result.line = await notifyLine(line.sub, [card]);
+    } catch (error) {
+      console.error("[line-notify] card not sent:", error.message);
+      result.line = { sent: false, reason: "ERROR" };
+    }
+  }
+  return result;
 }
 
 // create_booking reports why in the message, with BK409 / BK422 / BK404 as the code

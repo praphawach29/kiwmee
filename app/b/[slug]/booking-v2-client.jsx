@@ -344,8 +344,8 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     return (
       <div key={String(o.value)} className="bk-option-wrap">
         {button}
-        <button type="button" className="bk-details-link" onClick={() => setDetails(o)} aria-label={`รายละเอียด ${offering.name}`}>
-          รายละเอียด
+        <button type="button" className="bk-details-link" onClick={() => setDetails(o)} aria-label={`รายละเอียด ${offering.name}`} title="รายละเอียด">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5" /><path d="M12 11v6" /><circle cx="12" cy="7.5" r=".6" fill="currentColor" /></svg>
         </button>
       </div>
     );

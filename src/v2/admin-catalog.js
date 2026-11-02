@@ -11,6 +11,7 @@
 const { AppError, badRequest, forbidden, notFound } = require("../errors");
 const { validateMedia } = require("./media-validation");
 const { AMENITY_CODES } = require("./amenities");
+const { validMapUrl } = require("./directions");
 
 const SHOP_KINDS = ["salon", "barber", "spa", "court", "other"];
 const UNITS = ["per_booking", "per_hour", "per_person"];
@@ -183,7 +184,7 @@ async function memberShop(client, slug, { owner = false } = {}) {
 /** Everything the admin page edits, for one shop. */
 async function getCatalog(client, shop) {
   const queries = [
-    "select name, kind, media, amenities, about from public.businesses where id = $1",
+    "select name, kind, media, amenities, about, address, map_url from public.businesses where id = $1",
     `select min_lead_minutes, slot_interval_minutes, max_advance_days, hold_minutes,
             customer_can_cancel, customer_can_reschedule, customer_change_cutoff_hours,
             deposit_mode, deposit_value::float8 as deposit_value, payment_info, line_reminders
@@ -232,7 +233,7 @@ async function getCatalog(client, shop) {
   const dayHours = (d) => hours.find((h) => h.day_of_week === d) ?? (hours.length ? null : { is_open: true, open_time: "10:00", close_time: "19:00" });
 
   return {
-    shop: { slug: shop.slug, name: current.name, kind: current.kind, timezone: shop.timezone, role: shop.role, media: current.media, amenities: current.amenities ?? [], about: current.about ?? "" },
+    shop: { slug: shop.slug, name: current.name, kind: current.kind, timezone: shop.timezone, role: shop.role, media: current.media, amenities: current.amenities ?? [], about: current.about ?? "", address: current.address ?? "", mapUrl: current.map_url ?? "" },
     settings: {
       minLeadMinutes: s.min_lead_minutes,
       slotIntervalMinutes: s.slot_interval_minutes,
@@ -387,6 +388,23 @@ function shopAbout(value) {
   return about;
 }
 
+function shopAddress(value) {
+  if (value === undefined) return undefined;
+  if (value !== null && typeof value !== "string") throw invalid("ที่อยู่ร้านต้องเป็นข้อความ");
+  const address = (value ?? "").trim().replace(/\s+/g, " ");
+  if (address.length > 300) throw invalid("ที่อยู่ร้านยาวได้ไม่เกิน 300 ตัวอักษร");
+  return address;
+}
+
+// a map link pasted from Google Maps / Apple Maps (src/v2/directions.js); "" clears it
+function shopMapUrl(value) {
+  if (value === undefined) return undefined;
+  if (value === null || (typeof value === "string" && !value.trim())) return "";
+  const url = validMapUrl(value);
+  if (!url) throw invalid("ลิงก์แผนที่ต้องเป็นลิงก์จาก Google Maps หรือ Apple Maps (https://…)");
+  return url;
+}
+
 /** Name, type, booking rules and opening hours. */
 async function saveShop(client, shop, input = {}) {
   const name = text(input.name, "ชื่อร้าน");
@@ -394,13 +412,18 @@ async function saveShop(client, shop, input = {}) {
   const media = validateMedia(input.media);
   const amenities = shopAmenities(input.amenities);
   const about = shopAbout(input.about);
+  const address = shopAddress(input.address);
+  const mapUrl = shopMapUrl(input.mapUrl);
   // SQL NULL means omitted (keep what is there); an explicit [] / "" clears it. No read/write race.
   await client.query(
     `update public.businesses set name = $2, kind = $3, media = coalesce($4::jsonb, media),
             amenities = coalesce($5::text[], amenities),
-            about = case when $6::boolean then nullif($7, '') else about end
+            about = case when $6::boolean then nullif($7, '') else about end,
+            address = case when $8::boolean then nullif($9, '') else address end,
+            map_url = case when $10::boolean then nullif($11, '') else map_url end
       where id = $1`,
-    [shop.id, name, kind, media === undefined ? null : JSON.stringify(media), amenities ?? null, about !== undefined, about ?? null]
+    [shop.id, name, kind, media === undefined ? null : JSON.stringify(media), amenities ?? null, about !== undefined, about ?? null,
+     address !== undefined, address ?? null, mapUrl !== undefined, mapUrl ?? null]
   );
 
   if (input.settings !== undefined) {

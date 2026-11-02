@@ -11,6 +11,7 @@ const { findShop } = require("./catalog-repository");
 const { verifyLineIdToken } = require("./public-booking");
 const { openLink } = require("./line-notify");
 const { msToLocal } = require("./options-engine");
+const { directionsLink } = require("./directions");
 
 const UPCOMING = ["held", "pending", "confirmed", "checked_in"];
 const PAST_LIMIT = 20;
@@ -65,7 +66,7 @@ async function myBookings(db, slug, body = {}, { now = new Date(), verifyLineTok
   };
   const all = rows.map(item);
   return {
-    shop: { slug: shop.slug, name: shop.name },
+    shop: { slug: shop.slug, name: shop.name, directions: directionsLink({ address: shop.address, mapUrl: shop.map_url }) },
     // soonest first
     upcoming: all.filter((x) => x.upcoming).map((x) => x.booking).reverse(),
     // latest first

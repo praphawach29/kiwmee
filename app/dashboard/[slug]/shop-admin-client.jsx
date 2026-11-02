@@ -1924,7 +1924,7 @@ function DaysOff({ title, items, add, remove, onSaved }) {
 }
 
 function HoursTab({ slug, catalog, onSaved }) {
-  const initial = useMemo(() => ({ name: catalog.shop.name, kind: catalog.shop.kind, media: catalog.shop.media ?? [], amenities: catalog.shop.amenities ?? [], about: catalog.shop.about ?? "", settings: catalog.settings, hours: catalog.hours }), [catalog]);
+  const initial = useMemo(() => ({ name: catalog.shop.name, kind: catalog.shop.kind, media: catalog.shop.media ?? [], amenities: catalog.shop.amenities ?? [], about: catalog.shop.about ?? "", address: catalog.shop.address ?? "", mapUrl: catalog.shop.mapUrl ?? "", settings: catalog.settings, hours: catalog.hours }), [catalog]);
   const [form, setForm] = useState(initial);
   useEffect(() => setForm(initial), [initial]);
   const save = useSave();
@@ -1959,6 +1959,15 @@ function HoursTab({ slug, catalog, onSaved }) {
         <label className="ad-field">
           เกี่ยวกับร้าน (ไม่บังคับ · ลูกค้าเห็นในหน้าจอง)
           <textarea rows={3} maxLength={1000} value={form.about} placeholder="เช่น สนามหญ้าเทียมมาตรฐาน 7 คน เปิดถึงเที่ยงคืน ใกล้ BTS" onChange={(e) => setForm({ ...form, about: e.target.value })} />
+        </label>
+        <label className="ad-field">
+          ที่อยู่ร้าน (ลูกค้าเห็นในหน้าจอง และใช้กับปุ่ม “นำทางไปร้าน”)
+          <textarea rows={2} maxLength={300} value={form.address} placeholder="เช่น 99/9 ซ.สุขุมวิท 77 แขวงอ่อนนุช เขตสวนหลวง กรุงเทพฯ" onChange={(e) => setForm({ ...form, address: e.target.value })} />
+        </label>
+        <label className="ad-field">
+          ลิงก์แผนที่ (ไม่บังคับ · แม่นกว่าที่อยู่)
+          <input type="url" inputMode="url" maxLength={500} value={form.mapUrl} placeholder="https://maps.app.goo.gl/…" onChange={(e) => setForm({ ...form, mapUrl: e.target.value })} />
+          <span className="ad-muted">เปิด Google Maps → ค้นหาร้าน → แชร์ → คัดลอกลิงก์ แล้ววางที่นี่ · ไม่ใส่ ปุ่มนำทางจะค้นหาจากที่อยู่</span>
         </label>
         <div className="ad-field">
           สิ่งอำนวยความสะดวก (ลูกค้าเห็นเป็นไอคอนในหน้าจอง)

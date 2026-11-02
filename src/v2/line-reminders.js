@@ -7,6 +7,7 @@
 // day-before card, the confirmation card just went out), and a moved booking is reminded again.
 
 const { bookingCard, manageLink, openLink, pushLine } = require("./line-notify");
+const { directionsLink } = require("./directions");
 
 const KINDS = [
   // kind, from (before the start), until (before the start)
@@ -17,7 +18,7 @@ const KINDS = [
 async function dueReminders(db, now, limit) {
   const { rows } = await db.query(
     `select b.id, b.business_id, k.kind, b.start_at, b.end_at, (b.price_snapshot->>'total')::float8 as total, b.line_manage_token,
-            o.name as offering, c.line_user_id, biz.name as shop_name, biz.slug, biz.timezone,
+            o.name as offering, c.line_user_id, biz.name as shop_name, biz.slug, biz.timezone, biz.address, biz.map_url,
             coalesce((select array_agg(r.name order by r.sort_order, r.name) from public.booking_resources br
                         join public.resources r on r.id = br.resource_id
                        where br.booking_id = b.id and br.addon_id is null), '{}') as resources,
@@ -77,7 +78,8 @@ async function sendDueReminders(db, { now = new Date(), push = (to, messages) =>
           total: r.total ?? 0,
           deposit: null
         },
-        link: token ? await manageLink(db, { slug: r.slug, token }, { env }) : null
+        link: token ? await manageLink(db, { slug: r.slug, token }, { env }) : null,
+        directions: directionsLink({ address: r.address, mapUrl: r.map_url })
       });
       result = await push(r.line_user_id, [card]);
     } catch (error) {

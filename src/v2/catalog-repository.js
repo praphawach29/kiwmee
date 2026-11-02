@@ -2,7 +2,7 @@
 
 async function findShop(db, slug) {
   if (typeof slug !== "string" || !/^[a-z0-9][a-z0-9-]{1,40}$/.test(slug)) return null;
-  const { rows } = await db.query("select id, slug, name, kind, timezone from public.businesses where slug = $1", [slug]);
+  const { rows } = await db.query("select id, slug, name, kind, timezone, address, map_url from public.businesses where slug = $1", [slug]);
   return rows[0] ?? null;
 }
 
@@ -76,7 +76,7 @@ async function findShopWithCatalog(db, slug) {
   if (typeof slug !== "string" || !/^[a-z0-9][a-z0-9-]{1,40}$/.test(slug)) return null;
   const { rows } = await db.query(
     `select row_to_json(s) as shop, ${catalogSql("s.id")} as catalog
-       from (select id, slug, name, kind, timezone from public.businesses where slug = $1) s`,
+       from (select id, slug, name, kind, timezone, address, map_url from public.businesses where slug = $1) s`,
     [slug]
   );
   if (!rows[0]) return null;

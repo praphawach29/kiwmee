@@ -26,5 +26,10 @@ export default async function ShopBookingPage({ params }) {
   const { slug } = await params;
   const shop = await loadShop(slug);
   if (!shop) notFound();
-  return <BookingV2Client shop={shop} liffId={(await platformSettings.getSetting(v2db.getBookingPool(), "line.liff_id")) || null} />;
+  // the first step comes with the page, so the customer sees choices without waiting for a second request
+  const [liffId, first] = await Promise.all([
+    platformSettings.getSetting(v2db.getBookingPool(), "line.liff_id"),
+    publicBooking.step(v2db.getBookingPool(), slug, { selected: {} }).catch(() => null)
+  ]);
+  return <BookingV2Client shop={shop} liffId={liffId || null} initialView={first} />;
 }

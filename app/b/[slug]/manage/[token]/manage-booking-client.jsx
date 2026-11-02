@@ -218,6 +218,7 @@ export default function ManageBookingClient({ token, initial }) {
                   data-selected={pick.date === o.value}
                   aria-pressed={pick.date === o.value}
                   disabled={busy || !o.available}
+                  data-unavailable={!o.available || undefined}
                   onClick={() => chooseDate(o.value)}
                 >
                   <span className="bk-day-label">{new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", weekday: "short" }).format(new Date(`${o.value}T00:00:00Z`))}</span>
@@ -248,6 +249,7 @@ export default function ManageBookingClient({ token, initial }) {
                         data-selected={pick.time === o.value}
                         aria-pressed={pick.time === o.value}
                         disabled={busy || current}
+                        data-unavailable={current || undefined}
                         onClick={() => setPick({ ...pick, time: o.value })}
                       >
                         <strong>{o.value}</strong>

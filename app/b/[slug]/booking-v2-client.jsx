@@ -176,13 +176,14 @@ function useLiff(liffId) {
   return liff;
 }
 
-export default function BookingV2Client({ shop, liffId }) {
+export default function BookingV2Client({ shop, liffId, initialView = null }) {
   const api = `/api/b/${shop.slug}`;
-  const [selected, setSelected] = useState({});
-  const [view, setView] = useState(null); // { next, ask, options, reason }
+  const [selected, setSelected] = useState(() => initialView?.selected ?? {});
+  const [view, setView] = useState(initialView); // { next, ask, options, reason }
+  const [pending, setPending] = useState(null); // { step, value } tapped, waiting for the server
   const [notice, setNotice] = useState(null);
   const [error, setError] = useState(null);
-  const [busy, setBusy] = useState(true);
+  const [busy, setBusy] = useState(!initialView);
   const [customer, setCustomer] = useState({ name: "", phone: "" });
   const [booking, setBooking] = useState(null);
   const liff = useLiff(liffId);
@@ -237,14 +238,16 @@ export default function BookingV2Client({ shop, liffId }) {
         setError(e.message);
       } finally {
         setBusy(false);
+        setPending(null);
       }
     },
     [api, valueLabel]
   );
 
+  // the server sends the first step with the page; fetch it only if that did not work
   useEffect(() => {
-    run({ selected: {} });
-  }, [run]);
+    if (!initialView) run({ selected: {} });
+  }, [run, initialView]);
 
   const [category, setCategory] = useState(null);
   const summaryItems = SUMMARY_ORDER.filter((s) => selected[KEY[s]] !== undefined).map((s) => ({
@@ -254,8 +257,15 @@ export default function BookingV2Client({ shop, liffId }) {
   }));
   const estimate = priceEstimate(offerings.get(selected.offeringId), selected, addonInfo);
 
-  const choose = (step, value) => run({ selected: { ...selected, [KEY[step]]: value }, changed: step });
-  const showStep = (step) => run({ selected, ask: step });
+  // the tapped choice lights up at once; the server's answer follows
+  const choose = (step, value) => {
+    setPending({ step, value });
+    return run({ selected: { ...selected, [KEY[step]]: value }, changed: step });
+  };
+  const showStep = (step) => {
+    setPending({ step: "show", value: step });
+    return run({ selected, ask: step });
+  };
 
   async function submit(event) {
     event.preventDefault();
@@ -303,13 +313,16 @@ export default function BookingV2Client({ shop, liffId }) {
   const categories = ask === "offering" ? [...new Set((view?.options ?? []).map((o) => offerings.get(o.value)?.category).filter(Boolean))] : [];
   const shownOptions = (view?.options ?? []).filter((o) => ask !== "offering" || !category || categories.length < 2 || offerings.get(o.value)?.category === category);
   const optionProps = (o) => {
-    const chosen = selected[KEY[ask]] === o.value;
+    const tapped = pending?.step === ask && pending.value === o.value;
+    const chosen = pending?.step === ask ? tapped : selected[KEY[ask]] === o.value;
     return {
       type: "button",
       className: "bk-option",
       "data-testid": `option-${ask}`,
       "data-value": o.value === null ? "any" : String(o.value),
       "data-selected": chosen,
+      "data-pending": tapped || undefined,
+      "data-unavailable": !o.available || undefined,
       "aria-pressed": chosen,
       disabled: busy || !o.available,
       onClick: () => choose(ask, o.value)
@@ -332,7 +345,7 @@ export default function BookingV2Client({ shop, liffId }) {
         {!atCustomer && summaryItems.length > 0 && (
           <nav className="bk-chips" aria-label="ที่เลือกไว้">
             {summaryItems.map((item) => (
-              <button key={item.step} type="button" className="bk-chip" data-active={ask === item.step} onClick={() => showStep(item.step)} disabled={busy}>
+              <button key={item.step} type="button" className="bk-chip" data-active={ask === item.step} data-pending={(pending?.step === "show" && pending.value === item.step) || undefined} onClick={() => showStep(item.step)} disabled={busy}>
                 <span>{item.step === "date" ? shortDate(selected.date) : item.value}</span>
                 <small>เปลี่ยน</small>
               </button>
@@ -356,7 +369,7 @@ export default function BookingV2Client({ shop, liffId }) {
             <h2>เริ่มจองจาก</h2>
             <div className="bk-start">
               {next.choices.map((c) => (
-                <button key={c} type="button" className="bk-start-button" onClick={() => showStep(c)} disabled={busy}>
+                <button key={c} type="button" className="bk-start-button" data-pending={(pending?.step === "show" && pending.value === c) || undefined} onClick={() => showStep(c)} disabled={busy}>
                   <span className="bk-start-icon" aria-hidden="true">{c === "date" ? "▦" : c === "offering" ? "✂" : "☺"}</span>
                   <span className="bk-start-text">
                     <strong>{c === "date" ? "เลือกวันก่อน" : c === "offering" ? "เลือกบริการก่อน" : `เลือก${resourceWord}ก่อน`}</strong>

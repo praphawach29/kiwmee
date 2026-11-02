@@ -10,6 +10,7 @@
 
 const { AppError, badRequest, forbidden, notFound } = require("../errors");
 const { validateMedia } = require("./media-validation");
+const { AMENITY_CODES } = require("./amenities");
 
 const SHOP_KINDS = ["salon", "barber", "spa", "court", "other"];
 const UNITS = ["per_booking", "per_hour", "per_person"];
@@ -182,7 +183,7 @@ async function memberShop(client, slug, { owner = false } = {}) {
 /** Everything the admin page edits, for one shop. */
 async function getCatalog(client, shop) {
   const queries = [
-    "select name, kind, media from public.businesses where id = $1",
+    "select name, kind, media, amenities, about from public.businesses where id = $1",
     `select min_lead_minutes, slot_interval_minutes, max_advance_days, hold_minutes,
             customer_can_cancel, customer_can_reschedule, customer_change_cutoff_hours,
             deposit_mode, deposit_value::float8 as deposit_value, payment_info, line_reminders
@@ -231,7 +232,7 @@ async function getCatalog(client, shop) {
   const dayHours = (d) => hours.find((h) => h.day_of_week === d) ?? (hours.length ? null : { is_open: true, open_time: "10:00", close_time: "19:00" });
 
   return {
-    shop: { slug: shop.slug, name: current.name, kind: current.kind, timezone: shop.timezone, role: shop.role, media: current.media },
+    shop: { slug: shop.slug, name: current.name, kind: current.kind, timezone: shop.timezone, role: shop.role, media: current.media, amenities: current.amenities ?? [], about: current.about ?? "" },
     settings: {
       minLeadMinutes: s.min_lead_minutes,
       slotIntervalMinutes: s.slot_interval_minutes,
@@ -369,14 +370,38 @@ function depositSettings(s) {
   return [mode, value, JSON.stringify(clean)];
 }
 
+// What the venue offers (src/v2/amenities.js): known codes only, each once
+function shopAmenities(value) {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) throw invalid("สิ่งอำนวยความสะดวกไม่ถูกต้อง");
+  const unknown = value.filter((c) => !AMENITY_CODES.includes(c));
+  if (unknown.length) throw invalid("สิ่งอำนวยความสะดวกไม่ถูกต้อง");
+  return AMENITY_CODES.filter((c) => value.includes(c));
+}
+
+function shopAbout(value) {
+  if (value === undefined) return undefined;
+  if (value !== null && typeof value !== "string") throw invalid("เกี่ยวกับร้านต้องเป็นข้อความ");
+  const about = (value ?? "").trim();
+  if (about.length > 1000) throw invalid("เกี่ยวกับร้านยาวได้ไม่เกิน 1,000 ตัวอักษร");
+  return about;
+}
+
 /** Name, type, booking rules and opening hours. */
 async function saveShop(client, shop, input = {}) {
   const name = text(input.name, "ชื่อร้าน");
   const kind = oneOf(input.kind ?? shop.kind, SHOP_KINDS, "ประเภทร้าน");
   const media = validateMedia(input.media);
-  // SQL NULL means omitted; an explicit [] clears the gallery. No read/write race.
-  await client.query("update public.businesses set name = $2, kind = $3, media = coalesce($4::jsonb, media) where id = $1",
-    [shop.id, name, kind, media === undefined ? null : JSON.stringify(media)]);
+  const amenities = shopAmenities(input.amenities);
+  const about = shopAbout(input.about);
+  // SQL NULL means omitted (keep what is there); an explicit [] / "" clears it. No read/write race.
+  await client.query(
+    `update public.businesses set name = $2, kind = $3, media = coalesce($4::jsonb, media),
+            amenities = coalesce($5::text[], amenities),
+            about = case when $6::boolean then nullif($7, '') else about end
+      where id = $1`,
+    [shop.id, name, kind, media === undefined ? null : JSON.stringify(media), amenities ?? null, about !== undefined, about ?? null]
+  );
 
   if (input.settings !== undefined) {
     const s = input.settings ?? {};

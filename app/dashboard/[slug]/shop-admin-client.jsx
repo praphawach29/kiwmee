@@ -14,6 +14,7 @@ import { MobileShopHeader, MobileTabBar } from "../merchant-mobile.jsx";
 import { shopNavigation, shopTabs, resolveShopTab } from "../merchant-navigation.mjs";
 import { bookingFlowDraft, bookingFlowFromDraft, catalogWarnings, kindWord, previewPaths, resourceWord } from "./flow-preview.mjs";
 import { BOOKING_TEMPLATES, previewBookingTemplate } from "../../../src/v2/booking-templates.js";
+import { AMENITIES } from "../../../src/v2/amenities.js";
 
 // Defense in depth for owner-only settings controls; APIs/RLS enforce permissions.
 const ReadOnly = createContext(false);
@@ -1916,7 +1917,7 @@ function DaysOff({ title, items, add, remove, onSaved }) {
 }
 
 function HoursTab({ slug, catalog, onSaved }) {
-  const initial = useMemo(() => ({ name: catalog.shop.name, kind: catalog.shop.kind, media: catalog.shop.media ?? [], settings: catalog.settings, hours: catalog.hours }), [catalog]);
+  const initial = useMemo(() => ({ name: catalog.shop.name, kind: catalog.shop.kind, media: catalog.shop.media ?? [], amenities: catalog.shop.amenities ?? [], about: catalog.shop.about ?? "", settings: catalog.settings, hours: catalog.hours }), [catalog]);
   const [form, setForm] = useState(initial);
   useEffect(() => setForm(initial), [initial]);
   const save = useSave();
@@ -1948,6 +1949,25 @@ function HoursTab({ slug, catalog, onSaved }) {
           </label>
         </div>
         <MediaEditor slug={slug} disabled={save.busy} label="ภาพร้าน" value={form.media} onChange={(media) => setForm((f) => ({ ...f, media }))} />
+        <label className="ad-field">
+          เกี่ยวกับร้าน (ไม่บังคับ · ลูกค้าเห็นในหน้าจอง)
+          <textarea rows={3} maxLength={1000} value={form.about} placeholder="เช่น สนามหญ้าเทียมมาตรฐาน 7 คน เปิดถึงเที่ยงคืน ใกล้ BTS" onChange={(e) => setForm({ ...form, about: e.target.value })} />
+        </label>
+        <div className="ad-field">
+          สิ่งอำนวยความสะดวก (ลูกค้าเห็นเป็นไอคอนในหน้าจอง)
+          <div className="ad-checks ad-amenities">
+            {AMENITIES.map((a) => (
+              <label key={a.code}>
+                <input
+                  type="checkbox"
+                  checked={form.amenities.includes(a.code)}
+                  onChange={(e) => setForm((f) => ({ ...f, amenities: e.target.checked ? [...f.amenities, a.code] : f.amenities.filter((c) => c !== a.code) }))}
+                />
+                <span aria-hidden="true">{a.icon}</span> {a.label}
+              </label>
+            ))}
+          </div>
+        </div>
         <h2>เวลาทำการ</h2>
         <table className="ad-table">
           <tbody>

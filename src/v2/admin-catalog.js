@@ -185,7 +185,7 @@ async function getCatalog(client, shop) {
     "select name, kind, media from public.businesses where id = $1",
     `select min_lead_minutes, slot_interval_minutes, max_advance_days, hold_minutes,
             customer_can_cancel, customer_can_reschedule, customer_change_cutoff_hours,
-            deposit_mode, deposit_value::float8 as deposit_value, payment_info
+            deposit_mode, deposit_value::float8 as deposit_value, payment_info, line_reminders
        from public.business_booking_settings where business_id = $1`,
     "select day_of_week, is_open, open_time, close_time from public.business_hours where business_id = $1",
     `select id, date::text as date, is_full_day, start_time, end_time, reason from public.business_closures
@@ -223,7 +223,8 @@ async function getCatalog(client, shop) {
     customer_change_cutoff_hours: 2,
     deposit_mode: "none",
     deposit_value: 0,
-    payment_info: {}
+    payment_info: {},
+    line_reminders: true
   };
   const flow = flows[0] ?? { entry: ["date", "offering"], require: ["offering", "date", "time"], optional: ["resource"], then: ["customer"], options: {} };
   // A shop with no hours saved yet is open 10–19 every day (as the options engine assumes)
@@ -241,7 +242,8 @@ async function getCatalog(client, shop) {
       customerChangeCutoffHours: s.customer_change_cutoff_hours,
       depositMode: s.deposit_mode,
       depositValue: s.deposit_value,
-      paymentInfo: s.payment_info ?? {}
+      paymentInfo: s.payment_info ?? {},
+      lineReminders: s.line_reminders !== false
     },
     hours: [0, 1, 2, 3, 4, 5, 6].map((d) => {
       const h = dayHours(d);
@@ -386,19 +388,21 @@ async function saveShop(client, shop, input = {}) {
       s.customerCanCancel !== false,
       s.customerCanReschedule !== false,
       int(s.customerChangeCutoffHours ?? 2, "ลูกค้าเปลี่ยนเองได้ถึงก่อนนัด (ชั่วโมง)", { min: 0, max: 720 }),
-      ...depositSettings(s)
+      ...depositSettings(s),
+      s.lineReminders !== false
     ];
     await client.query(
       `insert into public.business_booking_settings (business_id, min_lead_minutes, slot_interval_minutes, max_advance_days, hold_minutes,
                                                      customer_can_cancel, customer_can_reschedule, customer_change_cutoff_hours,
-                                                     deposit_mode, deposit_value, payment_info)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)
+                                                     deposit_mode, deposit_value, payment_info, line_reminders)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12)
        on conflict (business_id) do update set min_lead_minutes = excluded.min_lead_minutes,
          slot_interval_minutes = excluded.slot_interval_minutes, max_advance_days = excluded.max_advance_days,
          hold_minutes = excluded.hold_minutes, customer_can_cancel = excluded.customer_can_cancel,
          customer_can_reschedule = excluded.customer_can_reschedule,
          customer_change_cutoff_hours = excluded.customer_change_cutoff_hours,
-         deposit_mode = excluded.deposit_mode, deposit_value = excluded.deposit_value, payment_info = excluded.payment_info`,
+         deposit_mode = excluded.deposit_mode, deposit_value = excluded.deposit_value, payment_info = excluded.payment_info,
+         line_reminders = excluded.line_reminders`,
       [shop.id, ...values]
     );
   }

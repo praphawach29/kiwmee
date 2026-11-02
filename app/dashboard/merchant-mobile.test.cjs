@@ -49,3 +49,16 @@ test('booking actions: one main button, the rest behind ⋯, skipping actions th
   assert.doesNotMatch(single, /<details/);
   assert.equal(render(BookingActions, { busy: false, actions: [false, null] }), '');
 });
+
+test('booking link card: the message names the shop and time, with copy, LINE and (when there is a phone) SMS', () => {
+  const { ManageLinkCard } = load('[slug]/shop-admin-client.jsx', '\nexport { ManageLinkCard };');
+  const props = { shop: { name: 'Bloom' }, link: { path: '/b/bloom/manage/abc', name: 'คุณมาลี', phone: '0812345678', date: '2026-11-03', time: '14:00' }, onClose() {} };
+  const html = render(ManageLinkCard, props);
+  assert.match(html, /ส่งลิงก์ให้ คุณมาลี/);
+  assert.match(html, /นัดของคุณที่ Bloom/);
+  assert.match(html, /เวลา 14:00 น\./);
+  assert.match(html, /\/b\/bloom\/manage\/abc/);
+  assert.match(html, /href="https:\/\/line.me\/R\/share\?text=[^"]*%2Fb%2Fbloom%2Fmanage%2Fabc/);
+  assert.match(html, /href="sms:0812345678\?body=/);
+  assert.doesNotMatch(render(ManageLinkCard, { ...props, link: { ...props.link, phone: null } }), /sms:/);
+});

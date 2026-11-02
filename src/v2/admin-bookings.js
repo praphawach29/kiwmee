@@ -9,6 +9,7 @@
 const { AppError, badRequest, notFound } = require("../errors");
 const { loadCatalog } = require("./catalog-repository");
 const { getOptions, localToMs, msToLocal } = require("./options-engine");
+const { issueToken } = require("./manage-booking");
 
 const DAY_MS = 24 * 3600 * 1000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -89,6 +90,7 @@ async function listBookings(client, shop, { from, days = 1 } = {}) {
   const n = Math.min(Math.max(Number(days) || 1, 1), 31);
   const { rows } = await client.query(
     `select b.id, b.status, b.start_at, b.end_at, b.party_size, b.source, b.notes, b.hold_expires_at,
+            b.manage_token_hash is not null as has_link,
             (b.price_snapshot->>'total')::float8 as price, b.offering_id, o.name as offering_name,
             coalesce(b.customer_name, c.name) as customer_name, c.phone as customer_phone, c.line_user_id is not null as from_line,
             (select h.reason from public.booking_status_history h where h.booking_id = b.id
@@ -126,7 +128,9 @@ async function listBookings(client, shop, { from, days = 1 } = {}) {
       price: b.price,
       offering: { id: b.offering_id, name: b.offering_name },
       customer: { name: b.customer_name, phone: b.customer_phone, fromLine: b.from_line },
-      resources: b.resources
+      resources: b.resources,
+      // the customer already has a link (from booking online, or one the shop sent)
+      hasLink: b.has_link
     };
   });
 }
@@ -191,7 +195,25 @@ async function createBooking(client, shop, input = {}, now = new Date()) {
       notes
     ]
   );
-  return { id: row.booking.id, status: row.booking.status };
+  // the customer's own link, for the shop to send them right away
+  const link = await attachLink(client, row.booking.id);
+  return { id: row.booking.id, status: row.booking.status, manageToken: link.token, managePath: `/b/${shop.slug}/manage/${link.token}` };
+}
+
+async function attachLink(client, id) {
+  const link = issueToken();
+  await rpc(client, "select public.issue_manage_link($1, $2)", [id, link.hash]);
+  return link;
+}
+
+/**
+ * A new link for the customer to see, move or cancel this booking themselves. Only the hash is
+ * kept, so the link is shown once; issuing another one makes the earlier link stop working.
+ */
+async function issueManageLink(client, shop, id) {
+  await ownBooking(client, shop, id);
+  const link = await attachLink(client, id);
+  return { id, manageToken: link.token, managePath: `/b/${shop.slug}/manage/${link.token}` };
 }
 
 async function rescheduleBooking(client, shop, id, input = {}) {
@@ -219,4 +241,4 @@ async function setStatus(client, shop, id, input = {}) {
   return { id, status: input.status };
 }
 
-module.exports = { listBookings, freeTimes, createBooking, rescheduleBooking, cancelBooking, setStatus, REASON_TEXT };
+module.exports = { listBookings, freeTimes, createBooking, rescheduleBooking, cancelBooking, setStatus, issueManageLink, REASON_TEXT };

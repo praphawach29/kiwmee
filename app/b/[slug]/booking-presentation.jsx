@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 // Presentation only: the booking engine remains the source of selections and next steps.
 const isDemo = (item) => item?.url?.startsWith("/demo-media/");
@@ -215,5 +215,39 @@ export function DepositBox({ deposit, status, deadline, uploadUrl, onUploaded })
       {state.error && <p className="bk-error" role="alert">{state.error}</p>}
       {deposit.slips > 0 && <p className="bk-muted">ส่งสลิปแล้ว {deposit.slips} รูป</p>}
     </section>
+  );
+}
+
+// ---------- one service, in full (opened from "รายละเอียด" on its card) ----------
+
+/** A sheet over the page: the service's photos, length, price and description, and a button to pick it */
+export function OfferingDetails({ offering, length, price, available, reason, busy, onChoose, onClose }) {
+  useEffect(() => {
+    const close = (e) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [onClose]);
+  const hasMedia = safeMedia(offering.media).length > 0;
+  return (
+    <>
+      <button type="button" className="bk-sheet-backdrop" aria-label="ปิด" onClick={onClose} />
+      <section className="bk-sheet" role="dialog" aria-modal="true" aria-labelledby="offering-details-title">
+        <div className="bk-sheet-grip" aria-hidden="true" />
+        {hasMedia && <ShopGallery shop={{ name: offering.name, media: offering.media }} />}
+        <div className="bk-sheet-head">
+          <h2 id="offering-details-title">{offering.name}</h2>
+          <button type="button" className="bk-icon-button" aria-label="ปิด" onClick={onClose}>✕</button>
+        </div>
+        <p className="bk-option-meta">
+          <span>{length}</span>
+          {price && <b className="bk-option-price">{price}</b>}
+        </p>
+        {offering.description && <p className="bk-sheet-text">{offering.description}</p>}
+        {!available && reason && <p className="bk-notice">{reason}</p>}
+        <button type="button" className="bk-primary" disabled={busy || !available} onClick={onChoose}>
+          {available ? "เลือกบริการนี้" : "ตอนนี้จองไม่ได้"}
+        </button>
+      </section>
+    </>
   );
 }

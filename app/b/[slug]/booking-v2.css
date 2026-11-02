@@ -303,3 +303,37 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   .bk-option[data-pending="true"]::after, .bk-start-button[data-pending="true"]::after { animation: none; }
   .bk-option:active, .bk-start-button:active, .bk-chip:active { transform: none; }
 }
+
+/* ---------- a service's details: a link on its card, a sheet from the bottom ---------- */
+.bk-option-wrap { position: relative; display: grid; }
+.bk-option-wrap > .bk-option { padding-bottom: 34px; }
+.bk-details-link { position: absolute; right: 12px; bottom: 6px; min-height: 30px; padding: 2px 10px; border: 0; border-radius: 999px; background: var(--selected); color: var(--grape-deep); font: inherit; font-size: .78rem; cursor: pointer; }
+.bk-details-link:focus-visible { outline: 3px solid var(--grape); outline-offset: 2px; }
+.bk-sheet-backdrop { position: fixed; inset: 0; z-index: 40; border: 0; background: rgba(27, 22, 64, .45); cursor: pointer; }
+.bk-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 41; max-height: 88vh; overflow: auto; display: grid; gap: 12px;
+  padding: 10px 18px max(18px, env(safe-area-inset-bottom)); border-radius: 22px 22px 0 0; background: var(--surface); box-shadow: 0 -12px 32px rgba(27, 22, 64, .2); }
+.bk-sheet-grip { justify-self: center; width: 40px; height: 4px; border-radius: 2px; background: var(--line); }
+.bk-sheet-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.bk-sheet-head h2 { margin: 0; font-family: var(--font-display); font-weight: 500; font-size: 1.2rem; line-height: 1.4; overflow-wrap: anywhere; }
+.bk-sheet .bk-option-meta { margin: 0; }
+.bk-sheet-text { margin: 0; color: #3A3460; line-height: 1.7; white-space: pre-line; overflow-wrap: anywhere; }
+@media (min-width: 640px) {
+  .bk-sheet { left: 50%; right: auto; bottom: auto; top: 50%; width: min(520px, calc(100vw - 32px)); transform: translate(-50%, -50%); border-radius: 22px; }
+  .bk-sheet-grip { display: none; }
+}
+
+/* phones: a little tighter, so the cards still fit when LINE shows text larger than the browser */
+@media (max-width: 440px) {
+  .bk-card h2 { font-size: 1.05rem; }
+  .bk-options-offering .bk-option, .bk-options-resource .bk-option { min-height: 64px; padding: 10px 12px; gap: 10px; }
+  .bk-options-offering .bk-option-text strong, .bk-options-resource .bk-option-text strong { font-size: .95rem; }
+  .bk-option-meta { font-size: .8rem; }
+  .bk-option-price { font-size: .88rem; }
+  .bk-offering-media, .bk-resource-media, .bk-avatar { width: 48px; height: 48px; }
+}
+/* the circle moves to the top so the "รายละเอียด" chip below it never covers it */
+.bk-option-wrap > .bk-option { align-items: flex-start; }
+.bk-option-wrap .bk-choice-mark { margin-top: 2px; }
+/* small thumbnails: a tiny "ภาพประกอบ" tag, and no loading words over the picture */
+.bk-offering-media .bk-media-caption, .bk-resource-media .bk-media-caption { font-size: .5rem; line-height: 1.6; padding: 0 2px; }
+.bk-offering-media .bk-media-status, .bk-resource-media .bk-media-status { font-size: 0; }

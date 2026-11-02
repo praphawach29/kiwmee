@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CustomerFrame from "./customer-frame.jsx";
-import { BookingProgress, BookingReview, BookingSubmitBar, DepositBox, ShopHeader, ShopGallery, OfferingThumbnail, ResourceChoice, groupTimes } from "./booking-presentation.jsx";
+import { BookingProgress, BookingReview, BookingSubmitBar, DepositBox, OfferingDetails, ShopHeader, ShopGallery, OfferingThumbnail, ResourceChoice, groupTimes } from "./booking-presentation.jsx";
 
 const RESOURCE_WORD = { staff: "ช่าง", court: "สนาม", room: "ห้อง", equipment: "อุปกรณ์" };
 const STEP_TITLE = {
@@ -181,6 +181,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
   const [selected, setSelected] = useState(() => initialView?.selected ?? {});
   const [view, setView] = useState(initialView); // { next, ask, options, reason }
   const [pending, setPending] = useState(null); // { step, value } tapped, waiting for the server
+  const [details, setDetails] = useState(null); // the offering option whose details are open
   const [notice, setNotice] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(!initialView);
@@ -328,12 +329,25 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
       onClick: () => choose(ask, o.value)
     };
   };
-  const optionButton = (o) => (
-    <button key={String(o.value)} {...optionProps(o)}>
-      <OptionBody ask={ask} option={o} offering={offerings.get(o.value)} resource={resources.get(o.value)} resourceWord={resourceWord} />
-      {!o.available && <small className="bk-reason">{REASON_TEXT[o.reason] ?? "ไม่ว่าง"}</small>}
-    </button>
-  );
+  const optionButton = (o) => {
+    const button = (
+      <button key={String(o.value)} {...optionProps(o)}>
+        <OptionBody ask={ask} option={o} offering={offerings.get(o.value)} resource={resources.get(o.value)} resourceWord={resourceWord} />
+        {!o.available && <small className="bk-reason">{REASON_TEXT[o.reason] ?? "ไม่ว่าง"}</small>}
+      </button>
+    );
+    // a service with a description or photos: the card stays short, the rest opens in a sheet
+    const offering = ask === "offering" ? offerings.get(o.value) : null;
+    if (!offering || (!offering.description && !(offering.media?.length > 0))) return button;
+    return (
+      <div key={String(o.value)} className="bk-option-wrap">
+        {button}
+        <button type="button" className="bk-details-link" onClick={() => setDetails(o)} aria-label={`รายละเอียด ${offering.name}`}>
+          รายละเอียด
+        </button>
+      </div>
+    );
+  };
 
   return (
     <CustomerFrame aside={<SummaryAside items={summaryItems} estimate={estimate} shop={shop} onEdit={showStep} busy={busy} />}>
@@ -453,9 +467,27 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
         {atCustomer && <BookingSubmitBar formId="booking-customer" disabled={busy || !liff.ready} busy={busy} price={estimate?.short} />}
         <PoweredBy />
       </main>
+      {details && offerings.get(details.value) && (
+        <OfferingDetails
+          offering={offerings.get(details.value)}
+          length={offeringLength(offerings.get(details.value))}
+          price={offerings.get(details.value).price ? priceText(offerings.get(details.value).price) : null}
+          available={details.available}
+          reason={details.available ? null : REASON_TEXT[details.reason] ?? "ไม่ว่าง"}
+          busy={busy}
+          onClose={() => setDetails(null)}
+          onChoose={() => {
+            setDetails(null);
+            choose("offering", details.value);
+          }}
+        />
+      )}
     </CustomerFrame>
   );
 }
+
+const offeringLength = (offering) =>
+  offering.durationMinutes ? formatMinutes(offering.durationMinutes) : `${formatMinutes(offering.minMinutes)}–${formatMinutes(offering.maxMinutes)}`;
 
 // The extras for the chosen offering at the chosen time, grouped as the shop set them up. The engine
 // says which can still be taken (and how many); the customer picks, then goes on.
@@ -806,7 +838,7 @@ function PoweredBy() {
 
 function OptionBody({ ask, option, offering, resource, resourceWord }) {
   if (ask === "offering" && offering) {
-    const length = offering.durationMinutes ? formatMinutes(offering.durationMinutes) : `${formatMinutes(offering.minMinutes)}–${formatMinutes(offering.maxMinutes)}`;
+    const length = offeringLength(offering);
     return (
       <>
         <OfferingThumbnail offering={offering} />
@@ -817,7 +849,6 @@ function OptionBody({ ask, option, offering, resource, resourceWord }) {
             <span>{length}</span>
             {offering.price && <b className="bk-option-price">{priceText(offering.price)}</b>}
           </span>
-          {offering.description && <span className="bk-option-desc">{offering.description}</span>}
         </span>
         <span className="bk-choice-mark" aria-hidden="true" />
       </>

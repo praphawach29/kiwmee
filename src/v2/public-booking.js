@@ -12,7 +12,7 @@ const { findShopWithCatalog } = require("./catalog-repository");
 const { getOptions, nextStep, reconcile, localToMs } = require("./options-engine");
 const { issueToken } = require("./manage-booking");
 const { getSetting } = require("./platform-settings");
-const { bookingCard, manageLink, pushLine } = require("./line-notify");
+const { bookingCard, manageLink, pushLine, sealLink } = require("./line-notify");
 
 const ASKABLE = ["offering", "resource", "date", "time", "duration", "party", "addons"];
 const SELECTED_KEYS = ["offeringId", "resourceId", "date", "time", "durationMinutes", "partySize"];
@@ -258,6 +258,13 @@ async function book(
 
   // Booked inside LINE: the card goes to the customer's chat with Kiwmee's OA (never fails the booking)
   if (line) {
+    try {
+      // kept (encrypted) so the reminders can carry the same link
+      const sealed = sealLink(result.id, result.manageToken);
+      if (sealed) await db.query("update public.bookings set line_manage_token = $2 where id = $1", [result.id, sealed]);
+    } catch (error) {
+      console.error("[line-notify] link not kept:", error.message);
+    }
     try {
       const card = bookingCard({
         kind: result.status === "held" ? "held" : "booked",

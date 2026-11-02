@@ -7,7 +7,7 @@
 //   pushLine(db, to, messages)  → { sent, status?, reason? } with the token saved in /super
 
 const crypto = require("node:crypto");
-const { getSetting } = require("./platform-settings");
+const { getSetting, encrypt, decrypt } = require("./platform-settings");
 
 const GRAPE = "#6A4CFF";
 const GRAPE_DEEP = "#4F33E0";
@@ -45,7 +45,9 @@ const row = (label, value, { bold = false } = {}) => ({
 const KINDS = {
   booked: { title: "จองสำเร็จ", icon: "✓", color: GRAPE, button: "ดู เลื่อน หรือยกเลิกนัด" },
   held: { title: "กันคิวไว้ให้แล้ว", icon: "⏳", color: WARN, button: "แนบสลิปโอนมัดจำ" },
-  confirmed: { title: "ร้านยืนยันคิวแล้ว", icon: "✓", color: "#0B7A50", button: "ดูการจองของฉัน" }
+  confirmed: { title: "ร้านยืนยันคิวแล้ว", icon: "✓", color: "#0B7A50", button: "ดูการจองของฉัน" },
+  remind_day: { title: "พรุ่งนี้มีนัด", icon: "🔔", color: GRAPE, button: "ดู เลื่อน หรือยกเลิกนัด" },
+  remind_soon: { title: "ใกล้ถึงเวลานัดแล้ว", icon: "⏰", color: GRAPE_DEEP, button: "ดูการจองของฉัน" }
 };
 
 /**
@@ -135,6 +137,25 @@ function bookingCard({ kind, shop, booking, link }) {
   return { type: "flex", altText: `${k.title} · ${shop.name} · ${when.day} ${when.time}`.slice(0, 400), contents: bubble };
 }
 
+// The customer's booking link kept for later cards (reminders), encrypted with the platform key so
+// the database alone cannot open anyone's booking. null when no key is set.
+function sealLink(bookingId, token, env = process.env) {
+  try {
+    return encrypt(`booking-link:${bookingId}`, token, env);
+  } catch {
+    return null;
+  }
+}
+
+function openLink(bookingId, sealed, env = process.env) {
+  if (!sealed) return null;
+  try {
+    return decrypt(`booking-link:${bookingId}`, sealed, env);
+  } catch {
+    return null;
+  }
+}
+
 /** The customer's own booking page, opened inside LINE when the LIFF app is set up */
 async function manageLink(db, { slug, token, origin }, { env = process.env } = {}) {
   if (!token) return null;
@@ -164,4 +185,4 @@ async function pushLine(db, to, messages, { fetchImpl = fetch, env = process.env
   }
 }
 
-module.exports = { bookingCard, manageLink, pushLine };
+module.exports = { bookingCard, manageLink, pushLine, sealLink, openLink };

@@ -1983,6 +1983,9 @@ function HoursTab({ slug, catalog, onSaved }) {
           </label>
         </div>
         <DepositSettings settings={form.settings} setSetting={setSetting} />
+        <h2>แจ้งเตือนลูกค้าทาง LINE</h2>
+        <p className="ad-muted">ลูกค้าที่จองผ่าน LINE ได้การ์ดยืนยันทันที และการ์ดเตือนนัด 1 วันก่อน กับ 2 ชั่วโมงก่อนถึงเวลา (ต้องเป็นเพื่อนกับ LINE OA ของ Kiwmee)</p>
+        <label className="ad-check"><input type="checkbox" checked={form.settings.lineReminders !== false} onChange={(e) => setSetting("lineReminders", e.target.checked)} />ส่งการ์ดเตือนนัด</label>
         <Status save={save} />
         <button className="ad-primary" disabled={save.busy}>บันทึก</button>
         </Locked>

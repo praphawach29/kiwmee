@@ -104,3 +104,22 @@ test("the shop moves a rental: it keeps its days; the owner sets the days mode i
     await refused(() => db.query("update public.offerings set min_days = null where id = $1", [ctx.hire]), (e) => e.code === "23514");
   });
 });
+
+test("the shop takes a rental itself: free pick-up times, then the booking; the 14-day list shows it on every day it holds", { skip }, async () => {
+  await inTx(async (ctx) => {
+    await admin.actAs(db, OWNER);
+    const free = await bookings.freeTimes(db, ctx.shop, { offeringId: ctx.hire, date: TUE, durationMinutes: 2880 });
+    assert.ok(free.times.includes("11:00"));
+    const made = await bookings.createBooking(db, ctx.shop, { offeringId: ctx.hire, date: TUE, time: "11:00", durationMinutes: 2880, customer: { name: "โทรมาเช่า", phone: "0812345678" } });
+    assert.ok(made.managePath);
+
+    const after = await bookings.freeTimes(db, ctx.shop, { offeringId: ctx.hire, date: addDays(TUE, 1), durationMinutes: 1440 });
+    assert.ok(!after.times.includes("11:00"), "the car is out until Thursday 11:00");
+
+    const twoWeeks = await bookings.listBookings(db, ctx.shop, { from: addDays(TUE, -1), days: 14 });
+    const b = twoWeeks.find((x) => x.id === made.id);
+    assert.deepEqual([b.date, b.start, b.endDate, b.end], [TUE, "11:00", addDays(TUE, 2), "11:00"]);
+    // the day in the middle lists it too (as "กำลังเช่า" on the page)
+    assert.ok((await bookings.listBookings(db, ctx.shop, { from: addDays(TUE, 1) })).some((x) => x.id === made.id));
+  });
+});

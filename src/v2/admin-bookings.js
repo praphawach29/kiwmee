@@ -156,7 +156,7 @@ async function freeTimes(client, shop, query = {}, now = new Date()) {
   const selected = { offeringId, date: date(query.date) };
   const resourceId = optionalId(query.resourceId, "ช่าง/สนาม");
   if (resourceId) selected.resourceId = resourceId;
-  const duration = optionalInt(query.durationMinutes, "ระยะเวลา");
+  const duration = optionalInt(query.durationMinutes, "ระยะเวลา", 90 * 1440);
   if (duration) selected.durationMinutes = duration;
   const party = optionalInt(query.partySize, "จำนวนคน", 1000);
   if (party) selected.partySize = party;
@@ -188,7 +188,7 @@ async function createBooking(client, shop, input = {}, now = new Date()) {
       JSON.stringify({ name, phone: phone || null }),
       status,
       optionalId(input.resourceId, "ช่าง/สนาม"),
-      optionalInt(input.durationMinutes, "ระยะเวลา"),
+      optionalInt(input.durationMinutes, "ระยะเวลา", 90 * 1440),
       optionalInt(input.partySize, "จำนวนคน", 1000) ?? 1,
       notes
     ]);
@@ -203,7 +203,7 @@ async function createBooking(client, shop, input = {}, now = new Date()) {
       start,
       JSON.stringify({ name, phone: phone || null }),
       optionalId(input.resourceId, "ช่าง/สนาม"),
-      optionalInt(input.durationMinutes, "ระยะเวลา"),
+      optionalInt(input.durationMinutes, "ระยะเวลา", 90 * 1440),
       optionalInt(input.partySize, "จำนวนคน", 1000) ?? 1,
       notes
     ]
@@ -237,7 +237,7 @@ async function rescheduleBooking(client, shop, id, input = {}) {
     id,
     startAt(shop, input.date, input.time),
     optionalId(input.resourceId, "ช่าง/สนาม"),
-    optionalInt(input.durationMinutes, "ระยะเวลา")
+    optionalInt(input.durationMinutes, "ระยะเวลา", 90 * 1440)
   ]);
   const { rows: [after] } = await client.query("select start_at from public.bookings where id = $1", [id]);
   const moved = before && after && new Date(before.start_at).getTime() !== new Date(after.start_at).getTime();

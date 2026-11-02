@@ -1,11 +1,13 @@
 // Desktop-only navigation. Narrow screens keep their existing dashboard navigation.
-export default function MerchantSidebar({ groups, active, onSelect, name, role, onSignOut, signingOut = false }) {
+// badges: { [itemId]: count } shown beside the item (e.g. unread booking activity)
+export default function MerchantSidebar({ groups, active, onSelect, name, role, onSignOut, signingOut = false, badges = {} }) {
   const item = ({ id, label, icon, href }) => {
     const props = {
       className: "merchant-nav" + (active === id ? " is-active" : ""),
       "aria-current": active === id ? "page" : undefined,
     };
-    const content = <><span className="merchant-nav-icon" aria-hidden="true">{icon}</span><span>{label}</span></>;
+    const badge = badges[id] > 0 ? <span className="merchant-nav-badge" aria-label={`${badges[id]} รายการใหม่`}>{badges[id] > 99 ? "99+" : badges[id]}</span> : null;
+    const content = <><span className="merchant-nav-icon" aria-hidden="true">{icon}</span><span>{label}</span>{badge}</>;
     return href
       ? <a key={id} {...props} href={href}>{content}</a>
       : <button key={id} type="button" {...props} onClick={() => onSelect(id)}>{content}</button>;

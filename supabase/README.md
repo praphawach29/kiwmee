@@ -16,6 +16,7 @@
 | `migrations/20261025000800_record_past_booking.sql` | ร้านบันทึกการจองย้อนหลัง (`record_past_booking`, ย้อนได้ 1 ปี) · `booking_plan` ได้พารามิเตอร์ `p_allow_past` |
 | `migrations/20261025000900_customer_self_service.sql` | ลูกค้ายกเลิก/เลื่อนเองจากลิงก์ (`customer_cancel_booking`, `customer_reschedule_booking`) · กติกาของร้าน 3 ค่าใน `business_booking_settings` · `bookings.manage_token_hash` |
 | `migrations/20261025001000_bills.sql` | บิลและการรับเงิน (แยกจากการจอง): `open_bill`, `close_bill`, `refund_bill` (เจ้าของเท่านั้น), `void_bill` · `set_booking_status` ย้อนการจองที่ปิดบิลแล้วไม่ได้ |
+| `migrations/20261025001800_booking_activity.sql` | ความเคลื่อนไหวของการจอง: `booking_events` (trigger บันทึกทุกการจองใหม่/เลื่อน/เปลี่ยนสถานะ พร้อมว่าใครทำ: ลูกค้า/ร้าน/ระบบ) · `business_members.activity_seen_at` + `mark_activity_seen` สำหรับตัวเลขแจ้งเตือนที่ยังไม่อ่าน |
 | `migrations/20261025001700_shop_team.sql` | ทีมงานร้าน: `business_invites` · `invite_member` (มีบัญชีแล้ว = เพิ่มทันที, ยังไม่มี = รอคำเชิญ), `accept_my_invites` (ตอนเข้า `/dashboard`, เฉพาะอีเมลที่ยืนยันแล้ว), `shop_team`, `set_member_role`, `remove_member`, `cancel_invite` · ร้านต้องมีเจ้าของอย่างน้อย 1 คน |
 | `migrations/20261025001100_brands.sql` | แบรนด์และสาขา: `brands`, `brand_members`, `brand_plans` · ร้านเดิมทุกร้านได้แบรนด์ของตัวเอง · `add_branch` (คัดลอกตั้งค่าจากสาขาเดิม), `move_business_to_brand` · แพ็กเกจฟรี/เริ่มต้นมีได้ 1 สาขา |
 | `seed.sql` | ร้านตัวอย่าง 2 ร้าน: Bloom Hair & Beauty (เสริมสวย), Gentleman Barber (ตัดผมชาย) |

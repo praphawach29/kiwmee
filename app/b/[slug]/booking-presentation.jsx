@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { amenityList } from "../../../src/v2/amenities.js";
 
 // Presentation only: the booking engine remains the source of selections and next steps.
 const isDemo = (item) => item?.url?.startsWith("/demo-media/");
@@ -69,6 +70,35 @@ export function ShopHero({ shop, compact = false }) {
               <MediaImage key={image.url} item={image} name={shop.name} />
             </button>
           ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// About the venue and what it offers, as icons (the owner's "Facilities" reference)
+export function ShopAbout({ shop }) {
+  const [open, setOpen] = useState(false);
+  const amenities = amenityList(shop.amenities);
+  const about = (shop.about ?? "").trim();
+  if (!about && amenities.length === 0) return null;
+  const long = about.length > 120;
+  return (
+    <section className="bk-card bk-about" aria-label={`เกี่ยวกับ ${shop.name}`}>
+      {about && (
+        <div className="bk-about-text">
+          <p data-open={open || !long || undefined}>{about}</p>
+          {long && <button type="button" className="bk-text-button" onClick={() => setOpen(!open)} aria-expanded={open}>{open ? "ย่อ" : "อ่านต่อ"}</button>}
+        </div>
+      )}
+      {amenities.length > 0 && (
+        <div className="bk-amenities-wrap">
+          <h2>สิ่งอำนวยความสะดวก</h2>
+          <ul className="bk-amenities">
+            {amenities.map((a) => (
+              <li key={a.code}><span aria-hidden="true">{a.icon}</span>{a.label}</li>
+            ))}
+          </ul>
         </div>
       )}
     </section>

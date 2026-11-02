@@ -13,6 +13,7 @@ const { getOptions, nextStep, reconcile, localToMs } = require("./options-engine
 const { issueToken } = require("./manage-booking");
 const { getSetting } = require("./platform-settings");
 const { bookingCard, manageLink, pushLine, sealLink } = require("./line-notify");
+const { amenityList } = require("./amenities");
 
 const ASKABLE = ["offering", "resource", "date", "time", "duration", "party", "addons"];
 const SELECTED_KEYS = ["offeringId", "resourceId", "date", "time", "durationMinutes", "partySize"];
@@ -68,7 +69,7 @@ async function shopInfo(db, slug) {
   const { shop, catalog } = await requireShopWithCatalog(db, slug);
   // Keep gallery reads out of the availability snapshot: media never affects booking rules.
   const { rows: [gallery] } = await db.query(
-    `select b.media,
+    `select b.media, b.amenities, b.about,
             (select coalesce(jsonb_object_agg(o.id, o.media), '{}'::jsonb)
                from public.offerings o where o.business_id = b.id and o.active) as offering_media,
             (select coalesce(jsonb_object_agg(r.id, r.media), '{}'::jsonb)
@@ -92,6 +93,8 @@ async function shopInfo(db, slug) {
     kind: shop.kind,
     timezone: shop.timezone,
     media: gallery.media,
+    amenities: amenityList(gallery.amenities).map((a) => a.code),
+    about: gallery.about ?? "",
     flow: {
       entry: catalog.flow.entry,
       then: catalog.flow.then,

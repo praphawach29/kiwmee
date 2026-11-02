@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CustomerFrame from "./customer-frame.jsx";
-import { BookingProgress, BookingReview, BookingSubmitBar, DepositBox, OfferingDetails, ShopHeader, ShopHero, OfferingThumbnail, ResourceChoice, groupTimes, withMedia } from "./booking-presentation.jsx";
+import { BookingProgress, BookingReview, BookingSubmitBar, DepositBox, OfferingDetails, ShopAbout, ShopHeader, ShopHero, OfferingThumbnail, ResourceChoice, groupTimes, withMedia } from "./booking-presentation.jsx";
 
 const RESOURCE_WORD = { staff: "ช่าง", court: "สนาม", room: "ห้อง", equipment: "อุปกรณ์" };
 const STEP_TITLE = {
@@ -360,6 +360,8 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     >
       <main className="bk-shell" aria-busy={busy}>
         <ShopHeader shop={shop} subtitle="จองคิวออนไลน์ · เลือกจากคิวว่างของร้าน" />
+        {/* the venue's details while the customer is still looking; out of the way once they start picking */}
+        {!atCustomer && summaryItems.length === 0 && <ShopAbout shop={shop} />}
         <BookingProgress phase={atCustomer ? "customer" : "selection"} />
 
         {!atCustomer && summaryItems.length > 0 && (

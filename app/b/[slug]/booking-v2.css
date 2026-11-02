@@ -432,3 +432,17 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .bk-options-offering[data-photos] .bk-media-caption { font-size: .6rem; padding: 2px 6px; text-align: left; }
 .bk-options-offering[data-photos] .bk-option[data-selected="true"] { box-shadow: 0 0 0 2px var(--grape); }
 .bk-options-offering[data-photos] .bk-option > .bk-reason { position: static; padding: 0 12px; }
+
+/* ---------- about the venue + what it offers (migration …002400) ---------- */
+.bk-about { gap: 16px; }
+.bk-about-text { display: grid; justify-items: start; gap: 2px; }
+.bk-about-text p { margin: 0; color: #3A3460; line-height: 1.7; white-space: pre-line; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.bk-about-text p[data-open] { display: block; }
+.bk-about-text .bk-text-button { min-height: 32px; padding: 0; font-size: .88rem; }
+.bk-amenities-wrap { display: grid; gap: 10px; }
+.bk-amenities-wrap h2 { font-size: 1rem !important; }
+/* one swipeable row, so the booking steps stay close */
+.bk-amenities { list-style: none; margin: 0 -18px; padding: 2px 18px 4px; display: flex; gap: 6px; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; }
+.bk-amenities::-webkit-scrollbar { display: none; }
+.bk-amenities li { flex: 0 0 5.2em; scroll-snap-align: start; display: grid; justify-items: center; align-content: start; gap: 6px; text-align: center; font-size: .76rem; line-height: 1.35; color: var(--ink); }
+.bk-amenities li span { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 16px; background: var(--selected); font-size: 22px; }

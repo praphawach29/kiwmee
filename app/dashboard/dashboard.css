@@ -839,3 +839,6 @@
 /* A booking waiting for its transfer deposit */
 .ad-deposit-line { align-self: start; justify-self: start; padding: 4px 10px; border-radius: 8px; background: var(--warn-bg); color: var(--warn); font-size: 13px; }
 .ad-deposit-line .ad-link { color: var(--warn); font-weight: 600; }
+
+/* shop amenities: a grid of checkboxes with their icons */
+.ad-amenities { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px 12px; }

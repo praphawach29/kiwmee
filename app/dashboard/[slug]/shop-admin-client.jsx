@@ -45,13 +45,20 @@ function nowLocal() {
 }
 
 /** busy/error/done around one save; `run` returns true when it worked */
+// After the shop moves or cancels: say whether the customer heard it in LINE
+function withLine(text, result) {
+  if (!result?.line) return text;
+  return result.line.sent ? `${text} · แจ้งลูกค้าทาง LINE แล้ว` : `${text} · ส่งการ์ด LINE ไม่สำเร็จ (ลูกค้าอาจยังไม่ได้เพิ่ม OA เป็นเพื่อน)`;
+}
+
 function useSave() {
   const [state, setState] = useState({ busy: false, error: "", done: "" });
   const run = useCallback(async (fn, done = "บันทึกแล้ว") => {
     setState({ busy: true, error: "", done: "" });
     try {
-      await fn();
-      setState({ busy: false, error: "", done });
+      const result = await fn();
+      // done may depend on the answer, e.g. "… · แจ้งลูกค้าทาง LINE แล้ว"
+      setState({ busy: false, error: "", done: typeof done === "function" ? done(result) : done });
       return true;
     } catch (e) {
       if (e.status === 401) window.location.href = "/dashboard";
@@ -429,7 +436,7 @@ function BookingsTab({ slug, catalog, initialDay }) {
   function cancel(booking) {
     const reason = window.prompt(`ยกเลิกการจองของ ${booking.customer.name} เวลา ${booking.start}?\nเหตุผล (ไม่บังคับ)`, "");
     if (reason === null) return;
-    act(booking, "cancel", { reason }, "ยกเลิกแล้ว");
+    act(booking, "cancel", { reason }, (r) => withLine("ยกเลิกแล้ว", r));
   }
 
   async function sendLink(booking) {
@@ -1001,7 +1008,7 @@ function BookingForm({ slug, catalog, booking, defaultDate, onClose, onSaved }) 
             notes: f.notes,
             ...(past ? { status: f.status } : {})
           }));
-    });
+    }, () => withLine(booking ? "เลื่อนนัดแล้ว" : "บันทึกแล้ว", result));
     // a new upcoming booking comes with the customer's link, for the shop to send right away
     if (ok) onSaved(f.date, result?.managePath ? { path: result.managePath, name: f.name, phone: f.phone, date: f.date, time: f.time } : null);
   }

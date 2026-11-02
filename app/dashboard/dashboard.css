@@ -816,3 +816,8 @@
 @media (min-width: 1100px) {
   .merchant-mobile-top, .merchant-tabbar, .merchant-sheet, .merchant-sheet-backdrop { display: none; }
 }
+
+/* The customer's booking link, ready to send */
+.ad-link-card { scroll-margin-top: 80px; border-color: var(--grape); background: linear-gradient(0deg, var(--surface), var(--surface)) padding-box; box-shadow: 0 0 0 3px var(--selected); }
+.ad-link-message { width: 100%; min-width: 0; resize: none; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); font: inherit; font-size: 14px; line-height: 1.6; }
+.ad-link-card a.ad-secondary { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }

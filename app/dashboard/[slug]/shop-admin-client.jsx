@@ -5,7 +5,7 @@
 // a preview of what customers will see. Staff use daily booking and bill operations only.
 // Every save goes to /api/dashboard/shops/<slug>/…, which writes as the signed-in user (RLS).
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api.mjs";
 import OwnerMediaEditor from "../media-editor.jsx";
 import { isSafeMediaUrl } from "../media-upload.mjs";
@@ -400,6 +400,7 @@ function BookingsTab({ slug, catalog, initialDay }) {
   const [form, setForm] = useState(null); // { booking? } while the form is open
   const [checkout, setCheckout] = useState(null); // the booking whose bill is being closed
   const [showOff, setShowOff] = useState(false);
+  const [link, setLink] = useState(null); // { path, name, phone, date, time } while the link is on screen
   const save = useSave();
 
   const load = useCallback(async () => {
@@ -430,6 +431,18 @@ function BookingsTab({ slug, catalog, initialDay }) {
     act(booking, "cancel", { reason }, "ยกเลิกแล้ว");
   }
 
+  async function sendLink(booking) {
+    if (booking.hasLink && !window.confirm(`${booking.customer.name} มีลิงก์จัดการการจองอยู่แล้ว\nส่งลิงก์ใหม่จะทำให้ลิงก์เดิมใช้ไม่ได้ ทำต่อไหม?`)) return;
+    let made = null;
+    const ok = await save.run(async () => {
+      made = await api("POST", shopPath(slug, `/bookings/${booking.id}/manage-link`));
+    }, "สร้างลิงก์แล้ว");
+    if (ok) {
+      setLink({ path: made.managePath, name: booking.customer.name, phone: booking.customer.phone, date: booking.date, time: booking.start });
+      load();
+    }
+  }
+
   function noShow(booking) {
     if (!window.confirm(`บันทึกว่า ${booking.customer.name} ไม่มา? ช่วงเวลานี้จะว่างให้คนอื่นจอง`)) return;
     act(booking, "status", { status: "no_show" }, "บันทึกว่าไม่มา");
@@ -442,6 +455,7 @@ function BookingsTab({ slug, catalog, initialDay }) {
 
   return (
     <div className="ad-stack">
+      {link && <ManageLinkCard shop={catalog.shop} link={link} onClose={() => setLink(null)} />}
       <section className="ad-card">
         <div className="ad-row ad-wrap ad-between">
           <div className="ad-row ad-wrap">
@@ -517,6 +531,7 @@ function BookingsTab({ slug, catalog, initialDay }) {
                     billable && { label: "ปิดบิล", run: () => setCheckout(b), primary: ["checked_in", "completed"].includes(b.status) },
                     b.status === "checked_in" && { label: "เสร็จแล้ว", run: () => act(b, "status", { status: "completed" }, "บันทึกว่าเสร็จแล้ว") },
                     open && { label: "เลื่อน", run: () => setForm({ booking: b }) },
+                    open && { label: b.hasLink ? "ส่งลิงก์ใหม่ให้ลูกค้า" : "ส่งลิงก์ให้ลูกค้า", run: () => sendLink(b) },
                     open && { label: "ยกเลิก", run: () => cancel(b), danger: true },
                     open && b.status !== "held" && { label: "ไม่มา", run: () => noShow(b) },
                     b.status === "checked_in" && { label: "ย้อนกลับ", run: () => act(b, "status", { status: "confirmed" }, "ย้อนกลับแล้ว") },
@@ -548,14 +563,49 @@ function BookingsTab({ slug, catalog, initialDay }) {
           booking={form.booking}
           defaultDate={day}
           onClose={() => setForm(null)}
-          onSaved={(date) => {
+          onSaved={(date, newLink) => {
             setForm(null);
+            setLink(newLink);
             if (date !== day) setDay(date);
             else load();
           }}
         />
       )}
     </div>
+  );
+}
+
+// The customer's own link (see, move or cancel), shown once for the shop to send by LINE, SMS or copy.
+function ManageLinkCard({ shop, link, onClose }) {
+  const [copied, setCopied] = useState(false);
+  const card = useRef(null);
+  useEffect(() => {
+    card.current?.scrollIntoView?.({ block: "nearest" });
+  }, [link.path]);
+  const url = typeof window === "undefined" ? link.path : new URL(link.path, window.location.origin).toString();
+  const message = `นัดของคุณที่ ${shop.name}\n${longDate(link.date)} เวลา ${link.time} น.\nดู เลื่อน หรือยกเลิกนัดได้ที่ ${url}`;
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(message);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  }
+  return (
+    <section className="ad-card ad-link-card" aria-labelledby="manage-link-title" ref={card}>
+      <div className="ad-row ad-between">
+        <h2 id="manage-link-title">ส่งลิงก์ให้ {link.name}</h2>
+        <button type="button" className="ad-link" onClick={onClose}>ปิด</button>
+      </div>
+      <p className="ad-muted">ลูกค้าใช้ลิงก์นี้ดู เลื่อน หรือยกเลิกนัดเองได้ตามกติกาของร้าน · ลิงก์แสดงครั้งเดียว ถ้าทำหายให้ส่งลิงก์ใหม่</p>
+      <textarea className="ad-link-message" readOnly rows={4} value={message} aria-label="ข้อความที่จะส่ง" onFocus={(e) => e.target.select()} />
+      <div className="ad-row ad-wrap">
+        <button type="button" className="ad-primary" onClick={copy}>{copied ? "คัดลอกแล้ว" : "คัดลอกข้อความ"}</button>
+        <a className="ad-secondary" href={`https://line.me/R/share?text=${encodeURIComponent(message)}`} target="_blank" rel="noreferrer">ส่งทาง LINE</a>
+        {link.phone && <a className="ad-secondary" href={`sms:${link.phone}?body=${encodeURIComponent(message)}`}>ส่ง SMS</a>}
+      </div>
+    </section>
   );
 }
 
@@ -917,8 +967,9 @@ function BookingForm({ slug, catalog, booking, defaultDate, onClose, onSaved }) 
       resourceId: f.resourceId || null,
       durationMinutes: f.durationMinutes ? Number(f.durationMinutes) : null
     };
-    const ok = await save.run(() =>
-      booking
+    let result = null;
+    const ok = await save.run(async () => {
+      result = await (booking
         ? api("PUT", shopPath(slug, `/bookings/${booking.id}`), common)
         : api("POST", shopPath(slug, "/bookings"), {
             ...common,
@@ -927,9 +978,10 @@ function BookingForm({ slug, catalog, booking, defaultDate, onClose, onSaved }) 
             customer: { name: f.name, phone: f.phone },
             notes: f.notes,
             ...(past ? { status: f.status } : {})
-          })
-    );
-    if (ok) onSaved(f.date);
+          }));
+    });
+    // a new upcoming booking comes with the customer's link, for the shop to send right away
+    if (ok) onSaved(f.date, result?.managePath ? { path: result.managePath, name: f.name, phone: f.phone, date: f.date, time: f.time } : null);
   }
 
   return (

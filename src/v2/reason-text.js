@@ -18,7 +18,10 @@ const REASON_TEXT = {
   CUSTOMER_NAME_REQUIRED: "กรุณากรอกชื่อ",
   INVALID_DURATION: "ระยะเวลาที่เลือกไม่ถูกต้อง",
   INVALID_PARTY_SIZE: "จำนวนคนไม่ถูกต้อง",
-  NOT_IN_PAST: "เวลานี้ยังไม่ผ่านไป"
+  NOT_IN_PAST: "เวลานี้ยังไม่ผ่านไป",
+  ADDON_UNAVAILABLE: "ตัวเลือกเสริมที่เลือกหมดในเวลานั้นแล้ว กรุณาเลือกใหม่",
+  ADDON_INVALID: "ตัวเลือกเสริมนี้ใช้กับบริการนี้ไม่ได้แล้ว กรุณาเลือกใหม่",
+  ADDON_GROUP_RULE: "จำนวนตัวเลือกเสริมที่เลือกไม่ตรงกับที่ร้านกำหนด"
 };
 
 module.exports = { REASON_TEXT };

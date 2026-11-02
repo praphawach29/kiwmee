@@ -157,3 +157,57 @@ test("the customer opens their link, moves the booking, then cancels it", async 
   const missing = await page.goto("/b/bloom-hair/manage/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
   expect(missing.status()).toBe(404);
 });
+
+// Add-ons (design §11): the salon gets rackets to rent and a treatment that adds 30 minutes, set up
+// straight in the test database for this test only (the other tests expect no add-on step).
+test("add-ons: after the time the customer picks extras, the price adds up, and the booking keeps them", async ({ page }) => {
+  const { Client } = require("pg");
+  const db = new Client({ connectionString: process.env.BOOKING_DB_URL || "postgres://postgres@127.0.0.1:54329/booking_test" });
+  await db.connect();
+  const SALON = "b1000000-0000-4000-8000-000000000001";
+  const CUT = "c1000000-0000-4000-8000-000000000001";
+  const rackets = "f0e00000-0000-4000-8000-000000000001";
+  const groups = ["f1e00000-0000-4000-8000-000000000001", "f1e00000-0000-4000-8000-000000000002"];
+  try {
+    await db.query("insert into public.resources (id, business_id, kind, name, capacity) values ($1, $2, 'ไม้แบด', 'ไม้แบด', 3)", [rackets, SALON]);
+    await db.query("insert into public.addon_groups (id, business_id, name, sort_order) values ($1, $3, 'อุปกรณ์', 1), ($2, $3, 'บริการเสริม', 2)", [...groups, SALON]);
+    await db.query("update public.addon_groups set max_select = 1 where id = $1", [groups[1]]);
+    await db.query(
+      `insert into public.addons (business_id, group_id, name, price_unit, amount, max_quantity, adds_minutes, uses_kind, sort_order) values
+         ($1, $2, 'เช่าไม้', 'per_unit', 50, 4, 0, 'ไม้แบด', 1),
+         ($1, $3, 'ทรีตเมนต์เพิ่ม', 'per_booking', 300, 1, 30, null, 1)`,
+      [SALON, ...groups]
+    );
+    await db.query("insert into public.offering_addon_groups (business_id, offering_id, group_id) select $1, $2, unnest($3::uuid[])", [SALON, CUT, groups]);
+
+    const errors = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    await page.goto("/b/bloom-hair");
+    await page.getByRole("button", { name: /เลือกบริการก่อน/ }).click();
+    await page.locator('[data-testid="option-offering"]', { hasText: "ตัดผมหญิง" }).click();
+    await page.getByRole("button", { name: "ช่างแนน" }).click();
+    await enabled(page, "date").nth(6).click();
+    await enabled(page, "time").first().click();
+
+    await expect(page.getByRole("heading", { name: "ตัวเลือกเพิ่มเติม" })).toBeVisible();
+    await page.getByRole("checkbox", { name: /เช่าไม้/ }).click();
+    await page.getByRole("button", { name: "เพิ่มจำนวน" }).click();
+    await page.getByRole("radio", { name: /ทรีตเมนต์เพิ่ม/ }).click();
+    await page.getByRole("button", { name: /ต่อไป · เพิ่ม 2 อย่าง/ }).click();
+
+    await expect(page.getByRole("button", { name: /ยืนยันการจอง · 850 บาท/ })).toBeVisible(); // 450 + 2 × 50 + 300
+    await fillAndConfirm(page, "ลูกค้าเช่าไม้");
+    const done = page.getByTestId("booking-done");
+    await expect(done).toContainText("จองสำเร็จ");
+    await expect(done).toContainText("เช่าไม้ ×2, ทรีตเมนต์เพิ่ม");
+    await expect(done).toContainText("850 บาท");
+    await expect(done).not.toContainText("ไม้แบด"); // the rackets are not shown as the stylist
+    expect(errors).toEqual([]);
+  } finally {
+    await db.query("delete from public.booking_addons where addon_id in (select id from public.addons where group_id = any($1::uuid[]))", [groups]);
+    await db.query("delete from public.booking_resources where resource_id = $1", [rackets]);
+    await db.query("delete from public.addon_groups where id = any($1::uuid[])", [groups]);
+    await db.query("delete from public.resources where id = $1", [rackets]);
+    await db.end();
+  }
+});

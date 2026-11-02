@@ -14,9 +14,12 @@
 //   offerings, requirements, offeringResources:  offerings / offering_requirements / offering_resources rows
 //   busy:                active booking_resources rows as { booking_id, resource_id, units, start_at, end_at,
 //                        hold_expires_at } — end_at already includes the offering's buffer (range upper)
+//   addonGroups, addonLinks, addons:  active addon_groups / offering_addon_groups / addons rows (design §11)
 // }
-// selected = { offeringId, resourceId, date, time, durationMinutes, partySize }
+// selected = { offeringId, resourceId, date, time, durationMinutes, partySize, addons }
 //   undefined = not chosen yet. resourceId: null = the customer chose "anyone".
+//   addons = { "<addon id>": quantity } — {} = asked and none taken. Their extra minutes lengthen the
+//   booking and an add-on that uses a kind of resource needs one free for the whole booking.
 
 const { ZERO_AVAILABILITY_REASONS } = require("../availability-engine");
 const { badRequest } = require("../errors");
@@ -24,7 +27,10 @@ const { badRequest } = require("../errors");
 const REASONS = {
   ...ZERO_AVAILABILITY_REASONS,
   OUTSIDE_BOOKING_WINDOW: "OUTSIDE_BOOKING_WINDOW", // before today or past max_advance_days
-  NOT_OFFERED: "NOT_OFFERED" // the chosen resource does not do this offering (or the reverse)
+  NOT_OFFERED: "NOT_OFFERED", // the chosen resource does not do this offering (or the reverse)
+  RESOURCE_BUSY: "RESOURCE_BUSY", // an add-on's racket / driver is all taken at that time
+  NOT_ENOUGH_TIME: "NOT_ENOUGH_TIME", // an add-on's extra minutes run past the working hours or into the next booking
+  ADDON_GROUP_RULE: "ADDON_GROUP_RULE" // more picks than the group allows
 };
 
 // When several days/offerings fail for different reasons, tell the customer the most useful one
@@ -39,7 +45,7 @@ const REASON_PRIORITY = [
   REASONS.OUTSIDE_BOOKING_WINDOW
 ];
 
-const ASKS = ["offering", "resource", "date", "time", "duration", "party"];
+const ASKS = ["offering", "resource", "date", "time", "duration", "party", "addons"];
 // Order of the steps after the starting one (design §5)
 const STEP_ORDER = ["offering", "resource", "date", "time", "duration", "party"];
 const SELECTED_KEY = {
@@ -48,7 +54,8 @@ const SELECTED_KEY = {
   date: "date",
   time: "time",
   duration: "durationMinutes",
-  party: "partySize"
+  party: "partySize",
+  addons: "addons"
 };
 
 // ---------- time in the shop's timezone ----------
@@ -165,8 +172,45 @@ function createContext(catalog, { now, excludeBookingId } = {}) {
     schedules: catalog.schedules || [],
     timeOff: catalog.timeOff || [],
     busy,
+    addonGroups: (catalog.addonGroups || []).filter((g) => g.active !== false),
+    addonLinks: catalog.addonLinks || [],
+    addonById: new Map((catalog.addons || []).filter((a) => a.active !== false).map((a) => [a.id, a])),
     dayCache: new Map()
   };
+}
+
+// ---------- add-ons ----------
+
+// The groups an offering offers, each with its add-ons in order (groups without any are left out)
+function addonGroupsFor(ctx, offeringId) {
+  const linked = new Set(ctx.addonLinks.filter((l) => l.offering_id === offeringId).map((l) => l.group_id));
+  const all = [...ctx.addonById.values()];
+  return ctx.addonGroups
+    .filter((g) => linked.has(g.id))
+    .map((g) => ({
+      ...g,
+      addons: all.filter((a) => a.group_id === g.id).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name.localeCompare(b.name))
+    }))
+    .filter((g) => g.addons.length > 0)
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name.localeCompare(b.name));
+}
+
+// The picks that apply to this offering, as [{ addon, quantity }]
+function picksFor(ctx, offeringId, addons) {
+  if (!addons) return [];
+  const offered = new Set(addonGroupsFor(ctx, offeringId).flatMap((g) => g.addons.map((a) => a.id)));
+  return Object.entries(addons)
+    .filter(([id, quantity]) => quantity > 0 && offered.has(id))
+    .map(([id, quantity]) => ({ addon: ctx.addonById.get(id), quantity }));
+}
+
+// Each group's minimum met, and no group over its maximum
+function groupRulesMet(ctx, offeringId, addons) {
+  const picks = picksFor(ctx, offeringId, addons);
+  return addonGroupsFor(ctx, offeringId).every((g) => {
+    const n = picks.filter((p) => p.addon.group_id === g.id).length;
+    return n >= (g.min_select ?? 0) && (g.max_select === null || g.max_select === undefined || n <= g.max_select);
+  });
 }
 
 function requirementsOf(ctx, offeringId) {
@@ -277,11 +321,45 @@ function resourceFree(ctx, resource, date, start, end, endWithBuffer, units) {
   return peak + units <= resource.capacity ? "ok" : "booked";
 }
 
+// How many more units this resource can take over the range (0 when it is not working then)
+function freeUnits(ctx, resource, date, start, end, endWithBuffer) {
+  const day = resourceDay(ctx, resource.id, date);
+  if (!day.working || start < day.start || end > day.end) return 0;
+  if (day.blocked.some((b) => overlaps(start, end, b.start, b.end))) return 0;
+  const clashing = day.busy.filter((b) => overlaps(start, endWithBuffer, b.start, b.end));
+  if (clashing.length === 0) return resource.capacity;
+  const points = [start, ...clashing.map((b) => b.start).filter((t) => t > start && t < endWithBuffer)];
+  const peak = Math.max(...points.map((t) => clashing.filter((b) => b.start <= t && t < b.end).reduce((sum, b) => sum + b.units, 0)));
+  return Math.max(resource.capacity - peak, 0);
+}
+
+// Spread each add-on's quantity over the free resources of its kind (as booking_plan does).
+// Returns the extra takes, or null when one runs out. `skip` = resources the booking already holds.
+function takeAddonResources(ctx, picks, date, start, end, endWithBuffer, skip) {
+  const used = new Set(skip);
+  const taken = [];
+  for (const { addon, quantity } of picks) {
+    if (!addon.uses_kind) continue;
+    let need = quantity;
+    for (const res of ctx.resources) {
+      if (need <= 0) break;
+      if (res.kind !== addon.uses_kind || used.has(res.id)) continue;
+      const take = Math.min(need, freeUnits(ctx, res, date, start, end, endWithBuffer));
+      if (take <= 0) continue;
+      used.add(res.id);
+      taken.push({ resourceId: res.id, kind: res.kind, units: take, addonId: addon.id });
+      need -= take;
+    }
+    if (need > 0) return null;
+  }
+  return taken;
+}
+
 // ---------- one offering on one day ----------
 
 // Every start time on `date` where the offering can be booked, each with the resources it would take.
 // Returns { starts, reason } — reason explains an empty list.
-function evaluateDay(ctx, { offering, date, durationMinutes, partySize, resourceId, time, firstOnly }) {
+function evaluateDay(ctx, { offering, date, durationMinutes, partySize, resourceId, time, firstOnly, addons }) {
   if (date < ctx.today || date > ctx.lastDay) return { starts: [], reason: REASONS.OUTSIDE_BOOKING_WINDOW };
   const shop = shopDay(ctx, date);
   if (shop.closed) return { starts: [], reason: REASONS.BUSINESS_CLOSED };
@@ -298,7 +376,9 @@ function evaluateDay(ctx, { offering, date, durationMinutes, partySize, resource
   }
 
   const step = ctx.settings.slot_interval_minutes * MINUTE;
-  const length = durationMinutes * MINUTE;
+  const picks = picksFor(ctx, offering.id, addons);
+  const extra = picks.reduce((sum, p) => sum + (p.addon.adds_minutes || 0) * p.quantity, 0);
+  const length = (durationMinutes + extra) * MINUTE;
   const buffer = (offering.buffer_after_minutes || 0) * MINUTE;
   const only = time ? localToMs(date, time, ctx.timezone) : null;
   const starts = [];
@@ -328,7 +408,12 @@ function evaluateDay(ctx, { offering, date, durationMinutes, partySize, resource
       taken.push({ resourceId: found.id, kind: req.kind, units });
     }
     if (taken.length === reqs.length) {
-      starts.push({ start, end, endWithBuffer: end + buffer, resources: taken });
+      const extras = takeAddonResources(ctx, picks, date, start, end, end + buffer, taken.map((t) => t.resourceId));
+      if (!extras) {
+        sawBooked = true;
+        continue;
+      }
+      starts.push({ start, end, endWithBuffer: end + buffer, resources: [...taken, ...extras] });
       if (firstOnly) break;
     }
   }
@@ -377,7 +462,8 @@ function search(ctx, sel, { firstOnly, visit }) {
           partySize: party,
           resourceId: sel.resourceId,
           time: sel.time,
-          firstOnly
+          firstOnly,
+          addons: sel.addons
         });
         if (reason) reasons.add(reason);
         for (const s of starts) if (visit({ offering, date, durationMinutes, ...s })) return null;
@@ -406,6 +492,18 @@ function normalizeSelected(ctx, selected = {}) {
   if (sel.partySize !== undefined && sel.partySize !== null) {
     sel.partySize = Number(sel.partySize);
     if (!Number.isInteger(sel.partySize) || sel.partySize < 1) throw badRequest("partySize must be a positive integer");
+  }
+  if (sel.addons !== undefined && sel.addons !== null) {
+    if (typeof sel.addons !== "object" || Array.isArray(sel.addons)) throw badRequest("addons must be an object");
+    const addons = {};
+    for (const [id, quantity] of Object.entries(sel.addons)) {
+      if (!ctx.addonById.has(id)) throw badRequest("unknown add-on");
+      if (!Number.isInteger(quantity) || quantity < 0 || quantity > 1000) throw badRequest("add-on quantity must be a whole number");
+      if (quantity > 0) addons[id] = quantity;
+    }
+    sel.addons = addons;
+  } else {
+    delete sel.addons;
   }
   return sel;
 }
@@ -480,16 +578,62 @@ function getOptions(catalog, { ask, selected, now, excludeBookingId } = {}) {
   } else if (ask === "duration") {
     const offering = requireOffering(ctx, sel, ask);
     options = durationsOf(offering).map((m) => ({ value: m, ...exists(ctx, { ...sel, durationMinutes: m }) }));
-  } else {
+  } else if (ask === "party") {
     const offering = requireOffering(ctx, sel, ask);
     options = Array.from({ length: offering.max_party_size }, (_, i) => i + 1).map((n) => ({
       value: n,
       ...exists(ctx, { ...sel, partySize: n })
     }));
+  } else {
+    return addonOptions(ctx, sel);
   }
 
   const reason = options.some((o) => o.available) ? null : strongest(new Set(options.map((o) => o.reason).filter(Boolean)));
   return { ask, options, reason };
+}
+
+// The add-ons of the chosen offering at the chosen time: each one on its own, how many are left
+// (an add-on that uses a kind of resource), and why one cannot be taken. Picks that only fail
+// together (two add-ons after the last racket) are caught when the booking is made.
+function addonOptions(ctx, sel) {
+  const offering = requireOffering(ctx, sel, "addons");
+  if (!sel.date || !sel.time) throw badRequest("choose a date and time before asking for add-ons");
+  const groups = addonGroupsFor(ctx, offering.id);
+  let slot = null;
+  search(ctx, sel, { firstOnly: true, visit: (s) => (slot = s) });
+  const options = [];
+  for (const g of groups) {
+    for (const addon of g.addons) {
+      const base = { value: addon.id, label: addon.name, groupId: g.id };
+      if (!slot) {
+        options.push({ ...base, available: false, reason: REASONS.NO_AVAILABLE_SLOTS, maxQuantity: 0 });
+        continue;
+      }
+      const one = exists(ctx, { ...sel, addons: { [addon.id]: 1 } });
+      let left = addon.max_quantity;
+      if (addon.uses_kind) {
+        const end = slot.end + (addon.adds_minutes || 0) * MINUTE;
+        const buffer = slot.endWithBuffer - slot.end;
+        const held = new Set(slot.resources.map((r) => r.resourceId));
+        left = Math.min(left, ctx.resources
+          .filter((r) => r.kind === addon.uses_kind && !held.has(r.id))
+          .reduce((sum, r) => sum + freeUnits(ctx, r, slot.date, slot.start, end, end + buffer), 0));
+      }
+      const available = one.available && left > 0;
+      options.push({
+        ...base,
+        available,
+        reason: available ? null : addon.uses_kind && left <= 0 ? REASONS.RESOURCE_BUSY : REASONS.NOT_ENOUGH_TIME,
+        maxQuantity: available ? left : 0
+      });
+    }
+  }
+  return {
+    ask: "addons",
+    options,
+    reason: null,
+    groups: groups.map((g) => ({ id: g.id, name: g.name, minSelect: g.min_select ?? 0, maxSelect: g.max_select ?? null }))
+  };
 }
 
 // Which steps apply to this shop's flow and the selection so far (skips ones that do not apply)
@@ -520,6 +664,11 @@ function nextStep(catalog, { selected, now }) {
   for (const step of STEP_ORDER) {
     if (steps.includes(step) && !chosen(step) && stepApplies(ctx, step, sel)) return { step };
   }
+  // add-ons come after the time (their resources and extra minutes depend on it), before the customer
+  if (sel.offeringId && addonGroupsFor(ctx, sel.offeringId).length > 0 &&
+      (sel.addons === undefined || !groupRulesMet(ctx, sel.offeringId, sel.addons))) {
+    return { step: "addons" };
+  }
   return { step: (flow.then || ["customer"])[0] || "done" };
 }
 
@@ -541,7 +690,8 @@ function reconcile(catalog, { selected, changed, now }) {
   // Check each earlier choice against the new one and the choices already kept, in step order,
   // so a stylist who is off that day is dropped rather than the offering they were booked for.
   const kept = {};
-  if (changed && SELECTED_KEY[changed]) kept[SELECTED_KEY[changed]] = sel[SELECTED_KEY[changed]];
+  // (add-ons are checked last, so a new add-on that does not fit is dropped rather than the time)
+  if (changed && SELECTED_KEY[changed] && changed !== "addons") kept[SELECTED_KEY[changed]] = sel[SELECTED_KEY[changed]];
   for (const step of STEP_ORDER) {
     const key = SELECTED_KEY[step];
     if (step === changed || sel[key] === undefined) continue;
@@ -558,6 +708,35 @@ function reconcile(catalog, { selected, changed, now }) {
       cleared.push({ step, value: sel[key], reason: options.length ? null : reason });
     } else {
       cleared.push({ step, value: sel[key], reason: match ? match.reason : REASONS.NOT_OFFERED });
+    }
+  }
+  // Add-ons belong to one offering; with a time they are checked one by one on top of the others
+  if (sel.addons !== undefined) {
+    if (changed === "offering" || !kept.offeringId) {
+      for (const id of Object.keys(sel.addons)) cleared.push({ step: "addons", value: id, reason: null });
+    } else if (!kept.time) {
+      kept.addons = sel.addons; // checked again once a time is picked
+    } else {
+      const ctx2 = createContext(catalog, { now });
+      const groups = addonGroupsFor(ctx2, kept.offeringId);
+      const offered = new Map(groups.flatMap((g) => g.addons.map((a) => [a.id, { addon: a, group: g }])));
+      const keptAddons = {};
+      for (const [id, quantity] of Object.entries(sel.addons)) {
+        const hit = offered.get(id);
+        if (!hit || quantity > hit.addon.max_quantity) {
+          cleared.push({ step: "addons", value: id, reason: REASONS.NOT_OFFERED });
+          continue;
+        }
+        const inGroup = Object.keys(keptAddons).filter((k) => offered.get(k).group.id === hit.group.id).length;
+        if (hit.group.max_select !== null && hit.group.max_select !== undefined && inGroup >= hit.group.max_select) {
+          cleared.push({ step: "addons", value: id, reason: REASONS.ADDON_GROUP_RULE });
+          continue;
+        }
+        const check = exists(ctx2, { ...kept, addons: { ...keptAddons, [id]: quantity } });
+        if (check.available) keptAddons[id] = quantity;
+        else cleared.push({ step: "addons", value: id, reason: hit.addon.uses_kind ? REASONS.RESOURCE_BUSY : REASONS.NOT_ENOUGH_TIME });
+      }
+      kept.addons = keptAddons;
     }
   }
   return { selected: kept, cleared };

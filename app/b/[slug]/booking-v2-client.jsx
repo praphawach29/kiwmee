@@ -31,6 +31,8 @@ const REASON_TEXT = {
   NOT_ENOUGH_TIME: "เวลาไม่พอ",
   ADDON_GROUP_RULE: "เลือกเกินจำนวน"
 };
+// a day's tile is narrow: one short word under the date
+const DAY_REASON_TEXT = { ...REASON_TEXT, PAST_WORKING_HOURS: "ปิดแล้ว", OUTSIDE_BOOKING_WINDOW: "ยังไม่เปิด" };
 const KEY = {
   offering: "offeringId",
   resource: "resourceId",
@@ -45,12 +47,12 @@ const SUMMARY_ORDER = ["date", "offering", "resource", "time", "duration", "part
 const SUMMARY_LABEL = { date: "วัน", offering: "บริการ", time: "เวลา", duration: "ระยะเวลา", party: "จำนวน", addons: "เพิ่มเติม" };
 const ADDON_UNIT = { per_unit: "/ชิ้น", per_hour: "/ชม.", per_day: "/วัน", per_person: "/คน", per_booking: "" };
 
-function formatDate(date, { long = false } = {}) {
+function formatDate(date, { long = false, shortMonth = false } = {}) {
   return new Intl.DateTimeFormat("th-TH", {
     timeZone: "UTC",
     weekday: long ? "long" : "short",
     day: "numeric",
-    month: long ? "long" : "short",
+    month: long && !shortMonth ? "long" : "short",
     year: "numeric"
   }).format(new Date(`${date}T00:00:00Z`));
 }
@@ -353,7 +355,8 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     <CustomerFrame aside={<SummaryAside items={summaryItems} estimate={estimate} shop={shop} onEdit={showStep} busy={busy} />}>
       <main className="bk-shell" aria-busy={busy}>
         <ShopHeader shop={shop} subtitle="จองคิวออนไลน์ · เลือกจากคิวว่างของร้าน" />
-        <ShopGallery shop={shop} />
+        {/* the photos help choosing; once the customer is filling in their details they only push the form down */}
+        {!atCustomer && <ShopGallery shop={shop} />}
         <BookingProgress phase={atCustomer ? "customer" : "selection"} />
 
         {!atCustomer && summaryItems.length > 0 && (
@@ -611,7 +614,7 @@ function DateStrip({ options, today, optionProps }) {
         {options.map((o) => (
           <button key={o.value} {...optionProps(o)}>
             <DateBody value={o.value} today={today} />
-            {!o.available && <small className="bk-reason">{REASON_TEXT[o.reason] ?? "ไม่ว่าง"}</small>}
+            {!o.available && <small className="bk-reason">{DAY_REASON_TEXT[o.reason] ?? "ไม่ว่าง"}</small>}
           </button>
         ))}
       </div>
@@ -619,12 +622,12 @@ function DateStrip({ options, today, optionProps }) {
   );
 }
 
-// "อ. 3 พ.ย. 2569": the whole date on one line in a summary
+// "วันอังคาร 3 พ.ย. 2569": the whole date on one line in a summary (the day in full, the month short)
 const mediumDate = (value) => {
   const d = new Date(`${value}T00:00:00Z`);
-  return `${SHORT_DAYS[d.getUTCDay()]} ${new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" }).format(d)}`;
+  const part = (opts) => new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", ...opts }).format(d);
+  return `${part({ weekday: "long" })} ${part({ day: "numeric", month: "short", year: "numeric" })}`;
 };
-
 const shortDate = (value) => {
   const d = new Date(`${value}T00:00:00Z`);
   return `${SHORT_DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", month: "short" }).format(d)}`;
@@ -751,7 +754,7 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
               <strong>{dayPart({ day: "numeric" })}</strong>
             </span>
             <div>
-              <strong>{formatDate(selected.date, { long: true })}</strong>
+              <strong>{formatDate(selected.date, { long: true, shortMonth: true })}</strong>
               <span>{when}</span>
             </div>
           </div>

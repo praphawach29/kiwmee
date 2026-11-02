@@ -337,3 +337,31 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 /* small thumbnails: a tiny "ภาพประกอบ" tag, and no loading words over the picture */
 .bk-offering-media .bk-media-caption, .bk-resource-media .bk-media-caption { font-size: .5rem; line-height: 1.6; padding: 0 2px; }
 .bk-offering-media .bk-media-status, .bk-resource-media .bk-media-status { font-size: 0; }
+
+/* ---------- larger text (LINE on a phone set to a big font) ----------
+   LINE's in-app browser enlarges the text but not the boxes, so anything sized in px gets crowded.
+   Sizes below follow the text (em) so tiles grow with it, and long rows wrap instead of overflowing. */
+/* picks: wrap onto a second line rather than run off the screen */
+.bk-chips { flex-wrap: wrap; overflow: visible; }
+.bk-chip { flex: 0 1 auto; max-width: 100%; min-width: 0; }
+/* days: never narrower than their date; with big text the row scrolls instead of squeezing */
+.bk-date-strip { grid-auto-columns: max(calc((100% - 6 * 6px) / 7), 2.8em); }
+@media (min-width: 1024px) { .bk-date-strip { grid-auto-columns: max(calc((100% - 13 * 6px) / 14), 2.8em); } }
+.bk-date-strip .bk-option { min-height: 4.6em; }
+.bk-date-strip .bk-reason { white-space: nowrap; }
+/* review: the label column follows the text; a small pencil instead of the word on every row */
+.bk-review-row { grid-template-columns: minmax(4.5em, auto) minmax(0, 1fr) auto; align-items: center; }
+.bk-review-edit { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; background: var(--selected); }
+.bk-review-row:hover:not(:disabled) .bk-review-edit { background: var(--grape); color: #fff; }
+/* done: buttons sit side by side while they fit, and stack when the text is big */
+.bk-link-actions { flex-wrap: wrap; }
+.bk-link-actions .bk-primary { flex: 1 1 10em; }
+.bk-link-actions .bk-secondary { flex: 1 1 7em; }
+.bk-when > div strong { line-height: 1.4; }
+/* photos: a lower cover on phones, so the steps start on the first screen */
+.bk-gallery-cover figcaption { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 6px 12px; font-size: .72rem; }
+@media (max-width: 640px) {
+  .bk-gallery { gap: 8px; }
+  .bk-gallery-cover > .bk-media-image { aspect-ratio: 2 / 1; max-height: 34svh; }
+  .bk-gallery-thumbnails button { flex-basis: 56px; width: 56px; height: 42px; }
+}

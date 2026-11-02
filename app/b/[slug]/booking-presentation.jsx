@@ -112,7 +112,9 @@ export function BookingReview({ items, onEdit, busy, price, id = "booking-review
             <button type="button" className="bk-review-row" disabled={busy} onClick={() => onEdit(item.step)} aria-label={`เปลี่ยน${item.label}: ${item.value}`}>
               <span className="bk-review-label">{item.label}</span>
               <strong>{item.value}</strong>
-              <span className="bk-review-edit" aria-hidden="true">เปลี่ยน</span>
+              <span className="bk-review-edit" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4z" /><path d="M13.5 6.5l4 4" /></svg>
+              </span>
             </button>
           </li>
         ))}

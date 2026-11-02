@@ -368,3 +368,67 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   .bk-gallery-cover > .bk-media-image { aspect-ratio: 2 / 1; max-height: 34svh; }
   .bk-gallery-thumbnails button { flex-basis: 56px; width: 56px; height: 42px; }
 }
+
+/* ======================================================================================
+   App-like look (owner's references): the shop's photo across the top with the shop card
+   over its lower edge, times as tabs, the total beside the button, big photo cards.
+   ====================================================================================== */
+
+/* ---------- the shop's photo as the page top ---------- */
+.bk-hero { position: relative; height: min(64vw, 320px); overflow: hidden; background: var(--grape-night); }
+.bk-hero > .bk-media-image { position: absolute; inset: 0; }
+.bk-hero::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, rgba(27, 22, 64, .28) 0%, rgba(27, 22, 64, 0) 30%, rgba(27, 22, 64, 0) 60%, rgba(27, 22, 64, .22) 100%); }
+.bk-hero[data-compact] { height: 128px; }
+.bk-hero-tag { position: absolute; z-index: 1; left: 12px; top: 12px; padding: 3px 10px; border-radius: 999px; background: rgba(27, 22, 64, .55); color: #fff; font-size: .7rem; backdrop-filter: blur(6px); }
+.bk-hero-thumbs { position: absolute; z-index: 1; right: 12px; bottom: 76px; display: flex; gap: 6px; padding: 4px; border-radius: 14px; background: rgba(255, 255, 255, .22); backdrop-filter: blur(8px); max-width: calc(100% - 24px); overflow-x: auto; scrollbar-width: none; }
+.bk-hero-thumbs button { flex: none; width: 44px; height: 44px; padding: 0; border: 2px solid transparent; border-radius: 10px; overflow: hidden; background: none; cursor: pointer; }
+.bk-hero-thumbs button[aria-pressed="true"] { border-color: #fff; }
+.bk-hero-thumbs .bk-media-image { border-radius: 8px; }
+.bk-hero-thumbs .bk-media-status { font-size: 0; }
+.customer-workspace[data-has-hero] .bk-shop-header { box-shadow: 0 10px 30px rgba(27, 22, 64, .16); }
+@media (min-width: 1024px) {
+  .bk-hero { height: 340px; }
+  .bk-hero[data-compact] { height: 180px; }
+  .bk-hero-thumbs { right: max(32px, calc((100vw - 1100px) / 2 + 32px)); bottom: 100px; }
+}
+
+/* ---------- days: capsules, the chosen one in brand colour ---------- */
+.bk-date-strip .bk-option { border-radius: 999px; padding: 10px 2px; }
+.bk-date-strip .bk-option[data-selected="true"] { background: var(--grape); border-color: var(--grape); box-shadow: 0 6px 16px rgba(106, 76, 255, .3); }
+.bk-date-strip .bk-option[data-unavailable="true"] { border-style: dashed; }
+
+/* ---------- times: เช้า / บ่าย / เย็น tabs ---------- */
+.bk-time-tabs { display: flex; gap: 4px; padding: 4px; border-radius: 16px; background: var(--bg); }
+.bk-time-tabs button { flex: 1 1 0; min-width: 0; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 0 6px; min-height: 48px; padding: 6px 4px; border: 0; border-radius: 12px; background: none; color: var(--ink); font: inherit; font-weight: 500; cursor: pointer; }
+.bk-time-tabs button small { flex-basis: 100%; text-align: center; color: var(--muted); font-size: .72rem; font-weight: 400; }
+.bk-time-tabs button[aria-selected="true"] { background: var(--ink); color: #fff; box-shadow: 0 4px 12px rgba(27, 22, 64, .18); }
+.bk-time-tabs button[aria-selected="true"] small { color: rgba(255, 255, 255, .75); }
+.bk-time-tabs button[data-empty] { color: var(--muted); }
+.bk-options-time .bk-option { min-height: 52px; border-radius: 14px; }
+
+/* ---------- the total beside the button ---------- */
+.bk-submit-bar[data-has-price] { display: flex; align-items: center; gap: 14px; }
+.bk-submit-total { flex: 1 1 auto; min-width: 0; display: grid; line-height: 1.25; }
+.bk-submit-total small { color: var(--muted); font-size: .78rem; }
+.bk-submit-total strong { font-family: var(--font-display); font-weight: 500; font-size: 1.35rem; color: var(--ink); white-space: nowrap; }
+.bk-submit-bar[data-has-price] .bk-primary { flex: 0 1 58%; min-width: 0; }
+@media (min-width: 1024px) {
+  .bk-submit-bar[data-has-price] { justify-content: flex-end; }
+  .bk-submit-bar[data-has-price] .bk-submit-total { flex: none; text-align: right; }
+  .bk-submit-bar[data-has-price] .bk-primary { flex: none; }
+}
+
+/* ---------- services with photos: big photo cards, two across ---------- */
+.bk-options-offering[data-photos] { grid-template-columns: repeat(auto-fill, minmax(min(100%, 9.5em), 1fr)); gap: 12px; }
+.bk-options-offering[data-photos] .bk-option-wrap { display: grid; }
+.bk-options-offering[data-photos] .bk-option,
+.bk-options-offering[data-photos] .bk-option-wrap > .bk-option { flex-direction: column; align-items: stretch; gap: 8px; min-height: 0; padding: 0 0 12px; border-radius: 18px; overflow: hidden; }
+.bk-options-offering[data-photos] .bk-offering-media { width: 100%; height: auto; aspect-ratio: 4 / 3; border-radius: 0; }
+.bk-options-offering[data-photos] .bk-option-text { padding: 0 12px; }
+.bk-options-offering[data-photos] .bk-option-wrap .bk-option-text { padding-right: 52px; }
+.bk-options-offering[data-photos] .bk-choice-mark,
+.bk-options-offering[data-photos] .bk-option-wrap .bk-choice-mark { position: absolute; right: 10px; top: 10px; margin: 0; background-color: #fff; box-shadow: 0 2px 8px rgba(27, 22, 64, .2); }
+.bk-options-offering[data-photos] .bk-media-caption { font-size: .6rem; padding: 2px 6px; text-align: left; }
+.bk-options-offering[data-photos] .bk-option[data-selected="true"] { box-shadow: 0 0 0 2px var(--grape); }
+.bk-options-offering[data-photos] .bk-option > .bk-reason { position: static; padding: 0 12px; }

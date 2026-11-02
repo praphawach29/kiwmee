@@ -101,8 +101,11 @@ test('manage resource summary shows provided media and preserves names for older
 test('resource image failure removes the broken image and exposes a readable fallback', () => {
   const { MediaImage } = loadComponents();
   const original = React.useState;
+  const { useRef, useEffect } = React;
   let state = 'loading';
   React.useState = () => [state, (next) => { state = next; }];
+  React.useRef = () => ({ current: null });
+  React.useEffect = () => {};
   try {
     const props = { item: { url: 'https://example.com/broken.jpg', alt: 'สนาม A' }, name: 'สนาม A' };
     const tree = MediaImage(props);
@@ -113,6 +116,7 @@ test('resource image failure removes the broken image and exposes a readable fal
     assert.doesNotMatch(html, /<img/);
   } finally {
     React.useState = original;
+    Object.assign(React, { useRef, useEffect });
   }
 });
 

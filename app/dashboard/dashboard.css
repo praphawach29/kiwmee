@@ -835,3 +835,7 @@
   .ad-addon-main { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .ad-addon-main > input:first-child { grid-column: 1 / -1; }
 }
+
+/* A booking waiting for its transfer deposit */
+.ad-deposit-line { align-self: start; justify-self: start; padding: 4px 10px; border-radius: 8px; background: var(--warn-bg); color: var(--warn); font-size: 13px; }
+.ad-deposit-line .ad-link { color: var(--warn); font-weight: 600; }

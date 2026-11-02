@@ -249,7 +249,10 @@ test("opening hours and booking rules are saved and checked", { skip }, async ()
       holdMinutes: 10,
       customerCanCancel: true,
       customerCanReschedule: true,
-      customerChangeCutoffHours: 2
+      customerChangeCutoffHours: 2,
+      depositMode: "none",
+      depositValue: 0,
+      paymentInfo: {}
     });
 
     // what customers may change themselves from their booking link

@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CustomerFrame from "./customer-frame.jsx";
-import { BookingProgress, BookingReview, BookingSubmitBar, ShopHeader, ShopGallery, OfferingThumbnail, ResourceChoice, groupTimes } from "./booking-presentation.jsx";
+import { BookingProgress, BookingReview, BookingSubmitBar, DepositBox, ShopHeader, ShopGallery, OfferingThumbnail, ResourceChoice, groupTimes } from "./booking-presentation.jsx";
 
 const RESOURCE_WORD = { staff: "ช่าง", court: "สนาม", room: "ห้อง", equipment: "อุปกรณ์" };
 const STEP_TITLE = {
@@ -286,7 +286,8 @@ export default function BookingV2Client({ shop, liffId }) {
     return (
       <CustomerFrame>
         <main className="bk-shell">
-          <BookingDone shop={shop} booking={booking} items={summaryItems} selected={selected} resourceWord={resourceWord} />
+          <BookingDone shop={shop} booking={booking} items={summaryItems} selected={selected} resourceWord={resourceWord}
+            onSlip={(view) => setBooking((b) => ({ ...b, status: view.booking.status, deposit: { ...b.deposit, slips: view.booking.deposit?.slips ?? 1 } }))} />
           <PoweredBy />
         </main>
       </CustomerFrame>
@@ -427,6 +428,7 @@ export default function BookingV2Client({ shop, liffId }) {
                   onChange={(e) => setCustomer({ ...customer, phone: e.target.value })}
                 />
               </label>
+              {shop.deposit && <DepositNote deposit={shop.deposit} estimate={estimate} />}
               <p className="bk-fine">
                 <SelfServiceNote shop={shop} /> ร้านใช้ชื่อและเบอร์นี้เพื่อติดต่อเรื่องนัดหมายนี้เท่านั้น
               </p>
@@ -590,6 +592,19 @@ function DateBody({ value, today }) {
   );
 }
 
+// Before booking: the shop asks for a deposit by transfer (the exact amount comes with the booking)
+function DepositNote({ deposit, estimate }) {
+  const total = estimate?.short ? estimate.amount : null;
+  const amount =
+    deposit.mode === "full" ? total : deposit.mode === "percent" ? (total !== null ? Math.round((total * deposit.value) / 100) : null) : total !== null ? Math.min(deposit.value, total) : deposit.value;
+  const what = amount !== null ? money(amount) : deposit.mode === "percent" ? `${deposit.value}% ของราคา` : "เต็มจำนวน";
+  return (
+    <p className="bk-notice">
+      ร้านนี้ขอมัดจำ <b>{what}</b> โดยโอนเงิน · หลังกดยืนยันจะได้เลขบัญชี แล้วโอนและแนบสลิปภายใน {formatMinutes(deposit.holdMinutes ?? 10)}
+    </p>
+  );
+}
+
 function SelfServiceNote({ shop }) {
   const { cancel, reschedule, cutoffHours } = shop.selfService ?? {};
   const can = cancel && reschedule ? "เลื่อนหรือยกเลิก" : cancel ? "ยกเลิก" : reschedule ? "เลื่อน" : null;
@@ -621,7 +636,7 @@ function icsText(value) {
 }
 const icsTime = (iso) => new Date(iso).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 
-function BookingDone({ shop, booking, items, selected, resourceWord }) {
+function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
   const timeFormat = (iso) => new Intl.DateTimeFormat("th-TH", { timeZone: shop.timezone, hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
   const dayPart = (opts) => new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", ...opts }).format(new Date(`${selected.date}T00:00:00Z`));
   const when = booking.startAt && booking.endAt ? `${timeFormat(booking.startAt)}–${timeFormat(booking.endAt)} น.` : selected.time ? `${selected.time} น.` : "";
@@ -661,9 +676,19 @@ function BookingDone({ shop, booking, items, selected, resourceWord }) {
         <span className="bk-done-icon" aria-hidden="true">
           <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7" /></svg>
         </span>
-        <h1>{held ? "กันคิวไว้ให้แล้ว" : "จองสำเร็จ"}</h1>
-        <p className="bk-muted">{shop.name} รอพบคุณ</p>
+        <h1>{held ? "กันคิวไว้ให้แล้ว" : booking.status === "pending" ? "ส่งสลิปแล้ว รอร้านยืนยัน" : "จองสำเร็จ"}</h1>
+        <p className="bk-muted">{held && booking.deposit ? "โอนมัดจำเพื่อยืนยันคิว" : `${shop.name} รอพบคุณ`}</p>
       </div>
+
+      {booking.deposit && ["held", "pending"].includes(booking.status) && managePath && (
+        <DepositBox
+          deposit={booking.deposit}
+          status={booking.status}
+          deadline={booking.holdExpiresAt ? `${timeFormat(booking.holdExpiresAt)} น.` : null}
+          uploadUrl={`/api/b/${shop.slug}/manage/${booking.manageToken}/slip`}
+          onUploaded={onSlip}
+        />
+      )}
 
       <div className="bk-card bk-done-card">
         {selected.date && (
@@ -700,7 +725,7 @@ function BookingDone({ shop, booking, items, selected, resourceWord }) {
             </div>
           )}
         </dl>
-        {held && booking.holdExpiresAt && <p className="bk-notice">กรุณาชำระเงินภายใน {timeFormat(booking.holdExpiresAt)} น.</p>}
+        {held && booking.holdExpiresAt && !booking.deposit && <p className="bk-notice">กรุณาชำระเงินภายใน {timeFormat(booking.holdExpiresAt)} น.</p>}
         {booking.startAt && booking.endAt && (
           <button type="button" className="bk-secondary" onClick={addToCalendar}>
             เพิ่มลงปฏิทิน

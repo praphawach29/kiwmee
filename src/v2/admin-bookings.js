@@ -37,7 +37,8 @@ const REASON_TEXT = {
   NOT_FOUND: "ไม่พบการจองนี้",
   ADDON_UNAVAILABLE: "ของ/คนที่ตัวเลือกเสริมต้องใช้ไม่ว่างในเวลานั้น",
   ADDON_INVALID: "ตัวเลือกเสริมนี้ใช้กับบริการนี้ไม่ได้ หรือเลือกเกินจำนวน",
-  ADDON_GROUP_RULE: "จำนวนตัวเลือกเสริมที่เลือกเกินที่กลุ่มกำหนด"
+  ADDON_GROUP_RULE: "จำนวนตัวเลือกเสริมที่เลือกเกินที่กลุ่มกำหนด",
+  INVALID_AMOUNT: "ยอดมัดจำมากกว่าราคาการจอง หรือวิธีชำระไม่ถูกต้อง"
 };
 
 function rpcError(error) {
@@ -94,6 +95,8 @@ async function listBookings(client, shop, { from, days = 1 } = {}) {
   const { rows } = await client.query(
     `select b.id, b.status, b.start_at, b.end_at, b.party_size, b.source, b.notes, b.hold_expires_at,
             b.manage_token_hash is not null as has_link,
+            b.deposit_due::float8 as deposit_due,
+            (select count(*)::int from public.payment_slips ps where ps.booking_id = b.id) as slips,
             (b.price_snapshot->>'total')::float8 as price, b.offering_id, o.name as offering_name,
             coalesce(b.customer_name, c.name) as customer_name, c.phone as customer_phone, c.line_user_id is not null as from_line,
             (select h.reason from public.booking_status_history h where h.booking_id = b.id
@@ -136,7 +139,9 @@ async function listBookings(client, shop, { from, days = 1 } = {}) {
       resources: b.resources,
       addons: b.addons.map((a) => ({ name: a.name, quantity: a.quantity, total: Number(a.total) })),
       // the customer already has a link (from booking online, or one the shop sent)
-      hasLink: b.has_link
+      hasLink: b.has_link,
+      depositDue: b.deposit_due,
+      slips: b.slips
     };
   });
 }
@@ -247,4 +252,32 @@ async function setStatus(client, shop, id, input = {}) {
   return { id, status: input.status };
 }
 
-module.exports = { listBookings, freeTimes, createBooking, rescheduleBooking, cancelBooking, setStatus, issueManageLink, REASON_TEXT };
+/**
+ * The deposit is in (the shop checked the slip, or took it another way): the booking is confirmed and
+ * the amount goes on its bill as a deposit. input = { amount?, method? } (default: deposit_due, transfer)
+ */
+async function confirmDeposit(client, shop, id, input = {}) {
+  await ownBooking(client, shop, id);
+  let amount = null;
+  if (input.amount !== undefined && input.amount !== null && input.amount !== "") {
+    amount = Number(input.amount);
+    if (!Number.isFinite(amount) || amount < 0) throw invalid("ยอดมัดจำต้องเป็นตัวเลขไม่ติดลบ");
+  }
+  const method = input.method ?? "transfer";
+  if (!["cash", "transfer", "card", "online"].includes(method)) throw badRequest("วิธีชำระไม่ถูกต้อง");
+  await rpc(client, "select public.confirm_deposit($1, $2, $3) as booking", [id, amount, method]);
+  return { id, status: "confirmed" };
+}
+
+/** A slip the customer sent (newest first: n = 0), as stored: WebP bytes, or null */
+async function getSlip(client, shop, id, n = 0) {
+  await ownBooking(client, shop, id);
+  const index = Math.min(Math.max(Number(n) || 0, 0), 4);
+  const { rows } = await client.query(
+    "select image, created_at, (select count(*)::int from public.payment_slips where booking_id = $1) as total from public.payment_slips where booking_id = $1 and business_id = $2 order by created_at desc offset $3 limit 1",
+    [id, shop.id, index]
+  );
+  return rows[0] ? { image: rows[0].image, createdAt: rows[0].created_at, total: rows[0].total } : null;
+}
+
+module.exports = { listBookings, freeTimes, createBooking, rescheduleBooking, cancelBooking, setStatus, issueManageLink, confirmDeposit, getSlip, REASON_TEXT };

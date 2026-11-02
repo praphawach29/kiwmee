@@ -443,6 +443,14 @@ function BookingsTab({ slug, catalog, initialDay }) {
     }
   }
 
+  async function confirmDeposit(booking) {
+    const answer = window.prompt(`ยืนยันว่าได้รับมัดจำของ ${booking.customer.name} แล้ว\nยอดที่ได้รับ (บาท) — ใส่ 0 ถ้ายืนยันคิวโดยไม่บันทึกเงิน`, String(booking.depositDue ?? 0));
+    if (answer === null) return;
+    const amount = Number(answer);
+    if (!Number.isFinite(amount) || amount < 0) return window.alert("ยอดเงินไม่ถูกต้อง");
+    act(booking, "deposit", { amount }, `ยืนยันมัดจำของ ${booking.customer.name} แล้ว`);
+  }
+
   function noShow(booking) {
     if (!window.confirm(`บันทึกว่า ${booking.customer.name} ไม่มา? ช่วงเวลานี้จะว่างให้คนอื่นจอง`)) return;
     act(booking, "status", { status: "no_show" }, "บันทึกว่าไม่มา");
@@ -490,7 +498,10 @@ function BookingsTab({ slug, catalog, initialDay }) {
         {list && shown.length === 0 && <p className="ad-empty">ยังไม่มีการจองในวันนี้</p>}
         <ul className="ad-bookings">
           {shown.map((b) => {
-            const [label, tone] = STATUS[b.status] ?? [b.status, "off"];
+            const waitingDeposit = ["held", "pending"].includes(b.status) && b.depositDue !== null && b.depositDue !== undefined;
+            const [label, tone] = waitingDeposit
+              ? (b.status === "pending" ? ["รอตรวจสลิป", "warn"] : ["รอโอนมัดจำ", "warn"])
+              : STATUS[b.status] ?? [b.status, "off"];
             const open = ["held", "pending", "confirmed"].includes(b.status);
             const paid = b.bill?.status === "closed";
             const billable = !paid && ["pending", "confirmed", "checked_in", "completed"].includes(b.status);
@@ -513,6 +524,14 @@ function BookingsTab({ slug, catalog, initialDay }) {
                     {b.price ? ` · ${money(b.price)}` : ""}
                   </div>
                   {b.addons?.length > 0 && <div className="ad-muted">+ {b.addons.map((a) => `${a.name}${a.quantity > 1 ? ` ×${a.quantity}` : ""}`).join(", ")}</div>}
+                  {waitingDeposit && (
+                    <div className="ad-deposit-line">
+                      มัดจำ {money(b.depositDue)}
+                      {b.slips > 0
+                        ? <> · <a className="ad-link" href={`/api/dashboard/shops/${encodeURIComponent(slug)}/bookings/${b.id}/slip`} target="_blank" rel="noreferrer">ดูสลิป{b.slips > 1 ? ` (ล่าสุดจาก ${b.slips})` : ""}</a></>
+                        : " · ยังไม่ได้ส่งสลิป"}
+                    </div>
+                  )}
                   <div className="ad-muted">
                     {b.customer.phone && <a className="ad-link" href={`tel:${b.customer.phone}`}>{b.customer.phone}</a>}
                     {b.customer.phone ? " · " : ""}
@@ -528,6 +547,7 @@ function BookingsTab({ slug, catalog, initialDay }) {
                 <BookingActions
                   busy={save.busy}
                   actions={[
+                    waitingDeposit && { label: "ยืนยันมัดจำ", run: () => confirmDeposit(b), primary: true },
                     open && b.status !== "held" && { label: "มาถึงแล้ว", run: () => act(b, "status", { status: "checked_in" }, `${b.customer.name} มาถึงแล้ว`) },
                     billable && { label: "ปิดบิล", run: () => setCheckout(b), primary: ["checked_in", "completed"].includes(b.status) },
                     b.status === "checked_in" && { label: "เสร็จแล้ว", run: () => act(b, "status", { status: "completed" }, "บันทึกว่าเสร็จแล้ว") },
@@ -1899,7 +1919,9 @@ function HoursTab({ slug, catalog, onSaved }) {
 
   async function submit(event) {
     event.preventDefault();
-    const settings = Object.fromEntries(Object.entries(form.settings).map(([k, v]) => [k, typeof v === "boolean" ? v : toInt(v)]));
+    // numbers typed into the form go back as numbers; the deposit's mode and bank details stay text
+    const numeric = ["minLeadMinutes", "slotIntervalMinutes", "maxAdvanceDays", "holdMinutes", "customerChangeCutoffHours", "depositValue"];
+    const settings = Object.fromEntries(Object.entries(form.settings).map(([k, v]) => [k, numeric.includes(k) ? toInt(v) : v]));
     if (await save.run(() => api("PUT", shopPath(slug), { ...form, settings }))) onSaved();
   }
 
@@ -1960,6 +1982,7 @@ function HoursTab({ slug, catalog, onSaved }) {
             <input type="number" min={0} max={720} required value={form.settings.customerChangeCutoffHours} onChange={(e) => setSetting("customerChangeCutoffHours", e.target.value)} />
           </label>
         </div>
+        <DepositSettings settings={form.settings} setSetting={setSetting} />
         <Status save={save} />
         <button className="ad-primary" disabled={save.busy}>บันทึก</button>
         </Locked>
@@ -1972,6 +1995,50 @@ function HoursTab({ slug, catalog, onSaved }) {
         onSaved={onSaved}
       />
     </div>
+  );
+}
+
+// Deposit by bank transfer (migration …002200): the booking is held until the shop confirms the slip
+const DEPOSIT_MODES = { none: "ไม่เก็บมัดจำ", fixed: "จำนวนเงินคงที่", percent: "เปอร์เซ็นต์ของราคา", full: "เต็มจำนวน" };
+
+function DepositSettings({ settings, setSetting }) {
+  const mode = settings.depositMode ?? "none";
+  const info = settings.paymentInfo ?? {};
+  const setInfo = (key, value) => setSetting("paymentInfo", { ...info, [key]: value });
+  return (
+    <>
+      <h2>มัดจำ (โอนเงิน)</h2>
+      <p className="ad-muted">เปิดแล้ว การจองออนไลน์จะถูกกันคิวไว้ระหว่างรอลูกค้าโอนและแนบสลิป ร้านตรวจสลิปแล้วกด “ยืนยันมัดจำ” ในหน้าการจอง ยอดมัดจำจะไปอยู่ในบิล</p>
+      <div className="ad-grid">
+        <label className="ad-field">
+          เก็บมัดจำ
+          <select value={mode} onChange={(e) => setSetting("depositMode", e.target.value)}>
+            {Object.entries(DEPOSIT_MODES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        </label>
+        {(mode === "fixed" || mode === "percent") && (
+          <label className="ad-field">
+            {mode === "fixed" ? "ยอดมัดจำ (บาท)" : "มัดจำกี่เปอร์เซ็นต์"}
+            <input type="number" required min={1} max={mode === "percent" ? 100 : undefined} step={mode === "fixed" ? "0.01" : 1} value={settings.depositValue || ""} onChange={(e) => setSetting("depositValue", e.target.value)} />
+          </label>
+        )}
+        {mode !== "none" && (
+          <label className="ad-field">
+            ลูกค้าต้องโอนภายใน (นาที)
+            <input type="number" required min={5} max={1440} value={settings.holdMinutes} onChange={(e) => setSetting("holdMinutes", e.target.value)} />
+          </label>
+        )}
+      </div>
+      {mode !== "none" && (
+        <div className="ad-grid">
+          <label className="ad-field">ธนาคาร<input maxLength={60} placeholder="เช่น กสิกรไทย" value={info.bank ?? ""} onChange={(e) => setInfo("bank", e.target.value)} /></label>
+          <label className="ad-field">เลขบัญชี<input maxLength={30} inputMode="numeric" value={info.accountNumber ?? ""} onChange={(e) => setInfo("accountNumber", e.target.value)} /></label>
+          <label className="ad-field">ชื่อบัญชี<input maxLength={80} value={info.accountName ?? ""} onChange={(e) => setInfo("accountName", e.target.value)} /></label>
+          <label className="ad-field">พร้อมเพย์ (ไม่บังคับ)<input maxLength={20} inputMode="numeric" placeholder="เบอร์มือถือหรือเลขบัตร" value={info.promptPay ?? ""} onChange={(e) => setInfo("promptPay", e.target.value)} /></label>
+          <label className="ad-field">ข้อความถึงลูกค้า (ไม่บังคับ)<input maxLength={200} placeholder="เช่น โอนแล้วแนบสลิปในหน้านี้" value={info.note ?? ""} onChange={(e) => setInfo("note", e.target.value)} /></label>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -2180,7 +2247,12 @@ function useActivity(slug, enabled) {
 
 function activityText(e) {
   if (e.kind === "rescheduled") return `${e.from ? `${shortDate(e.from.date)} ${e.from.time}` : ""} → ${shortDate(e.date)} ${e.time}`;
-  if (e.kind === "status") return e.status === "expired" ? "หมดเวลารอชำระเงิน" : e.status;
+  if (e.kind === "status") {
+    if (e.status === "expired") return "หมดเวลารอชำระเงิน";
+    if (e.status === "pending") return "ส่งสลิปมัดจำแล้ว รอร้านตรวจ";
+    if (e.status === "confirmed") return "ยืนยันมัดจำแล้ว";
+    return STATUS[e.status]?.[0] ?? e.status;
+  }
   return `${shortDate(e.date)} ${e.time}`;
 }
 

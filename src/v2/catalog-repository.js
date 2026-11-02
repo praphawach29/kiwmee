@@ -17,7 +17,8 @@ async function loadCatalog(db, shop) {
   const [settings, flows, hours, closures, resources, schedules, timeOff, offerings, requirements, offeringResources, prices, busy, addonGroups, addonLinks, addons] =
     await Promise.all([
       q(`select min_lead_minutes, slot_interval_minutes, max_advance_days, hold_minutes,
-                customer_can_cancel, customer_can_reschedule, customer_change_cutoff_hours
+                customer_can_cancel, customer_can_reschedule, customer_change_cutoff_hours,
+                deposit_mode, deposit_value::float8 as deposit_value, payment_info
            from public.business_booking_settings where business_id = $1`),
       q("select entry, require, optional, \"then\", options from public.booking_flows where business_id = $1 and category is null"),
       q("select day_of_week, is_open, open_time, close_time from public.business_hours where business_id = $1"),

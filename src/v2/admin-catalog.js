@@ -184,7 +184,8 @@ async function getCatalog(client, shop) {
   const queries = [
     "select name, kind, media from public.businesses where id = $1",
     `select min_lead_minutes, slot_interval_minutes, max_advance_days, hold_minutes,
-            customer_can_cancel, customer_can_reschedule, customer_change_cutoff_hours
+            customer_can_cancel, customer_can_reschedule, customer_change_cutoff_hours,
+            deposit_mode, deposit_value::float8 as deposit_value, payment_info
        from public.business_booking_settings where business_id = $1`,
     "select day_of_week, is_open, open_time, close_time from public.business_hours where business_id = $1",
     `select id, date::text as date, is_full_day, start_time, end_time, reason from public.business_closures
@@ -219,7 +220,10 @@ async function getCatalog(client, shop) {
     hold_minutes: 10,
     customer_can_cancel: true,
     customer_can_reschedule: true,
-    customer_change_cutoff_hours: 2
+    customer_change_cutoff_hours: 2,
+    deposit_mode: "none",
+    deposit_value: 0,
+    payment_info: {}
   };
   const flow = flows[0] ?? { entry: ["date", "offering"], require: ["offering", "date", "time"], optional: ["resource"], then: ["customer"], options: {} };
   // A shop with no hours saved yet is open 10–19 every day (as the options engine assumes)
@@ -234,7 +238,10 @@ async function getCatalog(client, shop) {
       holdMinutes: s.hold_minutes,
       customerCanCancel: s.customer_can_cancel,
       customerCanReschedule: s.customer_can_reschedule,
-      customerChangeCutoffHours: s.customer_change_cutoff_hours
+      customerChangeCutoffHours: s.customer_change_cutoff_hours,
+      depositMode: s.deposit_mode,
+      depositValue: s.deposit_value,
+      paymentInfo: s.payment_info ?? {}
     },
     hours: [0, 1, 2, 3, 4, 5, 6].map((d) => {
       const h = dayHours(d);
@@ -333,6 +340,33 @@ async function getCatalog(client, shop) {
   };
 }
 
+// Deposit by transfer (migration …002200): how much, and where customers transfer it
+const DEPOSIT_MODES = ["none", "fixed", "percent", "full"];
+function depositSettings(s) {
+  const mode = oneOf(s.depositMode ?? "none", DEPOSIT_MODES, "แบบมัดจำ");
+  let value = 0;
+  if (mode === "fixed" || mode === "percent") {
+    value = Number(s.depositValue);
+    const max = mode === "percent" ? 100 : 1000000;
+    if (!Number.isFinite(value) || value <= 0 || value > max) throw invalid(mode === "percent" ? "มัดจำเป็นเปอร์เซ็นต์ต้องอยู่ระหว่าง 1–100" : "ยอดมัดจำต้องมากกว่า 0 บาท");
+    value = Math.round(value * 100) / 100;
+  }
+  const p = s.paymentInfo ?? {};
+  if (typeof p !== "object" || Array.isArray(p)) throw invalid("ข้อมูลบัญชีไม่ถูกต้อง");
+  const info = {
+    bank: text(p.bank, "ธนาคาร", { max: 60, required: false }),
+    accountNumber: text(p.accountNumber, "เลขบัญชี", { max: 30, required: false }),
+    accountName: text(p.accountName, "ชื่อบัญชี", { max: 80, required: false }),
+    promptPay: text(p.promptPay, "พร้อมเพย์", { max: 20, required: false }),
+    note: text(p.note, "หมายเหตุการโอน", { max: 200, required: false })
+  };
+  if (info.accountNumber && !/^[0-9][0-9 -]{5,28}$/.test(info.accountNumber)) throw invalid("เลขบัญชีใส่ได้เฉพาะตัวเลขและขีด");
+  if (info.promptPay && !/^[0-9]{10}$|^[0-9]{13}$/.test(info.promptPay.replace(/[\s-]/g, ""))) throw invalid("พร้อมเพย์ต้องเป็นเบอร์มือถือ 10 หลัก หรือเลขบัตร 13 หลัก");
+  if (mode !== "none" && !info.accountNumber && !info.promptPay) throw invalid("ใส่เลขบัญชีหรือพร้อมเพย์ก่อนเปิดรับมัดจำ");
+  const clean = Object.fromEntries(Object.entries(info).filter(([, v]) => v));
+  return [mode, value, JSON.stringify(clean)];
+}
+
 /** Name, type, booking rules and opening hours. */
 async function saveShop(client, shop, input = {}) {
   const name = text(input.name, "ชื่อร้าน");
@@ -351,17 +385,20 @@ async function saveShop(client, shop, input = {}) {
       int(s.holdMinutes ?? 10, "เวลากันคิวรอชำระเงิน (นาที)", { min: 1, max: 1440 }),
       s.customerCanCancel !== false,
       s.customerCanReschedule !== false,
-      int(s.customerChangeCutoffHours ?? 2, "ลูกค้าเปลี่ยนเองได้ถึงก่อนนัด (ชั่วโมง)", { min: 0, max: 720 })
+      int(s.customerChangeCutoffHours ?? 2, "ลูกค้าเปลี่ยนเองได้ถึงก่อนนัด (ชั่วโมง)", { min: 0, max: 720 }),
+      ...depositSettings(s)
     ];
     await client.query(
       `insert into public.business_booking_settings (business_id, min_lead_minutes, slot_interval_minutes, max_advance_days, hold_minutes,
-                                                     customer_can_cancel, customer_can_reschedule, customer_change_cutoff_hours)
-       values ($1, $2, $3, $4, $5, $6, $7, $8)
+                                                     customer_can_cancel, customer_can_reschedule, customer_change_cutoff_hours,
+                                                     deposit_mode, deposit_value, payment_info)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)
        on conflict (business_id) do update set min_lead_minutes = excluded.min_lead_minutes,
          slot_interval_minutes = excluded.slot_interval_minutes, max_advance_days = excluded.max_advance_days,
          hold_minutes = excluded.hold_minutes, customer_can_cancel = excluded.customer_can_cancel,
          customer_can_reschedule = excluded.customer_can_reschedule,
-         customer_change_cutoff_hours = excluded.customer_change_cutoff_hours`,
+         customer_change_cutoff_hours = excluded.customer_change_cutoff_hours,
+         deposit_mode = excluded.deposit_mode, deposit_value = excluded.deposit_value, payment_info = excluded.payment_info`,
       [shop.id, ...values]
     );
   }

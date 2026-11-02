@@ -211,3 +211,52 @@ test("add-ons: after the time the customer picks extras, the price adds up, and 
     await db.end();
   }
 });
+
+// Transfer deposit (migration …002200): the salon asks for 200 baht; the customer books, sees where to
+// transfer, sends a slip, and the booking waits for the shop. Settings are put back afterwards.
+test("deposit: the booking is held, the customer sees the account and sends a slip, then waits for the shop", async ({ page }) => {
+  const { Client } = require("pg");
+  const sharp = require("sharp");
+  const db = new Client({ connectionString: process.env.BOOKING_DB_URL || "postgres://postgres@127.0.0.1:54329/booking_test" });
+  await db.connect();
+  const SALON = "b1000000-0000-4000-8000-000000000001";
+  const { rows: [before] } = await db.query("select deposit_mode, deposit_value, payment_info, hold_minutes from public.business_booking_settings where business_id = $1", [SALON]);
+  try {
+    await db.query(
+      `update public.business_booking_settings set deposit_mode = 'fixed', deposit_value = 200, hold_minutes = 60,
+              payment_info = '{"bank":"กสิกรไทย","accountNumber":"123-4-56789-0","accountName":"บลูม แฮร์"}' where business_id = $1`,
+      [SALON]
+    );
+    const errors = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    await page.goto("/b/bloom-hair");
+    await page.getByRole("button", { name: /เลือกบริการก่อน/ }).click();
+    await page.locator('[data-testid="option-offering"]', { hasText: "ทรีตเมนต์" }).click();
+    await page.getByRole("button", { name: "ช่างบี" }).click();
+    await enabled(page, "date").nth(7).click();
+    await enabled(page, "time").nth(3).click();
+    await expect(page.getByText(/ร้านนี้ขอมัดจำ\s*200 บาท/)).toBeVisible();
+    await fillAndConfirm(page, "ลูกค้ามัดจำ");
+
+    const done = page.getByTestId("booking-done");
+    await expect(done).toContainText("กันคิวไว้ให้แล้ว");
+    await expect(done).toContainText("โอนมัดจำเพื่อยืนยันคิว");
+    await expect(done).toContainText("123-4-56789-0");
+    const slip = await sharp({ create: { width: 300, height: 500, channels: 3, background: "#e8f5e9" } }).png().toBuffer();
+    await done.locator('input[type="file"]').setInputFiles({ name: "slip.png", mimeType: "image/png", buffer: slip });
+    await expect(done).toContainText("ส่งสลิปแล้ว รอร้านยืนยัน");
+    await expect(done).toContainText("ส่งสลิปแล้ว 1 รูป");
+
+    await page.getByTestId("manage-link").click();
+    await page.waitForLoadState("networkidle");
+    await expect(page.getByTestId("manage-booking")).toContainText("รอร้านตรวจสลิป");
+    await expect(page.getByText("ส่งสลิปแล้ว รอร้านตรวจ")).toBeVisible();
+    expect(errors).toEqual([]);
+  } finally {
+    await db.query(
+      "update public.business_booking_settings set deposit_mode = $2, deposit_value = $3, payment_info = $4, hold_minutes = $5 where business_id = $1",
+      [SALON, before.deposit_mode, before.deposit_value, before.payment_info, before.hold_minutes]
+    );
+    await db.end();
+  }
+});

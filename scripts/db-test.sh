@@ -24,4 +24,6 @@ for f in "$here"/supabase/migrations/*.sql; do
 done
 psql "$url" -v ON_ERROR_STOP=1 -q -f "$here/supabase/seed.sql"
 
-SUPABASE_TEST_DB_URL="$url" node --test "$here"/supabase/tests/*.test.js
+# One file at a time: every file books the same demo shops inside open transactions, and two files
+# holding their locks at once can deadlock each other (a test-only problem: real requests are short).
+SUPABASE_TEST_DB_URL="$url" node --test --test-concurrency=1 "$here"/supabase/tests/*.test.js

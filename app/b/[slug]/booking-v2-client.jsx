@@ -256,7 +256,9 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
   const summaryItems = SUMMARY_ORDER.filter((s) => selected[KEY[s]] !== undefined).map((s) => ({
     step: s,
     label: s === "resource" ? resourceWord : SUMMARY_LABEL[s] ?? s,
-    value: s === "date" ? mediumDate(selected.date) : valueLabel(s, selected[KEY[s]])
+    value: s === "date" ? mediumDate(selected.date) : valueLabel(s, selected[KEY[s]]),
+    // the day on its own line, the date below it
+    display: s === "date" ? <>{dayName(selected.date)}<br />{dateOnly(selected.date)}</> : null
   }));
   const estimate = priceEstimate(offerings.get(selected.offeringId), selected, addonInfo);
 
@@ -623,6 +625,8 @@ function DateStrip({ options, today, optionProps }) {
 }
 
 // "วันอังคาร 3 พ.ย. 2569": the whole date on one line in a summary (the day in full, the month short)
+const dayName = (value) => new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", weekday: "long" }).format(new Date(`${value}T00:00:00Z`));
+const dateOnly = (value) => new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" }).format(new Date(`${value}T00:00:00Z`));
 const mediumDate = (value) => {
   const d = new Date(`${value}T00:00:00Z`);
   const part = (opts) => new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", ...opts }).format(d);

@@ -27,7 +27,7 @@ test("salon: start from a date, then offering, anyone, time", async ({ page }) =
   await enabled(page, "date").nth(2).click();
 
   await expect(page.getByRole("heading", { name: "เลือกบริการ" })).toBeVisible();
-  await page.getByRole("button", { name: /ตัดผมหญิง/ }).click();
+  await page.getByTestId("option-offering").filter({ hasText: "ตัดผมหญิง" }).click();
 
   await expect(page.getByRole("heading", { name: "เลือกช่าง" })).toBeVisible();
   // ช่างพลอย does colour only, so she is not offered for a cut
@@ -76,7 +76,7 @@ test("date step: the month calendar shows the same days, picks one, and is remem
 test("salon: start from an offering, pick the colourist, then date and time", async ({ page }) => {
   await page.goto("/b/bloom-hair");
   await page.getByRole("button", { name: /เลือกบริการก่อน/ }).click();
-  await page.getByRole("button", { name: /ทำสีผม/ }).click();
+  await page.getByTestId("option-offering").filter({ hasText: "ทำสีผม" }).click();
   await page.getByRole("button", { name: "ช่างพลอย (ทำสีเท่านั้น)" }).click();
   await expect(page.getByRole("heading", { name: "เลือกวัน" })).toBeVisible();
   await enabled(page, "date").nth(3).click();
@@ -91,13 +91,13 @@ test("salon: start from an offering, pick the colourist, then date and time", as
 test("salon: going back to change the offering drops a stylist who does not do it", async ({ page }) => {
   await page.goto("/b/bloom-hair");
   await page.getByRole("button", { name: /เลือกบริการก่อน/ }).click();
-  await page.getByRole("button", { name: /ทำสีผม/ }).click();
+  await page.getByTestId("option-offering").filter({ hasText: "ทำสีผม" }).click();
   await page.getByRole("button", { name: "ช่างพลอย (ทำสีเท่านั้น)" }).click();
   await expect(page.getByRole("heading", { name: "เลือกวัน" })).toBeVisible();
 
   // tap the offering chip and switch to a cut
   await page.getByRole("button", { name: /ทำสีผม\s*เปลี่ยน/ }).click();
-  await page.getByRole("button", { name: /ตัดผมหญิง/ }).click();
+  await page.getByTestId("option-offering").filter({ hasText: "ตัดผมหญิง" }).click();
   await expect(page.getByRole("status")).toContainText("ช่างพลอย (ทำสีเท่านั้น) ไม่มีบริการนี้");
   await expect(page.getByRole("heading", { name: "เลือกช่าง" })).toBeVisible();
   await expect(page.getByRole("button", { name: /ตัดผมหญิง.*เปลี่ยน/ })).toBeVisible();

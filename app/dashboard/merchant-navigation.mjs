@@ -2,6 +2,7 @@
 const DAILY = [
   { id: "overview", label: "ภาพรวม", icon: "▨" },
   { id: "bookings", label: "การจอง", icon: "▦" },
+  { id: "scan", label: "สแกน QR", icon: "⌗" },
   { id: "bills", label: "บิลและรายรับ", icon: "▤" },
   { id: "members", label: "สมาชิกและคะแนน", icon: "★" },
 ];

@@ -92,6 +92,26 @@ async function ownBooking(client, shop, id) {
 async function listBookings(client, shop, { from, days = 1 } = {}) {
   const fromMs = localToMs(date(from), "00:00", shop.timezone);
   const n = Math.min(Math.max(Number(days) || 1, 1), 31);
+  // every booking that touches the days: a rental over several days shows on each of them
+  return queryBookings(client, shop, "b.start_at < $3 and b.end_at > $2", [new Date(fromMs).toISOString(), new Date(fromMs + n * DAY_MS).toISOString()]);
+}
+
+const BOOKING_REF = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{8})$/;
+
+/**
+ * One booking of this shop from what the check-in QR carries (the booking's id) or the 8-character
+ * booking code printed under it, for the scanner at the desk. null when there is none.
+ */
+async function findBooking(client, shop, ref) {
+  const value = String(ref ?? "").trim().toLowerCase();
+  if (!BOOKING_REF.test(value)) throw new AppError("INVALID", "รหัสการจองไม่ถูกต้อง", 422);
+  const rows = value.length === 8
+    ? await queryBookings(client, shop, "b.id::text like $2", [`${value}-%`])
+    : await queryBookings(client, shop, "b.id = $2::uuid", [value]);
+  return rows.length === 1 ? rows[0] : null;
+}
+
+async function queryBookings(client, shop, where, params) {
   const { rows } = await client.query(
     `select b.id, b.status, b.start_at, b.end_at, b.party_size, b.source, b.notes, b.hold_expires_at,
             b.manage_token_hash is not null as has_link,
@@ -114,10 +134,9 @@ async function listBookings(client, shop, { from, days = 1 } = {}) {
        from public.bookings b
        join public.offerings o on o.id = b.offering_id
        join public.customers c on c.id = b.customer_id
-      -- every booking that touches the days: a rental over several days shows on each of them
-      where b.business_id = $1 and b.start_at < $3 and b.end_at > $2
+      where b.business_id = $1 and ${where}
       order by b.start_at, coalesce(b.customer_name, c.name)`,
-    [shop.id, new Date(fromMs).toISOString(), new Date(fromMs + n * DAY_MS).toISOString()]
+    [shop.id, ...params]
   );
   return rows.map((b) => {
     const start = msToLocal(new Date(b.start_at).getTime(), shop.timezone);
@@ -360,4 +379,4 @@ async function getSlip(client, shop, id, n = 0) {
   return rows[0] ? { image: rows[0].image, createdAt: rows[0].created_at, total: rows[0].total } : null;
 }
 
-module.exports = { listBookings, freeTimes, createBooking, rescheduleBooking, cancelBooking, setStatus, issueManageLink, confirmDeposit, getSlip, lineCard, notifyChange, REASON_TEXT };
+module.exports = { listBookings, findBooking, freeTimes, createBooking, rescheduleBooking, cancelBooking, setStatus, issueManageLink, confirmDeposit, getSlip, lineCard, notifyChange, REASON_TEXT };

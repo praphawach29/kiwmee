@@ -7,6 +7,8 @@ import { useEffect, useState } from "react";
 import CustomerFrame from "../customer-frame.jsx";
 import { CustomerTabs, DirectionsButton, ShopHeader, ShopHero, withMedia } from "../booking-presentation.jsx";
 import { useLiff } from "../use-liff.jsx";
+import { CheckinQr, QrImage } from "../qr.jsx";
+import { scanUrl } from "../../../../src/v2/scan-codes.js";
 
 const STATUS = {
   held: "รอโอนมัดจำ",
@@ -32,7 +34,7 @@ function DateTile({ date, small = false }) {
   );
 }
 
-function NextBooking({ booking, directions }) {
+function NextBooking({ booking, directions, slug }) {
   const resource = booking.resources[0];
   return (
     <article className="bk-next" aria-label="นัดถัดไป">
@@ -58,6 +60,7 @@ function NextBooking({ booking, directions }) {
         {booking.total > 0 && <div><dt>ราคา</dt><dd><strong>{money(booking.total)}</strong></dd></div>}
       </dl>
       {booking.link && <a className="bk-primary" href={booking.link}>{booking.status === "held" ? "แนบสลิปโอนมัดจำ" : "ดู เลื่อน หรือยกเลิกนัด"}</a>}
+      <CheckinQr slug={slug} id={booking.checkin} />
       <DirectionsButton href={directions} />
     </article>
   );
@@ -122,12 +125,13 @@ function PointsCard({ points, slug, idToken }) {
         )}
         {code ? (
           <div className="bk-points-code" aria-live="polite">
-            <small>แสดงรหัสนี้ให้พนักงานตอนจ่ายเงิน</small>
+            <small>ให้พนักงานสแกน หรือบอกรหัสนี้ตอนจ่ายเงิน</small>
+            <QrImage text={scanUrl(window.location.origin, slug, "m", code.code)} label={`QR สมาชิก รหัส ${code.code}`} size={168} />
             <strong>{code.code.slice(0, 3)} {code.code.slice(3)}</strong>
             <small>ใช้ได้อีก {Math.floor(left / 60)}:{String(left % 60).padStart(2, "0")} นาที · ใช้ได้ครั้งเดียว</small>
           </div>
         ) : (
-          <button type="button" className="bk-points-button" onClick={showCode}>แสดงรหัสสมาชิก (ตอนจ่ายที่ร้าน)</button>
+          <button type="button" className="bk-points-button" onClick={showCode}>แสดง QR สมาชิก (ตอนจ่ายที่ร้าน)</button>
         )}
         {error && <span className="bk-points-error" role="alert">{error}</span>}
       </div>
@@ -218,7 +222,7 @@ export default function MyBookingsClient({ shop, liffId }) {
         {data && (
           <>
             {next ? (
-              <NextBooking booking={next} directions={data.shop?.directions} />
+              <NextBooking booking={next} directions={data.shop?.directions} slug={shop.slug} />
             ) : (
               <section className="bk-card bk-center-card">
                 <h2>ยังไม่มีนัดที่จะถึง</h2>

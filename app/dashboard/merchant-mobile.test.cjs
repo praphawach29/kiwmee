@@ -26,7 +26,7 @@ test('phone tab bar: daily tabs from the role-checked navigation plus "เพิ
   const { shopNavigation } = await import('./merchant-navigation.mjs');
   const { MobileTabBar } = load('merchant-mobile.jsx');
   const staff = render(MobileTabBar, { groups: shopNavigation('staff'), active: 'bookings', onSelect() {}, badges: { bookings: 3 }, bookingHref: '/b/x' });
-  assert.deepEqual([...staff.matchAll(/<\/span>([^<]+)<\/button>/g)].map((m) => m[1]), ['ภาพรวม', 'การจอง', 'บิล', 'สมาชิก', 'เพิ่มเติม']);
+  assert.deepEqual([...staff.matchAll(/<\/span>([^<]+)<\/button>/g)].map((m) => m[1]), ['ภาพรวม', 'การจอง', 'สแกน', 'บิล', 'สมาชิก', 'เพิ่มเติม']);
   assert.match(staff, /aria-current="page"[^>]*>.*?การจอง/);
   assert.match(staff, /aria-label="3 รายการใหม่">3</);
   // the settings stay in the closed sheet, and an owner on a settings tab sees "เพิ่มเติม" as current

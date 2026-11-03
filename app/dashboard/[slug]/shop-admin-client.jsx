@@ -16,6 +16,7 @@ import { bookingFlowDraft, bookingFlowFromDraft, catalogWarnings, kindWord, prev
 import { BOOKING_TEMPLATES, previewBookingTemplate } from "../../../src/v2/booking-templates.js";
 import { AMENITIES } from "../../../src/v2/amenities.js";
 import { parseScan, bookingCode } from "../../../src/v2/scan-codes.js";
+import { MAX as LAYOUT_MAX, MAX_SPAN, overlap as layoutOverlap, gridSize } from "../../../src/v2/resource-layout.js";
 
 // Defense in depth for owner-only settings controls; APIs/RLS enforce permissions.
 const ReadOnly = createContext(false);
@@ -2423,7 +2424,137 @@ function ResourcesTab({ slug, catalog, onSaved }) {
         </ul>
       </section>
       {editing && <ResourceEditor key={editing.id ?? "new"} slug={slug} catalog={catalog} initial={editing} onSaved={onSaved} onClose={() => setEditing(null)} />}
+      {catalog.resources.some((r) => r.active) && <LayoutEditor slug={slug} catalog={catalog} onSaved={onSaved} />}
     </div>
+  );
+}
+
+// แผนผังสนาม (migration …002900): the owner places courts / tables / rooms on a grid; the customer
+// then picks from the map. Pick one from the list, tap a free cell to put it there, make it wider or
+// taller, or take it off. Nothing is placed = the customer sees the usual list.
+function LayoutEditor({ slug, catalog, onSaved }) {
+  const readOnly = useContext(ReadOnly);
+  const active = useMemo(() => catalog.resources.filter((r) => r.active), [catalog]);
+  const initial = useMemo(() => Object.fromEntries(active.map((r) => [r.id, r.layout ?? null])), [active]);
+  const [spots, setSpots] = useState(initial);
+  const [picked, setPicked] = useState(null);
+  const [error, setError] = useState("");
+  const used = gridSize(active.map((r) => ({ layout: spots[r.id] })));
+  const [size, setSize] = useState(() => ({ rows: Math.max(used.rows, 2), cols: Math.max(used.cols, 4) }));
+  const save = useSave();
+  useEffect(() => setSpots(initial), [initial]);
+
+  const dirty = active.some((r) => JSON.stringify(spots[r.id]) !== JSON.stringify(initial[r.id]));
+  const items = (next) => active.map((r) => ({ id: r.id, name: r.name, layout: next[r.id] }));
+  const nameOf = (id) => active.find((r) => r.id === id)?.name ?? "";
+
+  function put(id, layout) {
+    const next = { ...spots, [id]: layout };
+    if (layout && (layout.row + layout.h - 1 > size.rows || layout.col + layout.w - 1 > size.cols)) return setError("เกินขอบผัง — เพิ่มแถว/คอลัมน์ก่อน");
+    const clash = layoutOverlap(items(next));
+    if (clash) return setError(`${clash[0].name} กับ ${clash[1].name} ทับกัน`);
+    setError("");
+    setSpots(next);
+  }
+
+  function tapCell(row, col) {
+    if (readOnly) return;
+    if (!picked) return setError("เลือกชื่อด้านบนก่อน แล้วแตะช่องว่างเพื่อวาง");
+    const now = spots[picked];
+    put(picked, { row, col, w: now?.w ?? 1, h: now?.h ?? 1 });
+  }
+
+  function resize(dw, dh) {
+    const now = spots[picked];
+    if (!now) return;
+    const w = Math.min(Math.max(now.w + dw, 1), MAX_SPAN);
+    const h = Math.min(Math.max(now.h + dh, 1), MAX_SPAN);
+    put(picked, { ...now, w, h });
+  }
+
+  function grow(dr, dc) {
+    const rows = Math.min(Math.max(size.rows + dr, Math.max(used.rows, 1)), LAYOUT_MAX);
+    const cols = Math.min(Math.max(size.cols + dc, Math.max(used.cols, 1)), LAYOUT_MAX);
+    setSize({ rows, cols });
+  }
+
+  async function submit() {
+    const ok = await save.run(() => api("PUT", shopPath(slug, "/resources/layout"), { items: active.map((r) => ({ id: r.id, layout: spots[r.id] })) }), "บันทึกผังแล้ว");
+    if (ok) onSaved();
+  }
+
+  const covered = new Set();
+  for (const r of active) {
+    const s = spots[r.id];
+    if (s) for (let y = s.row; y < s.row + s.h; y++) for (let x = s.col; x < s.col + s.w; x++) covered.add(`${y}:${x}`);
+  }
+  const cells = [];
+  for (let y = 1; y <= size.rows; y++) for (let x = 1; x <= size.cols; x++) if (!covered.has(`${y}:${x}`)) cells.push([y, x]);
+  const current = picked ? spots[picked] : null;
+
+  return (
+    <section className="ad-card ad-layout">
+      <div className="ad-row ad-wrap ad-between">
+        <h2>แผนผังที่ลูกค้าเห็น (ไม่บังคับ)</h2>
+        <span className="ad-muted">{active.filter((r) => spots[r.id]).length}/{active.length} อยู่บนผัง</span>
+      </div>
+      <p className="ad-muted">เหมาะกับสนาม โต๊ะ ห้อง — ลูกค้าเห็นตำแหน่งจริงและแตะเลือกที่ว่างจากผัง (ต้องวางอย่างน้อย 2 รายการ) · ไม่วางเลย = ลูกค้าเห็นเป็นรายการเหมือนเดิม</p>
+      {!readOnly && (
+        <div className="ad-layout-chips" role="group" aria-label="เลือกรายการที่จะวาง">
+          {active.map((r) => (
+            <button key={r.id} type="button" className="ad-chip" aria-pressed={picked === r.id} data-placed={Boolean(spots[r.id]) || undefined} onClick={() => { setPicked(picked === r.id ? null : r.id); setError(""); }}>
+              {spots[r.id] ? "✓ " : ""}{r.name}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="ad-layout-grid" style={{ gridTemplateColumns: `repeat(${size.cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${size.rows}, 56px)` }}>
+        {cells.map(([y, x]) => (
+          <button key={`${y}:${x}`} type="button" className="ad-layout-cell" style={{ gridRow: y, gridColumn: x }} disabled={readOnly}
+            aria-label={`ช่อง แถว ${y} คอลัมน์ ${x}${picked ? ` — วาง ${nameOf(picked)} ที่นี่` : ""}`} onClick={() => tapCell(y, x)}>
+            {picked && !readOnly ? "+" : ""}
+          </button>
+        ))}
+        {active.filter((r) => spots[r.id]).map((r) => {
+          const s = spots[r.id];
+          return (
+            <button key={r.id} type="button" className="ad-layout-spot" data-picked={picked === r.id || undefined} disabled={readOnly}
+              style={{ gridRow: `${s.row} / span ${s.h}`, gridColumn: `${s.col} / span ${s.w}` }} onClick={() => { setPicked(r.id); setError(""); }}>
+              {r.name}
+            </button>
+          );
+        })}
+      </div>
+      {!readOnly && (
+        <div className="ad-row ad-wrap">
+          <span className="ad-muted">ขนาดผัง {size.rows} × {size.cols}</span>
+          <button type="button" className="ad-secondary" onClick={() => grow(1, 0)} disabled={size.rows >= LAYOUT_MAX}>+ แถว</button>
+          <button type="button" className="ad-secondary" onClick={() => grow(-1, 0)}>− แถว</button>
+          <button type="button" className="ad-secondary" onClick={() => grow(0, 1)} disabled={size.cols >= LAYOUT_MAX}>+ คอลัมน์</button>
+          <button type="button" className="ad-secondary" onClick={() => grow(0, -1)}>− คอลัมน์</button>
+        </div>
+      )}
+      {current && !readOnly && (
+        <div className="ad-row ad-wrap ad-layout-picked">
+          <strong>{nameOf(picked)}</strong>
+          <span className="ad-muted">กว้าง {current.w}</span>
+          <button type="button" className="ad-secondary ad-icon-btn" aria-label="แคบลง" onClick={() => resize(-1, 0)}>−</button>
+          <button type="button" className="ad-secondary ad-icon-btn" aria-label="กว้างขึ้น" onClick={() => resize(1, 0)}>+</button>
+          <span className="ad-muted">สูง {current.h}</span>
+          <button type="button" className="ad-secondary ad-icon-btn" aria-label="เตี้ยลง" onClick={() => resize(0, -1)}>−</button>
+          <button type="button" className="ad-secondary ad-icon-btn" aria-label="สูงขึ้น" onClick={() => resize(0, 1)}>+</button>
+          <button type="button" className="ad-link" onClick={() => put(picked, null)}>เอาออกจากผัง</button>
+        </div>
+      )}
+      {error && <p className="ad-error" role="alert">{error}</p>}
+      <Status save={save} />
+      {!readOnly && (
+        <div className="ad-row">
+          <button type="button" className="ad-primary" disabled={!dirty || save.busy} onClick={submit}>บันทึกผัง</button>
+          {dirty && <button type="button" className="ad-link" onClick={() => { setSpots(initial); setError(""); }}>ยกเลิกการแก้</button>}
+        </div>
+      )}
+    </section>
   );
 }
 

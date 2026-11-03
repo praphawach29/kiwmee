@@ -8,6 +8,7 @@
 // Functions take a client that asUser (or a test) has already switched to the user, so tests run
 // them inside rolled-back transactions.
 
+const { cleanSpot, overlap, layoutOf } = require("./resource-layout");
 const { AppError, badRequest, forbidden, notFound } = require("../errors");
 const { validateMedia } = require("./media-validation");
 const { AMENITY_CODES } = require("./amenities");
@@ -192,7 +193,7 @@ async function getCatalog(client, shop) {
     "select day_of_week, is_open, open_time, close_time from public.business_hours where business_id = $1",
     `select id, date::text as date, is_full_day, start_time, end_time, reason from public.business_closures
         where business_id = $1 and date >= current_date - 1 order by date, start_time nulls first`,
-    "select id, kind, name, capacity, sort_order, active, media from public.resources where business_id = $1 order by active desc, sort_order, name",
+    "select id, kind, name, capacity, sort_order, active, media, layout_row, layout_col, layout_w, layout_h from public.resources where business_id = $1 order by active desc, sort_order, name",
     "select resource_id, day_of_week, is_working, start_time, end_time from public.resource_schedules where business_id = $1",
     `select id, resource_id, date::text as date, is_full_day, start_time, end_time, reason from public.resource_time_off
         where business_id = $1 and date >= current_date - 1 order by date, start_time nulls first`,
@@ -261,6 +262,7 @@ async function getCatalog(client, shop) {
       sortOrder: r.sort_order,
       active: r.active,
       media: r.media,
+      layout: layoutOf(r), // แผนผัง (migration …002900): { row, col, w, h } or null
       // no row for a day = works the shop's hours that day
       schedule: [0, 1, 2, 3, 4, 5, 6].map((d) => {
         const row = schedules.find((x) => x.resource_id === r.id && x.day_of_week === d);
@@ -557,6 +559,39 @@ async function removeOrArchive(client, table, shop, id) {
 }
 
 const deleteResource = (client, shop, id) => removeOrArchive(client, "resources", shop, id);
+
+/**
+ * แผนผังสนาม (migration …002900): items = [{ id, layout: { row, col, w, h } | null }] for this shop's
+ * resources. Every one sent is set (null takes it off the map); the others keep theirs. Two that would
+ * share a cell are refused. Owner only (row level security on resources).
+ */
+async function saveLayout(client, shop, items) {
+  if (!Array.isArray(items) || items.length > 200) throw invalid("ข้อมูลผังไม่ถูกต้อง");
+  const cleaned = items.map((item) => {
+    uuid(item?.id);
+    const layout = cleanSpot(item.layout);
+    if (layout === undefined) throw invalid("ตำแหน่งในผังต้องอยู่ในตาราง 12 × 12 ช่อง (กว้าง/สูงไม่เกิน 6 ช่อง)");
+    return { id: item.id, layout };
+  });
+  const { rows } = await client.query(
+    "select id, name, layout_row, layout_col, layout_w, layout_h from public.resources where business_id = $1 and active",
+    [shop.id]
+  );
+  const sent = new Map(cleaned.map((c) => [c.id, c]));
+  for (const c of cleaned) if (!rows.some((r) => r.id === c.id)) throw notFound("ไม่พบช่าง / สนามในผัง");
+  const after = rows.map((r) => ({ id: r.id, name: r.name, layout: sent.has(r.id) ? sent.get(r.id).layout : layoutOf(r) }));
+  const clash = overlap(after);
+  if (clash) throw invalid(`${clash[0].name} กับ ${clash[1].name} ทับกันในผัง`);
+  for (const c of cleaned) {
+    const s = c.layout;
+    const { rowCount } = await client.query(
+      "update public.resources set layout_row = $3, layout_col = $4, layout_w = $5, layout_h = $6 where id = $1 and business_id = $2",
+      [c.id, shop.id, s?.row ?? null, s?.col ?? null, s?.w ?? 1, s?.h ?? 1]
+    );
+    if (!rowCount) throw notFound("ไม่พบช่าง / สนามในผัง");
+  }
+  return { saved: cleaned.length };
+}
 
 // ---------- offerings and prices ----------
 
@@ -881,6 +916,7 @@ async function saveFlow(client, shop, input) {
 }
 
 module.exports = {
+  saveLayout,
   asUser,
   actAs,
   dbError,

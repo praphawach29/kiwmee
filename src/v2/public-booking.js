@@ -75,7 +75,9 @@ async function shopInfo(db, slug) {
             (select coalesce(jsonb_object_agg(o.id, o.media), '{}'::jsonb)
                from public.offerings o where o.business_id = b.id and o.active) as offering_media,
             (select coalesce(jsonb_object_agg(r.id, r.media), '{}'::jsonb)
-               from public.resources r where r.business_id = b.id and r.active) as resource_media
+               from public.resources r where r.business_id = b.id and r.active) as resource_media,
+            (select coalesce(jsonb_object_agg(r.id, jsonb_build_object('row', r.layout_row, 'col', r.layout_col, 'w', r.layout_w, 'h', r.layout_h)), '{}'::jsonb)
+               from public.resources r where r.business_id = b.id and r.active and r.layout_row is not null) as resource_layout
        from public.businesses b where b.id = $1`, [shop.id]
   );
   const pickable = new Set(
@@ -134,7 +136,8 @@ async function shopInfo(db, slug) {
     resources: catalog.resources
       .filter((r) => pickable.has(r.id))
       .sort(bySort)
-      .map((r) => ({ id: r.id, name: r.name, kind: r.kind, media: gallery.resource_media[r.id] ?? [] })),
+      // layout: where it sits on the shop's map (migration …002900), or null
+      .map((r) => ({ id: r.id, name: r.name, kind: r.kind, media: gallery.resource_media[r.id] ?? [], layout: gallery.resource_layout[r.id] ?? null })),
     // optional extras (design §11) for the page to show and price; which ones can be taken at the
     // chosen time comes from step() (ask "addons")
     addonGroups: [...catalog.addonGroups]

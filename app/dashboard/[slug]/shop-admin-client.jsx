@@ -586,6 +586,7 @@ function BookingsTab({ slug, catalog, initialDay, focusId = null }) {
                         : " · ลูกค้ายังไม่ได้ส่ง (ส่งได้จากลิงก์การจองของลูกค้า)"}
                     </div>
                   )}
+                  {waitingDeposit && b.slipCheck && <SlipCheckLine check={b.slipCheck} due={b.depositDue} />}
                   {waitingDeposit && (
                     <div className="ad-deposit-line">
                       มัดจำ {money(b.depositDue)}
@@ -654,6 +655,32 @@ function BookingsTab({ slug, catalog, initialDay, focusId = null }) {
           }}
         />
       )}
+    </div>
+  );
+}
+
+const SLIP_REASON = {
+  AMOUNT_LOW: "ยอดน้อยกว่ามัดจำ",
+  RECEIVER_MISMATCH: "บัญชีผู้รับไม่ตรงกับร้าน",
+  RECEIVER_UNKNOWN: "ตรวจบัญชีผู้รับไม่ได้",
+  TOO_EARLY: "โอนก่อนจองคิวนี้",
+  DUPLICATE: "สลิปนี้เคยใช้แล้ว",
+  UNREADABLE: "อ่านสลิปไม่ได้"
+};
+
+/** The latest slip's automatic check (migration …003300): what passed, what to look at */
+function SlipCheckLine({ check, due }) {
+  if (check.status === "error") return <div className="ad-deposit-line" data-tone="warn">ตรวจสลิปอัตโนมัติไม่สำเร็จ — ดูสลิปเอง</div>;
+  const facts = [
+    check.amount !== null ? `ยอด ${money(check.amount)}` : null,
+    check.paidAt ? `โอน ${new Intl.DateTimeFormat("th-TH", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(check.paidAt))}` : null,
+    check.receiver ? `ถึง ${check.receiver}` : null
+  ].filter(Boolean).join(" · ");
+  return (
+    <div className="ad-deposit-line" data-tone={check.status === "passed" ? "ok" : "warn"}>
+      {check.status === "passed" ? "✓ สลิปผ่านการตรวจ" : `⚠ ${check.reasons.map((r) => SLIP_REASON[r] ?? r).join(" · ")}`}
+      {facts ? <span className="ad-muted"> · {facts}</span> : null}
+      {check.status === "passed" && due ? <span className="ad-muted"> (มัดจำ {money(due)})</span> : null}
     </div>
   );
 }
@@ -3031,6 +3058,13 @@ function DepositSettings({ settings, setSetting }) {
           <label className="ad-field">ข้อความถึงลูกค้า (ไม่บังคับ)<input maxLength={200} placeholder="เช่น โอนแล้วแนบสลิปในหน้านี้" value={info.note ?? ""} onChange={(e) => setInfo("note", e.target.value)} /></label>
         </div>
       )}
+      {mode !== "none" && (
+        <label className="ad-check">
+          <input type="checkbox" checked={settings.slipAutoConfirm === true} onChange={(e) => setSetting("slipAutoConfirm", e.target.checked)} />
+          ยืนยันมัดจำอัตโนมัติเมื่อสลิปผ่านการตรวจทุกข้อ (ยอดครบ · โอนเข้าบัญชี/พร้อมเพย์ของร้าน · โอนหลังจอง · ไม่เคยใช้สลิปนี้)
+        </label>
+      )}
+      {mode !== "none" && <p className="ad-muted">ระบบตรวจสลิปให้อัตโนมัติเมื่อแพลตฟอร์มเปิดใช้ (ผลตรวจแสดงในหน้าการจอง) · ไม่ติ๊ก = ร้านกดยืนยันเองเหมือนเดิม · ระบบอ่านสลิปเป็นตัวช่วย ไม่ใช่ข้อมูลจากธนาคารโดยตรง</p>}
     </>
   );
 }

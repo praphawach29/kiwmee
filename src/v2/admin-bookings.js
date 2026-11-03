@@ -117,6 +117,8 @@ async function queryBookings(client, shop, where, params) {
             b.manage_token_hash is not null as has_link,
             b.deposit_due::float8 as deposit_due,
             (select count(*)::int from public.payment_slips ps where ps.booking_id = b.id) as slips,
+            (select json_build_object('status', ps.check_status, 'reasons', ps.check_reasons, 'amount', ps.paid_amount, 'paidAt', ps.paid_at, 'receiver', ps.receiver)
+               from public.payment_slips ps where ps.booking_id = b.id order by ps.created_at desc limit 1) as slip_check,
             (b.price_snapshot->>'total')::float8 as price, b.offering_id, o.name as offering_name,
             coalesce(b.customer_name, c.name) as customer_name, c.phone as customer_phone, c.line_user_id is not null as from_line,
             (select h.reason from public.booking_status_history h where h.booking_id = b.id
@@ -169,6 +171,8 @@ async function queryBookings(client, shop, where, params) {
       hasLink: b.has_link,
       depositDue: b.deposit_due,
       slips: b.slips,
+      // the latest slip's automatic check (migration …003300): null when slips are not checked
+      slipCheck: b.slip_check?.status ? { status: b.slip_check.status, reasons: b.slip_check.reasons ?? [], amount: b.slip_check.amount === null ? null : Number(b.slip_check.amount), paidAt: b.slip_check.paidAt, receiver: b.slip_check.receiver } : null,
       // a rental's ID / licence (design 11.7 E3): how many asked for, how many in
       documents: b.required_documents?.length ? { asked: b.required_documents.length, received: b.documents } : null,
       // the customer chose a reward with their points when booking (migration …003200)

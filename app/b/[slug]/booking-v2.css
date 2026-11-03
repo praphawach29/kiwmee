@@ -598,3 +598,4 @@ button.bk-cal-day:not([data-unavailable])::after { content: ""; position: absolu
 .bk-options-reward .bk-option { display: flex; align-items: center; gap: 12px; }
 .bk-options-reward .bk-option-text { flex: 1; min-width: 0; }
 .bk-options-reward .bk-option > .bk-reason { position: static; flex: none; }
+.bk-slip-ok { border-color: var(--mint-deep); color: var(--mint-deep); }

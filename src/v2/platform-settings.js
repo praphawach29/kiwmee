@@ -43,6 +43,14 @@ const SETTINGS = {
     secret: true,
     env: "LINE_CHANNEL_SECRET",
     valid: (v) => /^[A-Za-z0-9]{16,64}$/.test(v)
+  },
+  // migration …003300: slips are checked by EasySlip when this is set (src/v2/slip-check.js)
+  "slip.easyslip_api_key": {
+    label: "EasySlip · API key (ตรวจสลิปอัตโนมัติ)",
+    help: "developer.easyslip.com → API Keys · ว่าง = ไม่ตรวจสลิป ร้านดูสลิปเองเหมือนเดิม",
+    secret: true,
+    env: "EASYSLIP_API_KEY",
+    valid: (v) => v.length >= 10 && v.length <= 500 && NO_SPACE.test(v)
   }
 };
 

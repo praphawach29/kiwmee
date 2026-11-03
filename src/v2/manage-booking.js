@@ -12,6 +12,7 @@ const { promptPayQr } = require("./promptpay");
 const { directionsLink } = require("./directions");
 const { documentStatus, submitDocument } = require("./rental-documents");
 const { heldReward } = require("./loyalty");
+const { checkSlip } = require("./slip-check");
 
 const TOKEN = /^[A-Za-z0-9_-]{32}$/;
 const OPEN = ["held", "pending", "confirmed"];
@@ -187,14 +188,30 @@ async function rescheduleManaged(db, slug, token, body = {}) {
 }
 
 /** The customer's transfer slip (already decoded and re-encoded as WebP by the route) */
-async function submitSlip(db, slug, token, image) {
+/**
+ * The customer's slip. With a slip-reading key set (/super), it is checked at once (src/v2/slip-check.js)
+ * and, if the shop lets passing slips confirm by themselves, the booking may come back confirmed.
+ * jpeg: the same picture as JPEG for the reading service. check: injectable for tests.
+ */
+async function submitSlip(db, slug, token, image, { jpeg = null, check = checkSlip, onConfirmed = null } = {}) {
   const shop = await requireShop(db, slug);
+  const tokenHash = hashToken(token);
   try {
-    await db.query("select public.customer_submit_slip($1, $2, $3)", [shop.id, hashToken(token), image]);
+    await db.query("select public.customer_submit_slip($1, $2, $3)", [shop.id, tokenHash, image]);
   } catch (error) {
     throw rpcError(error);
   }
-  return findManaged(db, slug, token);
+  let slipCheck = null;
+  if (jpeg) {
+    const { rows: [slip] } = await db.query(
+      `select s.id from public.payment_slips s join public.bookings b on b.id = s.booking_id
+        where b.business_id = $1 and b.manage_token_hash = $2 order by s.created_at desc limit 1`,
+      [shop.id, tokenHash]
+    );
+    if (slip) slipCheck = await check(db, slip.id, jpeg, { onConfirmed });
+  }
+  const view = await findManaged(db, slug, token);
+  return slipCheck ? { ...view, slipCheck: { status: slipCheck.status, confirmed: slipCheck.confirmed, reasons: slipCheck.reasons } } : view;
 }
 
 /** The customer's rental document (re-encoded WebP by the route) with their consent */

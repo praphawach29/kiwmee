@@ -69,3 +69,15 @@ test("pushing: the saved token, a retry key, and a reason instead of an error wh
   assert.deepEqual(await pushLine(noDb, "not-a-user", [], { fetchImpl: ok, env: {} }), { sent: false, reason: "NO_LINE_USER" });
   clearCache();
 });
+
+test("reminder cards carry the check-in QR and its code; other cards and no QR leave it out", () => {
+  const checkin = { image: "https://kiwmee.test/api/b/qcourt/checkin-qr/1a2b3c4d-0000-4000-8000-000000000001", code: "1A2B3C4D" };
+  const image = (card) => JSON.stringify(card.contents).includes(checkin.image);
+  for (const kind of ["remind_day", "remind_soon"]) {
+    const card = bookingCard({ kind, shop, booking, link: null, checkin });
+    assert.ok(image(card), kind);
+    assert.ok(texts(card.contents).includes("1A2B3C4D"));
+  }
+  assert.ok(!image(bookingCard({ kind: "booked", shop, booking, link: null, checkin })), "not on the booked card");
+  assert.ok(!JSON.stringify(bookingCard({ kind: "remind_day", shop, booking, link: null }).contents).includes("checkin-qr"));
+});

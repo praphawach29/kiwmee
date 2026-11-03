@@ -65,8 +65,9 @@ const KINDS = {
  *            total, deposit: { due, holdExpiresAt } | null }
  * link: where the button goes (the customer's own booking page), or null for no button
  * directions: a map link to the shop (src/v2/directions.js), or null
+ * checkin: { image, code } — the check-in QR (src/v2/scan-codes.js) for the reminder cards, or null
  */
-function bookingCard({ kind, shop, booking, link, directions = null }) {
+function bookingCard({ kind, shop, booking, link, directions = null, checkin = null }) {
   const k = KINDS[kind] ?? KINDS.booked;
   const when = whenText(booking.startAt, booking.endAt, shop.timezone);
 
@@ -97,6 +98,23 @@ function bookingCard({ kind, shop, booking, link, directions = null }) {
       ]
     }
   ];
+  // the reminders carry the check-in QR: shown at the desk, the shop scans it (or types the code)
+  if (checkin?.image && (kind === "remind_day" || kind === "remind_soon")) {
+    body.push({
+      type: "box",
+      layout: "vertical",
+      margin: "lg",
+      paddingAll: "md",
+      borderWidth: "1px",
+      borderColor: LINE_SOFT,
+      cornerRadius: "md",
+      contents: [
+        { type: "image", url: checkin.image, size: "lg", aspectRatio: "1:1", aspectMode: "fit" },
+        { type: "text", text: checkin.code, size: "lg", weight: "bold", color: GRAPE_DEEP, align: "center", margin: "sm" },
+        { type: "text", text: "แสดง QR นี้ให้พนักงานตอนถึงร้าน", size: "xs", color: MUTED, align: "center", wrap: true }
+      ]
+    });
+  }
   if (details.length) body.push({ type: "box", layout: "vertical", spacing: "sm", margin: "lg", contents: details });
   if (booking.total > 0 && kind !== "cancelled") {
     body.push({ type: "separator", margin: "lg", color: LINE_SOFT });

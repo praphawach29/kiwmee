@@ -23,3 +23,31 @@ test("anything else is not ours", () => {
     assert.equal(parseScan(text), null, text);
   }
 });
+
+test("the public address for links made without a request", () => {
+  const { publicOrigin, checkinImageUrl } = require("../src/v2/scan-codes");
+  assert.equal(publicOrigin({ PUBLIC_ORIGIN: "https://kiwmee.app/" }), "https://kiwmee.app");
+  assert.equal(publicOrigin({ RAILWAY_PUBLIC_DOMAIN: "kiwmee.up.railway.app" }), "https://kiwmee.up.railway.app");
+  assert.equal(publicOrigin({ PUBLIC_ORIGIN: "http://insecure.test" }), null);
+  assert.equal(publicOrigin({}), null);
+  assert.equal(checkinImageUrl("https://k.test", "bloom-hair", ID), `https://k.test/api/b/bloom-hair/checkin-qr/${ID}`);
+});
+
+test("the check-in QR picture: a PNG of the scan link, no database; anything else is 404", async () => {
+  const { GET } = require("../app/api/b/[slug]/checkin-qr/[id]/route.js");
+  const jsQR = require("jsqr");
+  const sharp = require("sharp");
+  const saved = process.env.PUBLIC_ORIGIN;
+  process.env.PUBLIC_ORIGIN = "https://kiwmee.test";
+  try {
+    const ok = await GET(new Request("http://internal/x"), { params: Promise.resolve({ slug: "bloom-hair", id: ID }) });
+    assert.equal(ok.headers.get("content-type"), "image/png");
+    const { data, info } = await sharp(Buffer.from(await ok.arrayBuffer())).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    assert.equal(jsQR(new Uint8ClampedArray(data), info.width, info.height).data, `https://kiwmee.test/dashboard/bloom-hair?scan=b-${ID}`);
+    for (const params of [{ slug: "bloom-hair", id: "nope" }, { slug: "../x", id: ID }, { slug: "bloom-hair", id: ID.toUpperCase() }]) {
+      assert.equal((await GET(new Request("http://internal/x"), { params: Promise.resolve(params) })).status, 404);
+    }
+  } finally {
+    if (saved === undefined) delete process.env.PUBLIC_ORIGIN; else process.env.PUBLIC_ORIGIN = saved;
+  }
+});

@@ -213,7 +213,7 @@ export default function ShopAdmin({ slug }) {
         {tab === "bookings" && <BookingsTab key={`${bookingDay ?? "today"}:${focusBooking ?? ""}`} slug={slug} catalog={catalog} initialDay={bookingDay} focusId={focusBooking} />}
         {tab === "scan" && <ScanTab slug={slug} initial={scanned} onBooking={openBooking} onSale={saleFor} />}
         {tab === "bills" && <BillsTab key={saleCode ?? "bills"} slug={slug} catalog={catalog} saleCode={saleCode} onSaleDone={() => setSaleCode(null)} />}
-        {tab === "members" && <LoyaltyTab slug={slug} />}
+        {tab === "members" && <LoyaltyTab slug={slug} catalog={catalog} />}
         {tab === "flow" && <FlowTab slug={slug} catalog={catalog} version={version} onSaved={reload} />}
         {tab === "offerings" && <OfferingsTab slug={slug} catalog={catalog} onSaved={reload} />}
         {tab === "resources" && <ResourcesTab slug={slug} catalog={catalog} onSaved={reload} />}
@@ -787,11 +787,11 @@ const toPayments = (lines) => lines.map((l) => ({ method: l.method, amount: Numb
 /** Close a booking's bill after the visit: the amount (editable) and how it was paid */
 // ---------- the points programme (migration …002800): rules, rewards, members ----------
 
-function LoyaltyTab({ slug }) {
+function LoyaltyTab({ slug, catalog }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [program, setProgram] = useState(null);
-  const [reward, setReward] = useState({ name: "", pointsCost: "", discountBaht: "", minTierRank: 0 });
+  const [reward, setReward] = useState({ name: "", kind: "discount", offeringId: "", pointsCost: "", discountBaht: "", minTierRank: 0 });
   const save = useSave();
   const base = shopPath(slug, "/loyalty");
 
@@ -822,8 +822,16 @@ function LoyaltyTab({ slug }) {
 
   async function addReward(event) {
     event.preventDefault();
-    const body = { name: reward.name, pointsCost: Number(reward.pointsCost), discountBaht: Number(reward.discountBaht), minTierRank: Number(reward.minTierRank) || 0 };
-    if (await save.run(async () => setData(await api("POST", `${base}/rewards`, body)), "เพิ่มรางวัลแล้ว")) setReward({ name: "", pointsCost: "", discountBaht: "", minTierRank: 0 });
+    const free = reward.kind === "free_offering";
+    const body = {
+      name: reward.name,
+      kind: reward.kind,
+      offeringId: free ? reward.offeringId : null,
+      pointsCost: Number(reward.pointsCost),
+      discountBaht: free ? (reward.discountBaht === "" ? null : Number(reward.discountBaht)) : Number(reward.discountBaht),
+      minTierRank: Number(reward.minTierRank) || 0
+    };
+    if (await save.run(async () => setData(await api("POST", `${base}/rewards`, body)), "เพิ่มรางวัลแล้ว")) setReward({ name: "", kind: "discount", offeringId: "", pointsCost: "", discountBaht: "", minTierRank: 0 });
   }
 
   async function toggleReward(r) {
@@ -881,7 +889,7 @@ function LoyaltyTab({ slug }) {
           {data.rewards.map((r) => (
             <li key={r.id} className="ad-row ad-between ad-wrap" data-off={!r.active || undefined}>
               <span>
-                <strong>{r.name}</strong> <span className="ad-muted">· ใช้ {r.pointsCost.toLocaleString("th-TH")} คะแนน · ลด {money(r.discountBaht)}</span>
+                <strong>{r.name}</strong> <span className="ad-muted">· ใช้ {r.pointsCost.toLocaleString("th-TH")} คะแนน · {r.kind === "free_offering" ? `ฟรี ${r.offeringName ?? "(บริการถูกลบ)"}${r.discountBaht ? ` (สูงสุด ${money(r.discountBaht)})` : ""}` : `ลด ${money(r.discountBaht)}`}</span>
                 {r.minTierRank > 0 && <span className="ad-status" data-tone="info">เฉพาะ {data.tiers.find((t) => t.rank === r.minTierRank)?.name ?? `ระดับ ${r.minTierRank + 1}`} ขึ้นไป</span>}
               </span>
               {edit && <button type="button" className="ad-link" disabled={save.busy} onClick={() => toggleReward(r)}>{r.active ? "ปิด" : "เปิดใหม่"}</button>}
@@ -890,9 +898,30 @@ function LoyaltyTab({ slug }) {
         </ul>
         {edit && (
           <form className="ad-grid" onSubmit={addReward}>
-            <label className="ad-field">ชื่อรางวัล<input required maxLength={80} placeholder="เช่น ส่วนลด 100 บาท" value={reward.name} onChange={(e) => setReward({ ...reward, name: e.target.value })} /></label>
+            <label className="ad-field">
+              แบบรางวัล
+              <select value={reward.kind} onChange={(e) => setReward({ ...reward, kind: e.target.value, discountBaht: "" })}>
+                <option value="discount">ส่วนลดเป็นเงิน</option>
+                <option value="free_offering">รับบริการฟรี</option>
+              </select>
+            </label>
+            {reward.kind === "free_offering" && (
+              <label className="ad-field">
+                บริการที่ให้ฟรี
+                <select required value={reward.offeringId} onChange={(e) => {
+                  const o = catalog.offerings.find((x) => x.id === e.target.value);
+                  setReward({ ...reward, offeringId: e.target.value, name: reward.name || (o ? `${o.name} ฟรี 1 ครั้ง` : "") });
+                }}>
+                  <option value="">เลือกบริการ</option>
+                  {catalog.offerings.filter((o) => o.active !== false).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                </select>
+              </label>
+            )}
+            <label className="ad-field">ชื่อรางวัล<input required maxLength={80} placeholder={reward.kind === "free_offering" ? "เช่น ตัดผมฟรี 1 ครั้ง" : "เช่น ส่วนลด 100 บาท"} value={reward.name} onChange={(e) => setReward({ ...reward, name: e.target.value })} /></label>
             <label className="ad-field">ใช้กี่คะแนน<input type="number" min={1} required value={reward.pointsCost} onChange={(e) => setReward({ ...reward, pointsCost: e.target.value })} /></label>
-            <label className="ad-field">ลดกี่บาท<input type="number" min={1} step="0.01" required value={reward.discountBaht} onChange={(e) => setReward({ ...reward, discountBaht: e.target.value })} /></label>
+            {reward.kind === "discount"
+              ? <label className="ad-field">ลดกี่บาท<input type="number" min={1} step="0.01" required value={reward.discountBaht} onChange={(e) => setReward({ ...reward, discountBaht: e.target.value })} /></label>
+              : <label className="ad-field">มูลค่าสูงสุด (บาท, ไม่บังคับ)<input type="number" min={1} step="0.01" placeholder="ว่าง = เต็มราคาบริการ" value={reward.discountBaht} onChange={(e) => setReward({ ...reward, discountBaht: e.target.value })} /></label>}
             {data.tiers.length > 1 && (
               <label className="ad-field">
                 ใครแลกได้
@@ -1317,7 +1346,7 @@ function MemberBox({ slug, bookingId = null, initialCode = null, onChange }) {
                 <option value="">ไม่ใช้</option>
                 {member.rewards.map((r) => (
                   <option key={r.id} value={r.id} disabled={!r.usable}>
-                    {r.name} · ใช้ {r.pointsCost} คะแนน · ลด {money(r.discountBaht)}{r.usable ? "" : r.tierOk === false ? ` (เฉพาะ ${r.tierName} ขึ้นไป)` : " (คะแนนไม่พอ)"}
+                    {r.name} · ใช้ {r.pointsCost} คะแนน · ลด {money(r.discountBaht)}{r.usable ? "" : r.fits === false ? ` (ใช้กับ ${r.offeringName} เท่านั้น)` : r.tierOk === false ? ` (เฉพาะ ${r.tierName} ขึ้นไป)` : " (คะแนนไม่พอ)"}
                   </option>
                 ))}
               </select>

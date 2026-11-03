@@ -326,7 +326,8 @@ const POINTS_TEXT = {
   NOT_ENOUGH_POINTS: "คะแนนไม่พอสำหรับรางวัลนี้",
   REWARD_UNAVAILABLE: "รางวัลนี้ใช้ไม่ได้แล้ว",
   TIER_TOO_LOW: "รางวัลนี้สำหรับสมาชิกระดับสูงกว่านี้",
-  NOT_A_MEMBER: "ใช้คะแนนได้เมื่อจองผ่าน LINE"
+  NOT_A_MEMBER: "ใช้คะแนนได้เมื่อจองผ่าน LINE",
+  REWARD_NOT_FOR_THIS: "รางวัลนี้ใช้กับบริการอื่น"
 };
 
 function bookingError(error) {

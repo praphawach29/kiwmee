@@ -16,3 +16,5 @@
 .mc-next small { font-size: .8rem; opacity: .92; }
 .mc-bar { display: block; height: 8px; border-radius: 999px; background: rgba(255, 255, 255, .28); overflow: hidden; }
 .mc-bar i { display: block; height: 100%; border-radius: inherit; background: var(--mc-accent, #3DDC97); }
+.mc-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.mc-logo { flex: none; width: 36px; height: 36px; border-radius: 50%; object-fit: cover; background: #fff; border: 2px solid rgba(255, 255, 255, .7); }

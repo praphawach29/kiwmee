@@ -12,7 +12,7 @@ const { verifyLineIdToken } = require("./public-booking");
 const { openLink } = require("./line-notify");
 const { msToLocal } = require("./options-engine");
 const { directionsLink } = require("./directions");
-const { memberCard, issueMemberCode, heldReward, fitsOffering } = require("./loyalty");
+const { memberCard, memberCards, issueMemberCode, heldReward, fitsOffering } = require("./loyalty");
 
 const UPCOMING = ["held", "pending", "confirmed", "checked_in"];
 const PAST_LIMIT = 20;
@@ -74,9 +74,12 @@ async function myBookings(db, slug, body = {}, { now = new Date(), verifyLineTok
     if (all[i].upcoming) all[i].booking.points = await heldReward(db, rows[i].id).catch(() => null);
   }
   // the member's points at this shop's brand (migration …002800), when it runs a points programme
-  const points = await memberCard(db, shop, line.sub).catch(() => null);
+  // and the member's cards at other brands, to swipe through (migration …003500)
+  const cards = await memberCards(db, shop, line.sub).catch(() => []);
+  const points = cards.find((c) => c.here)?.card ?? null;
   return {
     points,
+    otherCards: cards.filter((c) => !c.here).map((c) => ({ slug: c.slug, shopName: c.shopName, card: c.card })),
     shop: { slug: shop.slug, name: shop.name, directions: directionsLink({ address: shop.address, mapUrl: shop.map_url }) },
     // soonest first
     upcoming: all.filter((x) => x.upcoming).map((x) => x.booking).reverse(),

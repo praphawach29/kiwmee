@@ -45,10 +45,11 @@ async function expiringBy(db, brandId, lineUserId, now, at) {
  * The card: points and day in big type, the balance, up to two rewards they can get now, and buttons
  * to their member card and to book again.
  */
-function expiryCard({ shopName, programName, points, expiresAt, balance, rewards = [], tier = null, cardLink = null, bookLink = null }) {
+function expiryCard({ shopName, programName, points, expiresAt, balance, rewards = [], tier = null, cardLink = null, bookLink = null, logoUrl = null }) {
   const theme = themeOf(tier?.cardTheme);
   const date = thaiDate(expiresAt);
   const body = [
+    ...(logoUrl?.startsWith("https://") ? [{ type: "image", url: logoUrl, size: "xxs", aspectRatio: "1:1", aspectMode: "cover", align: "start" }] : []),
     { type: "text", text: programName, size: "sm", color: "#5F5A7A", wrap: true },
     {
       type: "box",
@@ -163,7 +164,7 @@ async function sendExpiryNotices(db, { now = new Date(), push = (to, messages) =
 // The shop the member last earned or used points at is the one the card speaks for
 async function cardFor(db, d, points, balance, env) {
   const { rows: [shop] } = await db.query(
-    `select s.name, s.slug, p.name as program_name
+    `select s.name, s.slug, p.name as program_name, (select logo_url from public.brands where id = p.brand_id) as logo_url
        from public.loyalty_programs p
        join public.businesses s on s.brand_id = p.brand_id
        left join lateral (select max(l.created_at) as at from public.loyalty_ledger l
@@ -191,7 +192,8 @@ async function cardFor(db, d, points, balance, env) {
     rewards: rewards.map((r) => ({ name: r.name, pointsCost: r.points_cost })),
     tier: tier ? { name: tier.name, cardTheme: tier.card_theme } : null,
     cardLink: book ? `${book}/me` : null,
-    bookLink: book
+    bookLink: book,
+    logoUrl: shop.logo_url
   });
 }
 

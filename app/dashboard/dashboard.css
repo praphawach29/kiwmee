@@ -915,3 +915,8 @@
 .ad-tier-row textarea { min-height: 52px; }
 .ad-tier-preview { position: sticky; top: 16px; display: grid; gap: 8px; }
 .ad-tier-perks { margin: 0; padding-left: 1.2em; color: var(--muted); font-size: 14px; }
+
+/* ---------- brand logo on the membership card ---------- */
+.ad-logo-row { display: grid; gap: 16px; align-items: center; }
+@media (min-width: 700px) { .ad-logo-row { grid-template-columns: minmax(0, 360px) auto; } }
+.ad-upload-button { display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }

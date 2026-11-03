@@ -12,7 +12,7 @@ const { verifyLineIdToken } = require("./public-booking");
 const { openLink } = require("./line-notify");
 const { msToLocal } = require("./options-engine");
 const { directionsLink } = require("./directions");
-const { memberCard, issueMemberCode } = require("./loyalty");
+const { memberCard, issueMemberCode, heldReward } = require("./loyalty");
 
 const UPCOMING = ["held", "pending", "confirmed", "checked_in"];
 const PAST_LIMIT = 20;
@@ -69,6 +69,10 @@ async function myBookings(db, slug, body = {}, { now = new Date(), verifyLineTok
     };
   };
   const all = rows.map(item);
+  // points set aside when booking (migration …003200), on the bookings still to come
+  for (let i = 0; i < rows.length; i++) {
+    if (all[i].upcoming) all[i].booking.points = await heldReward(db, rows[i].id).catch(() => null);
+  }
   // the member's points at this shop's brand (migration …002800), when it runs a points programme
   const points = await memberCard(db, shop, line.sub).catch(() => null);
   return {
@@ -91,4 +95,16 @@ async function myMemberCode(db, slug, body = {}, { verifyLineToken = (token) => 
   return issueMemberCode(db, shop, line.sub);
 }
 
-module.exports = { myBookings, myMemberCode };
+/** The member's points and the rewards they can use, for the booking page's "use points" choice */
+async function myRewards(db, slug, body = {}, { verifyLineToken = (token) => verifyLineIdToken(token, db) } = {}) {
+  const shop = await findShop(db, slug);
+  if (!shop) throw notFound("ไม่พบร้าน");
+  if (typeof body.lineIdToken !== "string" || !body.lineIdToken) throw new AppError("FORBIDDEN", "กรุณาเปิดจาก LINE", 403);
+  const line = await verifyLineToken(body.lineIdToken);
+  if (!line?.sub) throw new AppError("FORBIDDEN", "ยืนยันตัวตน LINE ไม่สำเร็จ กรุณาเปิดจาก LINE อีกครั้ง", 403);
+  const card = await memberCard(db, shop, line.sub);
+  if (!card) return null;
+  return { name: card.name, balance: card.balance, tier: card.tier ? { name: card.tier.name } : null, rewards: card.rewards };
+}
+
+module.exports = { myBookings, myMemberCode, myRewards };

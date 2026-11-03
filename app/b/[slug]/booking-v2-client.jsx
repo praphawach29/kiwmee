@@ -175,6 +175,8 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(!initialView);
   const [customer, setCustomer] = useState({ name: "", phone: "" });
+  const [points, setPoints] = useState(null); // the LINE member's points and rewards (migration …003200)
+  const [rewardId, setRewardId] = useState(null);
   const [booking, setBooking] = useState(null);
   const liff = useLiff(liffId);
 
@@ -253,6 +255,11 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     display: s === "date" ? <>{dayName(selected.date)}<br />{dateOnly(selected.date)}</> : null
   }));
   const estimate = priceEstimate(offerings.get(selected.offeringId), selected, addonInfo);
+  // a reward chosen with points: the price the customer will pay at the desk
+  const chosenReward = points?.rewards.find((r) => r.id === rewardId) ?? null;
+  const shownPrice = chosenReward && estimate?.amount != null
+    ? { ...estimate, label: "ราคาหลังใช้คะแนน", value: money(Math.max(estimate.amount - chosenReward.discountBaht, 0)), short: estimate.short ? money(Math.max(estimate.amount - chosenReward.discountBaht, 0)) : null }
+    : estimate;
 
   // the tapped choice lights up at once; the server's answer follows
   const choose = (step, value) => {
@@ -264,12 +271,19 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     return run({ selected, ask: step });
   };
 
+  // a LINE member at the last step (the customer's details): their points and rewards, once
+  const reachedCustomer = Boolean(view?.next && !view?.ask && view.next.step !== "start");
+  useEffect(() => {
+    if (!reachedCustomer || !liff.idToken || points) return;
+    post(`${api}/me/rewards`, { lineIdToken: liff.idToken }).then((p) => setPoints(p ?? { rewards: [], none: true }), () => setPoints({ rewards: [], none: true }));
+  }, [reachedCustomer, liff.idToken, api, points]);
+
   async function submit(event) {
     event.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      const result = await post(`${api}/bookings`, { selected, customer, lineIdToken: liff.idToken || undefined });
+      const result = await post(`${api}/bookings`, { selected, customer, lineIdToken: liff.idToken || undefined, rewardId: rewardId || undefined });
       setBooking(result);
     } catch (e) {
       if (e.status === 409 && e.reason === "ADDON_UNAVAILABLE") {
@@ -452,7 +466,10 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
 
         {atCustomer && (
           <>
-            <BookingReview items={summaryItems} onEdit={showStep} busy={busy} price={estimate} />
+            <BookingReview items={summaryItems} onEdit={showStep} busy={busy} price={shownPrice} />
+            {points && !points.none && points.rewards.length > 0 && (
+              <PointsChoice points={points} chosen={rewardId} onChoose={setRewardId} busy={busy} />
+            )}
             <form id="booking-customer" className="bk-card" onSubmit={submit}>
               <h2>ข้อมูลผู้จอง</h2>
               <label className="bk-field">
@@ -478,7 +495,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
             </form>
           </>
         )}
-        {atCustomer && <BookingSubmitBar formId="booking-customer" disabled={busy || !liff.ready} busy={busy} price={estimate?.short} />}
+        {atCustomer && <BookingSubmitBar formId="booking-customer" disabled={busy || !liff.ready} busy={busy} price={shownPrice?.short} />}
         <PoweredBy />
       </main>
       {liffId && !atCustomer && <CustomerTabs slug={shop.slug} active="book" />}
@@ -632,6 +649,40 @@ function TimeTabs({ options, chosen, optionButton }) {
       )}
       <div className="bk-options bk-options-time" role="tabpanel" aria-label={part.label}>{part.options.map(optionButton)}</div>
     </div>
+  );
+}
+
+// "ใช้คะแนน" (migration …003200): a LINE member picks one reward; its points are set aside with the
+// booking and the discount comes off at the desk. Rewards they cannot use yet say why.
+function PointsChoice({ points, chosen, onChoose, busy }) {
+  return (
+    <section className="bk-card bk-points-choice" aria-labelledby="points-choice-title">
+      <div className="bk-row">
+        <h2 id="points-choice-title">ใช้คะแนนสะสม</h2>
+        <span className="bk-muted">มี {points.balance.toLocaleString("th-TH")} คะแนน{points.tier ? ` · ${points.tier.name}` : ""}</span>
+      </div>
+      <div className="bk-options bk-options-reward" role="radiogroup" aria-label="เลือกรางวัล">
+        <button type="button" className="bk-option" role="radio" aria-checked={!chosen} data-selected={!chosen} disabled={busy} onClick={() => onChoose(null)}>
+          <span className="bk-option-text"><strong>ไม่ใช้คะแนน</strong></span>
+          <span className="bk-choice-mark" aria-hidden="true" />
+        </button>
+        {points.rewards.map((r) => (
+          <button key={r.id} type="button" className="bk-option" role="radio" aria-checked={chosen === r.id} data-selected={chosen === r.id}
+            data-unavailable={!r.usable || undefined} disabled={busy || !r.usable} onClick={() => onChoose(r.id)}>
+            <span className="bk-option-text">
+              <strong>{r.name}</strong>
+              <span className="bk-option-meta">
+                <span>ใช้ {r.pointsCost.toLocaleString("th-TH")} คะแนน</span>
+                <b className="bk-option-price">ลด {money(r.discountBaht)}</b>
+              </span>
+            </span>
+            {!r.usable && <small className="bk-reason">{r.tierName ? `เฉพาะ ${r.tierName} ขึ้นไป` : "คะแนนไม่พอ"}</small>}
+            <span className="bk-choice-mark" aria-hidden="true" />
+          </button>
+        ))}
+      </div>
+      <p className="bk-fine">คะแนนถูกกันไว้กับการจองนี้ทันที ส่วนลดหักตอนจ่ายที่ร้าน · ยกเลิกหรือไม่ได้มา คะแนนคืนให้อัตโนมัติ</p>
+    </section>
   );
 }
 
@@ -994,6 +1045,12 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
               <dd>
                 <strong>{money(booking.price.total)}</strong>
               </dd>
+            </div>
+          )}
+          {booking.points && (
+            <div>
+              <dt>ใช้คะแนน</dt>
+              <dd>{booking.points.name} · {booking.points.points} คะแนน<br /><small className="bk-muted">ลด {money(booking.points.discountBaht)} ตอนจ่ายที่ร้าน</small></dd>
             </div>
           )}
         </dl>

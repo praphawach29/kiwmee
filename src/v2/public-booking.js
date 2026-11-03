@@ -199,7 +199,9 @@ async function step(db, slug, body = {}, now = new Date()) {
 const THAI_PHONE = /^0\d{8,9}$/;
 
 /**
- * body = { selected, customer: { name, phone }, lineIdToken? }
+ * body = { selected, customer: { name, phone }, lineIdToken?, rewardId? }
+ * rewardId: a LINE member uses points for a reward (migration …003200): set aside with the booking,
+ * in the same statement, so a booking never goes through with points that were not there.
  * verifyLineToken(idToken) → { sub, name } | null, injected so tests need no network.
  */
 async function book(
@@ -227,6 +229,8 @@ async function book(
     throw new AppError("INVALID_CUSTOMER", "กรุณากรอกเบอร์โทร 10 หลัก", 422);
   }
 
+  const rewardId = body.rewardId === undefined || body.rewardId === null || body.rewardId === "" ? null : String(body.rewardId);
+  if (rewardId && (!line || !UUID_RE.test(rewardId))) throw new AppError("FORBIDDEN", "ใช้คะแนนได้เมื่อจองผ่าน LINE", 403);
   const startAt = new Date(localToMs(selected.date, selected.time, shop.timezone)).toISOString();
   // a deposit to transfer (or a flow that ends in payment): the booking is held until the shop has it
   const hold = (catalog.flow.then || []).includes("payment") || (catalog.settings?.deposit_mode ?? "none") !== "none";
@@ -235,7 +239,8 @@ async function book(
   let result;
   try {
     const { rows } = await db.query(
-      "select public.booking_attach_manage_token(public.create_booking($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, null, $11::jsonb), $10) as booking",
+      `select x.booking, case when $12::uuid is null then null else public.loyalty_hold_for_booking((x.booking->>'id')::uuid, $12::uuid) end as points
+         from (select public.booking_attach_manage_token(public.create_booking($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, null, $11::jsonb), $10) as booking) x`,
       [
         shop.id,
         selected.offeringId,
@@ -247,7 +252,8 @@ async function book(
         hold,
         line ? "liff" : "web",
         link.hash,
-        JSON.stringify(selected.addons ?? {})
+        JSON.stringify(selected.addons ?? {}),
+        rewardId
       ]
     );
     const b = rows[0].booking;
@@ -265,7 +271,9 @@ async function book(
       price: b.price,
       manageToken: link.token,
       addons: (b.addons ?? []).map((a) => ({ id: a.addon_id, name: a.name, quantity: a.quantity, total: Number(a.total) })),
-      resources: ids.map((id) => ({ id, name: names.find((n) => n.id === id)?.name ?? null, kind: catalog.resources.find((r) => r.id === id)?.kind ?? null }))
+      resources: ids.map((id) => ({ id, name: names.find((n) => n.id === id)?.name ?? null, kind: catalog.resources.find((r) => r.id === id)?.kind ?? null })),
+      // points set aside for a reward: taken off at the desk when the bill is paid
+      points: rows[0].points ? { rewardId: rows[0].points.reward_id, name: rows[0].points.name, points: rows[0].points.points, discountBaht: Number(rows[0].points.discount) } : null
     };
   } catch (error) {
     throw bookingError(error);
@@ -297,6 +305,7 @@ async function book(
           resourceKind: catalog.resources.find((r) => r.id === result.resources[0]?.id)?.kind ?? null,
           addons: result.addons,
           total: Number(result.price?.total ?? 0),
+          points: result.points,
           deposit: result.deposit ? { due: result.deposit.due, holdExpiresAt: result.holdExpiresAt } : null
         },
         link: await manageLink(db, { slug: shop.slug, token: result.manageToken, origin }),
@@ -312,9 +321,19 @@ async function book(
 }
 
 // create_booking reports why in the message, with BK409 / BK422 / BK404 as the code
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const POINTS_TEXT = {
+  NOT_ENOUGH_POINTS: "คะแนนไม่พอสำหรับรางวัลนี้",
+  REWARD_UNAVAILABLE: "รางวัลนี้ใช้ไม่ได้แล้ว",
+  TIER_TOO_LOW: "รางวัลนี้สำหรับสมาชิกระดับสูงกว่านี้",
+  NOT_A_MEMBER: "ใช้คะแนนได้เมื่อจองผ่าน LINE"
+};
+
 function bookingError(error) {
   const kind = { BK409: ["CONFLICT", 409], BK422: ["UNAVAILABLE", 422], BK404: ["NOT_FOUND", 404] }[error?.code];
   if (!kind) return error;
+  // the points part (loyalty_hold_for_booking): the booking did not go through either
+  if (POINTS_TEXT[error.message]) return new AppError(error.message, `${POINTS_TEXT[error.message]} — ยังไม่ได้จอง ลองเลือกใหม่หรือจองโดยไม่ใช้คะแนน`, 422, { reason: error.message });
   return new AppError(kind[0], REASON_TEXT[error.message] ?? error.message, kind[1], { reason: error.message });
 }
 

@@ -11,6 +11,7 @@ const { getOptions, localToMs, msToLocal } = require("./options-engine");
 const { promptPayQr } = require("./promptpay");
 const { directionsLink } = require("./directions");
 const { documentStatus, submitDocument } = require("./rental-documents");
+const { heldReward } = require("./loyalty");
 
 const TOKEN = /^[A-Za-z0-9_-]{32}$/;
 const OPEN = ["held", "pending", "confirmed"];
@@ -88,8 +89,11 @@ async function findManaged(db, slug, token, now = new Date()) {
   const qr = b.deposit_due !== null && b.status === "held" && open ? await promptPayQr(b.payment_info?.promptPay, b.deposit_due).catch(() => null) : null;
   // the documents a rental asks for (design 11.7 E3), while the booking is still on
   const documents = OPEN.includes(b.status) ? await documentStatus(db, b.id) : null;
+  // points set aside for a reward when booking (migration …003200)
+  const points = OPEN.includes(b.status) ? await heldReward(db, b.id).catch(() => null) : null;
   return {
     documents,
+    points,
     shop: { slug: shop.slug, name: shop.name, timezone: shop.timezone, address: shop.address ?? "", directions: directionsLink({ address: shop.address, mapUrl: shop.map_url }) },
     booking: {
       // what the check-in QR carries (the shop scans it at the desk; it opens nothing for anyone else)

@@ -496,3 +496,16 @@ a.bk-booking-row:hover .bk-row-text strong { color: var(--grape-deep); }
 .bk-place { display: grid; gap: 10px; }
 .bk-place p { margin: 0; display: flex; gap: 6px; align-items: flex-start; color: #3A3460; line-height: 1.6; overflow-wrap: anywhere; }
 .bk-directions { gap: 8px; text-decoration: none; min-height: 46px; }
+
+/* ---------- rental documents (migration …002700) ---------- */
+.bk-docs { display: grid; gap: 12px; padding: 18px; border-radius: 20px; background: var(--surface); border: 2px solid var(--grape); box-shadow: var(--shadow); }
+.bk-docs[data-done] { border-color: var(--mint); }
+.bk-docs h2 { margin: 0; font-family: var(--font-display); font-weight: 500; font-size: 1.1rem; }
+.bk-consent { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border-radius: 14px; background: var(--bg); font-size: .86rem; line-height: 1.6; color: #3A3460; cursor: pointer; }
+.bk-consent input { flex: none; width: 20px; height: 20px; margin-top: 2px; accent-color: var(--grape); }
+.bk-doc-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.bk-doc-list li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
+.bk-doc-name { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.bk-doc-name small { font-weight: 400; color: var(--mint-deep); }
+.bk-doc-list .bk-upload { min-height: 44px; padding: 8px 16px; }
+.bk-upload[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }

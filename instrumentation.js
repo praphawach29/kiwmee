@@ -8,5 +8,11 @@ async function register() {
     const { getBookingPool } = require("./src/v2/db");
     startReminderLoop(getBookingPool);
   }
+  // Rental documents (src/v2/rental-documents.js) are deleted on schedule, every hour (PDPA)
+  if (process.env.NEXT_RUNTIME === "nodejs" && process.env.BOOKING_DB_URL) {
+    const { startDocumentPurge } = require("./src/v2/rental-documents");
+    const { getBookingPool } = require("./src/v2/db");
+    startDocumentPurge(getBookingPool);
+  }
 }
 module.exports = { register };

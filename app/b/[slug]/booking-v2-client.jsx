@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CustomerFrame from "./customer-frame.jsx";
 import { useLiff } from "./use-liff.jsx";
-import { BookingProgress, BookingReview, BookingSubmitBar, CustomerTabs, DepositBox, DirectionsButton, OfferingDetails, ShopAbout, ShopHeader, ShopHero, OfferingThumbnail, ResourceChoice, groupTimes, withMedia } from "./booking-presentation.jsx";
+import { BookingProgress, BookingReview, BookingSubmitBar, CustomerTabs, DepositBox, DirectionsButton, DocumentsBox, OfferingDetails, ShopAbout, ShopHeader, ShopHero, OfferingThumbnail, ResourceChoice, groupTimes, withMedia } from "./booking-presentation.jsx";
 
 const RESOURCE_WORD = { staff: "ช่าง", court: "สนาม", room: "ห้อง", equipment: "อุปกรณ์" };
 const STEP_TITLE = {
@@ -19,6 +19,7 @@ const STEP_TITLE = {
   party: "จำนวนคน",
   addons: "ตัวเลือกเพิ่มเติม"
 };
+const DOCUMENT_LABEL = { id_card: "บัตรประชาชน", driving_license: "ใบขับขี่", passport: "พาสปอร์ต" };
 // a rental by the day (design 11.7) asks the same steps in its own words
 const RENTAL_TITLE = { date: "เลือกวันรับ", duration: "เช่ากี่วัน", time: "เลือกเวลารับ" };
 const RENTAL_LABEL = { date: "วันรับ", time: "เวลารับ", duration: "เช่า" };
@@ -747,6 +748,11 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
   const rows = items.filter((item) => item.step !== "date" && item.step !== "time");
   const managePath = booking.manageToken ? `/b/${shop.slug}/manage/${booking.manageToken}` : null;
   const held = booking.status === "held";
+  // the ID / licence a rental asks for (design 11.7 E3), sent right here with the customer's consent
+  const asked = shop.offerings.find((o) => o.id === selected.offeringId)?.requiredDocuments ?? [];
+  const [documents, setDocuments] = useState(() =>
+    asked.length ? { required: asked.map((kind) => ({ kind, label: DOCUMENT_LABEL[kind] ?? kind })), uploaded: [], retentionDays: shop.documentRetentionDays ?? 30 } : null
+  );
 
   function addToCalendar() {
     const service = rows.find((r) => r.step === "offering")?.value ?? "นัดหมาย";
@@ -791,6 +797,10 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
           uploadUrl={`/api/b/${shop.slug}/manage/${booking.manageToken}/slip`}
           onUploaded={onSlip}
         />
+      )}
+
+      {documents && managePath && (
+        <DocumentsBox documents={documents} shopName={shop.name} uploadUrl={`/api/b/${shop.slug}/manage/${booking.manageToken}/document`} onUploaded={(view) => setDocuments(view.documents ?? documents)} />
       )}
 
       <div className="bk-card bk-done-card">

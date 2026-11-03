@@ -10,6 +10,7 @@ const { REASON_TEXT } = require("./reason-text");
 const { getOptions, localToMs, msToLocal } = require("./options-engine");
 const { promptPayQr } = require("./promptpay");
 const { directionsLink } = require("./directions");
+const { documentStatus, submitDocument } = require("./rental-documents");
 
 const TOKEN = /^[A-Za-z0-9_-]{32}$/;
 const OPEN = ["held", "pending", "confirmed"];
@@ -85,7 +86,10 @@ async function findManaged(db, slug, token, now = new Date()) {
   };
   // still to pay: a PromptPay QR with the deposit filled in, when the shop takes PromptPay
   const qr = b.deposit_due !== null && b.status === "held" && open ? await promptPayQr(b.payment_info?.promptPay, b.deposit_due).catch(() => null) : null;
+  // the documents a rental asks for (design 11.7 E3), while the booking is still on
+  const documents = OPEN.includes(b.status) ? await documentStatus(db, b.id) : null;
   return {
+    documents,
     shop: { slug: shop.slug, name: shop.name, timezone: shop.timezone, address: shop.address ?? "", directions: directionsLink({ address: shop.address, mapUrl: shop.map_url }) },
     booking: {
       status: b.status,
@@ -187,4 +191,15 @@ async function submitSlip(db, slug, token, image) {
   return findManaged(db, slug, token);
 }
 
-module.exports = { issueToken, hashToken, findManaged, manageOptions, cancelManaged, rescheduleManaged, submitSlip, REASON_TEXT };
+/** The customer's rental document (re-encoded WebP by the route) with their consent */
+async function submitManagedDocument(db, slug, token, input, options) {
+  const shop = await requireShop(db, slug);
+  try {
+    await submitDocument(db, shop, hashToken(token), input, options);
+  } catch (error) {
+    throw error.status ? error : rpcError(error);
+  }
+  return findManaged(db, slug, token);
+}
+
+module.exports = { submitManagedDocument, issueToken, hashToken, findManaged, manageOptions, cancelManaged, rescheduleManaged, submitSlip, REASON_TEXT };

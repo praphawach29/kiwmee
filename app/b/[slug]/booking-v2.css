@@ -619,3 +619,4 @@ a.bk-points-button { display: inline-flex; align-items: center; text-decoration:
 .bk-link-actions { flex-wrap: nowrap; gap: 8px; margin-top: 4px; }
 .bk-link-actions .bk-primary, .bk-link-actions .bk-secondary { flex: 1 1 0; min-width: 0; min-height: 42px; padding: 6px 10px; border-radius: 12px; font-size: .88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bk-link-actions .bk-secondary { flex: 0 1 auto; }
+.bk-nowrap { white-space: nowrap; }

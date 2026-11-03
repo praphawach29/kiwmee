@@ -75,7 +75,7 @@ Next.js 15 + Supabase · deploy บน Railway service `salon-booking-os-v1` →
 | #30 | **CI** (`.github/workflows/ci.yml`: unit, DB, build ทุก PR) · ปรับ roadmap ให้ตรงสถานะจริง |
 
 **Migration ล่าสุดที่รันบน booking-v2 แล้ว: `20261025001700_shop_team.sql`** (เจ้าของยืนยัน 2 พ.ย. 2569, PR #30)
-ไฟล์ถึง `20261025003400_loyalty_free_offering.sql` (PR #65) เจ้าของรันแล้วทั้งหมด · **`20261025003500_brand_logo.sql` (PR #66) ต้องให้เจ้าของรันก่อน merge** · ไฟล์ถัดไปตั้งชื่อ `20261025003600_…` · Supabase Auth ต้องเปิด "Confirm email" ไว้ (คำเชิญรับเฉพาะอีเมลที่ยืนยันแล้ว)
+ไฟล์ถึง `20261025003500_brand_logo.sql` (PR #66) เจ้าของรันแล้วทั้งหมด · ไฟล์ถัดไปตั้งชื่อ `20261025003600_…` · Supabase Auth ต้องเปิด "Confirm email" ไว้ (คำเชิญรับเฉพาะอีเมลที่ยืนยันแล้ว)
 แพ็กเกจของแบรนด์ตั้งด้วย SQL (ยังไม่มีระบบเก็บเงิน): `supabase/README.md` → "ตั้งแพ็กเกจของแบรนด์"
 
 ตัวอย่างหน้าจอบัตรสมาชิก (ยังไม่ใช่โค้ดจริง): https://claude.ai/artifact/Whda2NEfEyUgwDL62cWfKz

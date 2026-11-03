@@ -188,6 +188,7 @@ export default function ShopAdmin({ slug }) {
         {tab === "overview" && <OverviewTab slug={slug} catalog={catalog} onNavigate={show} />}
         {tab === "bookings" && <BookingsTab key={bookingDay ?? "today"} slug={slug} catalog={catalog} initialDay={bookingDay} />}
         {tab === "bills" && <BillsTab slug={slug} catalog={catalog} />}
+        {tab === "members" && <LoyaltyTab slug={slug} />}
         {tab === "flow" && <FlowTab slug={slug} catalog={catalog} version={version} onSaved={reload} />}
         {tab === "offerings" && <OfferingsTab slug={slug} catalog={catalog} onSaved={reload} />}
         {tab === "resources" && <ResourcesTab slug={slug} catalog={catalog} onSaved={reload} />}
@@ -725,24 +726,231 @@ function PaymentLines({ lines, setLines, due }) {
 const toPayments = (lines) => lines.map((l) => ({ method: l.method, amount: Number(l.amount) || 0 }));
 
 /** Close a booking's bill after the visit: the amount (editable) and how it was paid */
+// ---------- the points programme (migration …002800): rules, rewards, members ----------
+
+function LoyaltyTab({ slug }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+  const [program, setProgram] = useState(null);
+  const [reward, setReward] = useState({ name: "", pointsCost: "", discountBaht: "" });
+  const save = useSave();
+  const base = shopPath(slug, "/loyalty");
+
+  const load = useCallback(async () => {
+    try {
+      const d = await api("GET", base);
+      setData(d);
+      setProgram(d.program);
+      setError("");
+    } catch (e) {
+      setError(e.message);
+    }
+  }, [base]);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  if (error) return <section className="ad-card"><p className="ad-error">{error}</p></section>;
+  if (!data || !program) return <section className="ad-card"><p className="ad-muted">กำลังโหลด…</p></section>;
+  const edit = data.canEdit;
+  const setP = (patch) => setProgram((p) => ({ ...p, ...patch }));
+
+  async function saveProgram(event) {
+    event.preventDefault();
+    const body = { ...program, earnPerBaht: Number(program.earnPerBaht), earnPoints: Number(program.earnPoints), expireMonths: program.expireMonths === "" || program.expireMonths === null ? null : Number(program.expireMonths) };
+    if (await save.run(async () => setData(await api("PUT", base, body)), "บันทึกกติกาแล้ว")) load();
+  }
+
+  async function addReward(event) {
+    event.preventDefault();
+    const body = { name: reward.name, pointsCost: Number(reward.pointsCost), discountBaht: Number(reward.discountBaht) };
+    if (await save.run(async () => setData(await api("POST", `${base}/rewards`, body)), "เพิ่มรางวัลแล้ว")) setReward({ name: "", pointsCost: "", discountBaht: "" });
+  }
+
+  async function toggleReward(r) {
+    await save.run(async () => setData(await api("PUT", `${base}/rewards/${r.id}`, { ...r, active: !r.active })), r.active ? "ปิดรางวัลแล้ว" : "เปิดรางวัลแล้ว");
+  }
+
+  async function adjust(m) {
+    const answer = window.prompt(`ปรับคะแนนของ ${m.name} (ตอนนี้ ${m.balance})\nใส่ +50 เพื่อให้ หรือ -50 เพื่อหัก`, "");
+    if (answer === null || !answer.trim()) return;
+    const points = Number(answer.replace(/\s/g, ""));
+    if (!Number.isInteger(points) || points === 0) return window.alert("ใส่จำนวนเต็ม เช่น 50 หรือ -50");
+    const note = window.prompt("เหตุผล (ไม่บังคับ)", "") ?? "";
+    await save.run(async () => setData(await api("POST", `${base}/adjust`, { lineUserId: m.lineUserId, points, note })), "ปรับคะแนนแล้ว");
+  }
+
+  return (
+    <div className="ad-stack">
+      <form className="ad-card" onSubmit={saveProgram}>
+        <div className="ad-row ad-between ad-wrap">
+          <h2>กติกาคะแนนสะสม</h2>
+          <span className="ad-status" data-tone={program.active ? "ok" : "off"}>{program.active ? "เปิดใช้อยู่" : "ปิดอยู่"}</span>
+        </div>
+        <p className="ad-muted">ลูกค้าที่จองผ่าน LINE หรือแสดงรหัสสมาชิกตอนจ่าย ได้คะแนนเมื่อปิดบิล (จากยอดที่จ่ายจริง ปัดเศษทิ้ง) · ใช้ได้ทุกสาขาของแบรนด์ · คืนเงินแล้วคะแนนถูกหักคืนตามสัดส่วน</p>
+        {!edit && <p className="ad-notice">เฉพาะเจ้าของแบรนด์แก้กติกาและรางวัลได้</p>}
+        <fieldset disabled={!edit || save.busy} className="ad-fieldset">
+          <label className="ad-check"><input type="checkbox" checked={program.active} onChange={(e) => setP({ active: e.target.checked })} />เปิดระบบสะสมคะแนน</label>
+          <div className="ad-grid">
+            <label className="ad-field">ชื่อโปรแกรม<input maxLength={60} value={program.name} onChange={(e) => setP({ name: e.target.value })} /></label>
+            <label className="ad-field">
+              ได้คะแนนจาก
+              <select value={program.earnMode} onChange={(e) => setP({ earnMode: e.target.value })}>
+                <option value="per_baht">ยอดใช้จ่าย</option>
+                <option value="per_visit">จำนวนครั้งที่มา (บัตรสะสมแต้ม)</option>
+              </select>
+            </label>
+            {program.earnMode === "per_baht" && (
+              <label className="ad-field">ทุกกี่บาท<input type="number" min={1} step="0.01" required value={program.earnPerBaht ?? ""} onChange={(e) => setP({ earnPerBaht: e.target.value })} /></label>
+            )}
+            <label className="ad-field">{program.earnMode === "per_baht" ? "ได้กี่คะแนน" : "มา 1 ครั้งได้กี่คะแนน"}<input type="number" min={1} required value={program.earnPoints ?? ""} onChange={(e) => setP({ earnPoints: e.target.value })} /></label>
+            <label className="ad-field">หมดอายุหลังได้ (เดือน)<input type="number" placeholder="ว่าง = ไม่หมดอายุ" min={1} max={120} value={program.expireMonths ?? ""} onChange={(e) => setP({ expireMonths: e.target.value })} /></label>
+          </div>
+          <Status save={save} />
+          {edit && <button className="ad-primary">บันทึกกติกา</button>}
+        </fieldset>
+      </form>
+
+      <section className="ad-card">
+        <h2>รางวัลที่แลกได้</h2>
+        <p className="ad-muted">พนักงานเลือกใช้ตอนปิดบิล · 1 บิลใช้ได้ 1 รางวัล · ลูกค้าเห็นรายการนี้ในหน้า LINE</p>
+        {data.rewards.length === 0 && <p className="ad-empty">ยังไม่มีรางวัล</p>}
+        <ul className="ad-list">
+          {data.rewards.map((r) => (
+            <li key={r.id} className="ad-row ad-between ad-wrap" data-off={!r.active || undefined}>
+              <span><strong>{r.name}</strong> <span className="ad-muted">· ใช้ {r.pointsCost.toLocaleString("th-TH")} คะแนน · ลด {money(r.discountBaht)}</span></span>
+              {edit && <button type="button" className="ad-link" disabled={save.busy} onClick={() => toggleReward(r)}>{r.active ? "ปิด" : "เปิดใหม่"}</button>}
+            </li>
+          ))}
+        </ul>
+        {edit && (
+          <form className="ad-grid" onSubmit={addReward}>
+            <label className="ad-field">ชื่อรางวัล<input required maxLength={80} placeholder="เช่น ส่วนลด 100 บาท" value={reward.name} onChange={(e) => setReward({ ...reward, name: e.target.value })} /></label>
+            <label className="ad-field">ใช้กี่คะแนน<input type="number" min={1} required value={reward.pointsCost} onChange={(e) => setReward({ ...reward, pointsCost: e.target.value })} /></label>
+            <label className="ad-field">ลดกี่บาท<input type="number" min={1} step="0.01" required value={reward.discountBaht} onChange={(e) => setReward({ ...reward, discountBaht: e.target.value })} /></label>
+            <button className="ad-secondary" disabled={save.busy}>+ เพิ่มรางวัล</button>
+          </form>
+        )}
+      </section>
+
+      <section className="ad-card">
+        <h2>สมาชิกล่าสุด</h2>
+        {data.members.length === 0 && <p className="ad-empty">ยังไม่มีสมาชิกที่ได้คะแนน</p>}
+        <ul className="ad-list">
+          {data.members.map((m) => (
+            <li key={m.lineUserId} className="ad-row ad-between ad-wrap">
+              <span>
+                <strong>{m.name}</strong> <span className="ad-muted">· {m.balance.toLocaleString("th-TH")} คะแนน{m.expiring > 0 ? ` · ${m.expiring} จะหมดอายุ` : ""}</span>
+              </span>
+              {edit && <button type="button" className="ad-link" disabled={save.busy} onClick={() => adjust(m)}>ปรับคะแนน</button>}
+            </li>
+          ))}
+        </ul>
+      </section>
+    </div>
+  );
+}
+
+// ---------- points at the counter (migration …002800) ----------
+
+/**
+ * The member on this bill: from a booking made in LINE, or the 6-digit code a walk-in shows from their
+ * LINE page. onChange({ memberCode, reward }) — the parent takes the reward's discount off the total.
+ */
+function MemberBox({ slug, bookingId = null, onChange }) {
+  const [member, setMember] = useState(null);
+  const [code, setCode] = useState("");
+  const [rewardId, setRewardId] = useState("");
+  const [state, setState] = useState({ busy: false, error: "" });
+
+  useEffect(() => {
+    if (!bookingId) return;
+    api("GET", shopPath(slug, `/loyalty/member?bookingId=${bookingId}`)).then((m) => setMember(m), () => setMember(null));
+  }, [slug, bookingId]);
+
+  async function lookUp() {
+    setState({ busy: true, error: "" });
+    try {
+      const m = await api("GET", shopPath(slug, `/loyalty/member?code=${encodeURIComponent(code.trim())}`));
+      if (!m) throw new Error("ร้านยังไม่เปิดระบบสะสมคะแนน");
+      setMember(m);
+      setRewardId("");
+      onChange({ memberCode: code.trim(), reward: null });
+      setState({ busy: false, error: "" });
+    } catch (e) {
+      setState({ busy: false, error: e.message });
+    }
+  }
+
+  function pick(id) {
+    setRewardId(id);
+    onChange({ memberCode: bookingId ? null : code.trim(), reward: member?.rewards.find((r) => r.id === id) ?? null });
+  }
+
+  if (bookingId && !member) return null;
+  return (
+    <div className="ad-member">
+      {!bookingId && !member && (
+        <div className="ad-row ad-wrap">
+          <label className="ad-field ad-short">
+            รหัสสมาชิก (ไม่บังคับ)
+            <input inputMode="numeric" pattern="[0-9]{6}" maxLength={6} placeholder="6 หลัก จากหน้า LINE ของลูกค้า" value={code} onChange={(e) => setCode(e.target.value.replace(/[^0-9]/g, ""))} />
+          </label>
+          <button type="button" className="ad-secondary" disabled={code.length !== 6 || state.busy} onClick={lookUp}>ตรวจรหัส</button>
+        </div>
+      )}
+      {state.error && <p className="ad-error">{state.error}</p>}
+      {member && (
+        <>
+          <p className="ad-member-line">
+            ⭐ <strong>{member.name}</strong> · มี {member.balance.toLocaleString("th-TH")} คะแนน
+            {member.expiring > 0 && <span className="ad-muted"> · {member.expiring} คะแนนจะหมดอายุเร็วๆ นี้</span>}
+          </p>
+          {member.rewards.length > 0 && (
+            <label className="ad-field">
+              ใช้รางวัล (ไม่บังคับ)
+              <select value={rewardId} onChange={(e) => pick(e.target.value)}>
+                <option value="">ไม่ใช้</option>
+                {member.rewards.map((r) => (
+                  <option key={r.id} value={r.id} disabled={!r.usable}>
+                    {r.name} · ใช้ {r.pointsCost} คะแนน · ลด {money(r.discountBaht)}{r.usable ? "" : " (คะแนนไม่พอ)"}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 function CheckoutForm({ slug, booking, onClose, onSaved }) {
   const [subtotal, setSubtotal] = useState(String(booking.price ?? 0));
   const [lines, setLines] = useState([{ method: "cash", amount: String(booking.price ?? 0) }]);
   const [note, setNote] = useState("");
+  const [points, setPoints] = useState({ reward: null });
   const save = useSave();
-  const due = round2(subtotal);
+  const discount = points.reward ? Math.min(points.reward.discountBaht, round2(subtotal)) : 0;
+  const due = round2(round2(subtotal) - discount);
 
   function changeSubtotal(value) {
     setSubtotal(value);
     // one payment line follows the amount until the shop splits it
-    if (lines.length === 1) setLines([{ ...lines[0], amount: value }]);
+    if (lines.length === 1) setLines([{ ...lines[0], amount: String(round2(round2(value) - (points.reward ? Math.min(points.reward.discountBaht, round2(value)) : 0))) }]);
+  }
+
+  function changePoints(next) {
+    setPoints(next);
+    const off = next.reward ? Math.min(next.reward.discountBaht, round2(subtotal)) : 0;
+    if (lines.length === 1) setLines([{ ...lines[0], amount: String(round2(round2(subtotal) - off)) }]);
   }
 
   async function submit(event) {
     event.preventDefault();
     const ok = await save.run(
-      () => api("POST", shopPath(slug, `/bookings/${booking.id}/checkout`), { subtotal: due, payments: toPayments(lines), note }),
-      "ปิดบิลแล้ว"
+      () => api("POST", shopPath(slug, `/bookings/${booking.id}/checkout`), { subtotal: round2(subtotal), rewardId: points.reward?.id ?? null, payments: toPayments(lines), note }),
+      points.reward ? `ปิดบิลแล้ว · ใช้${points.reward.name}` : "ปิดบิลแล้ว"
     );
     if (ok) onSaved();
   }
@@ -761,6 +969,8 @@ function CheckoutForm({ slug, booking, onClose, onSaved }) {
         </label>
         <label className="ad-field">โน้ต (ไม่บังคับ)<input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} /></label>
       </div>
+      {booking.customer.fromLine && <MemberBox slug={slug} bookingId={booking.id} onChange={changePoints} />}
+      {discount > 0 && <p className="ad-muted">ส่วนลดจากคะแนน −{money(discount)}</p>}
       <PaymentLines lines={lines} setLines={setLines} due={due} />
       <Status save={save} />
       <div className="ad-row">
@@ -775,17 +985,27 @@ function CheckoutForm({ slug, booking, onClose, onSaved }) {
 function SaleForm({ slug, onClose, onSaved }) {
   const [f, setF] = useState({ title: "", customerName: "", amount: "", note: "" });
   const [lines, setLines] = useState([{ method: "cash", amount: "" }]);
+  const [points, setPoints] = useState({ memberCode: null, reward: null });
   const save = useSave();
-  const due = round2(f.amount);
+  const off = (amount, reward) => (reward ? Math.min(reward.discountBaht, round2(amount)) : 0);
+  const due = round2(round2(f.amount) - off(f.amount, points.reward));
 
   function changeAmount(value) {
     setF({ ...f, amount: value });
-    if (lines.length === 1) setLines([{ ...lines[0], amount: value }]);
+    if (lines.length === 1) setLines([{ ...lines[0], amount: String(round2(round2(value) - off(value, points.reward))) }]);
+  }
+
+  function changePoints(next) {
+    setPoints(next);
+    if (lines.length === 1) setLines([{ ...lines[0], amount: String(round2(round2(f.amount) - off(f.amount, next.reward))) }]);
   }
 
   async function submit(event) {
     event.preventDefault();
-    const ok = await save.run(() => api("POST", shopPath(slug, "/bills"), { ...f, amount: due, payments: toPayments(lines) }), "บันทึกการขายแล้ว");
+    const ok = await save.run(
+      () => api("POST", shopPath(slug, "/bills"), { ...f, amount: round2(f.amount), memberCode: points.memberCode || null, rewardId: points.reward?.id ?? null, payments: toPayments(lines) }),
+      points.memberCode ? "บันทึกการขายแล้ว · ลูกค้าได้คะแนน" : "บันทึกการขายแล้ว"
+    );
     if (ok) onSaved();
   }
 
@@ -801,6 +1021,8 @@ function SaleForm({ slug, onClose, onSaved }) {
         <label className="ad-field">ชื่อลูกค้า (ไม่บังคับ)<input value={f.customerName} maxLength={100} onChange={(e) => setF({ ...f, customerName: e.target.value })} autoComplete="off" /></label>
         <label className="ad-field">โน้ต (ไม่บังคับ)<input value={f.note} maxLength={300} onChange={(e) => setF({ ...f, note: e.target.value })} /></label>
       </div>
+      <MemberBox slug={slug} onChange={changePoints} />
+      {points.reward && <p className="ad-muted">ส่วนลดจากคะแนน −{money(off(f.amount, points.reward))}</p>}
       <PaymentLines lines={lines} setLines={setLines} due={due} />
       <Status save={save} />
       <div className="ad-row">

@@ -152,6 +152,8 @@ async function createSale(client, shop, input = {}) {
     subtotal,
     text(input.customerName, 100)
   ]);
+  // a member's code ties the sale to them (points); a reward takes off its discount first
+  await applyAtCounter(client, opened.id, input);
   return closeOpened(client, opened.id, input, null);
 }
 
@@ -160,6 +162,7 @@ async function checkoutBooking(client, shop, bookingId, input = {}) {
   if (typeof bookingId !== "string" || !UUID.test(bookingId)) throw notFound("ไม่พบการจองนี้");
   const opened = await rpc(client, "select public.open_bill($1, $2) as id", [shop.id, bookingId]);
   const subtotal = input.subtotal === undefined || input.subtotal === null || input.subtotal === "" ? null : amount(input.subtotal, "ยอดรวม");
+  await applyAtCounter(client, opened.id, input);
   return closeOpened(client, opened.id, input, subtotal);
 }
 
@@ -181,5 +184,7 @@ async function refundBill(client, shop, id, input = {}) {
   ]);
   return row.bill;
 }
+
+const { applyAtCounter } = require("./loyalty");
 
 module.exports = { listBills, createSale, checkoutBooking, refundBill, METHODS, REASON_TEXT };

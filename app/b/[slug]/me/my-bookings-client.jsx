@@ -77,6 +77,97 @@ function BookingRow({ booking }) {
   return <li>{booking.link ? <a className="bk-booking-row" href={booking.link}>{body}</a> : <div className="bk-booking-row">{body}</div>}</li>;
 }
 
+const KIND = { earn: "ได้คะแนน", redeem: "ใช้คะแนน", release: "คืนคะแนน", reverse: "หักคืน (คืนเงิน)", adjust: "ร้านปรับคะแนน" };
+
+// The member's points at this brand (migration …002800) and a 6-digit code to show at the counter
+function PointsCard({ points, slug, idToken }) {
+  const [code, setCode] = useState(null); // { code, until }
+  const [left, setLeft] = useState(0);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!code) return undefined;
+    const tick = () => {
+      const s = Math.max(Math.round((code.until - Date.now()) / 1000), 0);
+      setLeft(s);
+      if (s === 0) setCode(null);
+    };
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [code]);
+
+  async function showCode() {
+    setError("");
+    try {
+      const response = await fetch(`/api/b/${slug}/me/code`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ lineIdToken: idToken }) });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error?.message || "ขอรหัสไม่สำเร็จ กรุณาลองใหม่");
+      setCode({ code: payload.data.code, until: Date.now() + payload.data.expiresInSeconds * 1000 });
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  return (
+    <section className="bk-points" aria-label={points.name}>
+      <div className="bk-points-card">
+        <span className="bk-points-name">⭐ {points.name}</span>
+        <strong className="bk-points-balance">{points.balance.toLocaleString("th-TH")} <small>คะแนน</small></strong>
+        <span className="bk-points-rule">{points.rule}</span>
+        {points.expiring > 0 && points.expiringAt && (
+          <span className="bk-points-expiring">
+            {points.expiring} คะแนนจะหมดอายุ {new Date(points.expiringAt).toLocaleDateString("th-TH", { day: "numeric", month: "short" })}
+          </span>
+        )}
+        {code ? (
+          <div className="bk-points-code" aria-live="polite">
+            <small>แสดงรหัสนี้ให้พนักงานตอนจ่ายเงิน</small>
+            <strong>{code.code.slice(0, 3)} {code.code.slice(3)}</strong>
+            <small>ใช้ได้อีก {Math.floor(left / 60)}:{String(left % 60).padStart(2, "0")} นาที · ใช้ได้ครั้งเดียว</small>
+          </div>
+        ) : (
+          <button type="button" className="bk-points-button" onClick={showCode}>แสดงรหัสสมาชิก (ตอนจ่ายที่ร้าน)</button>
+        )}
+        {error && <span className="bk-points-error" role="alert">{error}</span>}
+      </div>
+      {points.rewards.length > 0 && (
+        <div className="bk-card">
+          <h2>แลกคะแนน</h2>
+          <p className="bk-muted">บอกพนักงานตอนจ่ายเงิน (1 บิลใช้ได้ 1 รางวัล)</p>
+          <ul className="bk-booking-list">
+            {points.rewards.map((r) => (
+              <li key={r.name} className="bk-booking-row">
+                <span className="bk-row-text">
+                  <strong>{r.name}</strong>
+                  <small>ใช้ {r.pointsCost.toLocaleString("th-TH")} คะแนน · ลด {Number(r.discountBaht).toLocaleString("th-TH")} บาท</small>
+                </span>
+                <span className="bk-status" data-status={r.usable ? "confirmed" : "held"}>{r.usable ? "แลกได้" : "คะแนนไม่พอ"}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {points.history.length > 0 && (
+        <details className="bk-card bk-points-history">
+          <summary>ประวัติคะแนน</summary>
+          <ul className="bk-booking-list">
+            {points.history.map((h, i) => (
+              <li key={i} className="bk-booking-row">
+                <span className="bk-row-text">
+                  <strong>{KIND[h.kind] ?? h.kind}</strong>
+                  <small>{new Date(h.at).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" })}{h.shop ? ` · ${h.shop}` : ""}</small>
+                </span>
+                <span className="bk-points-delta" data-plus={h.points > 0 || undefined}>{h.points > 0 ? "+" : ""}{h.points}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </section>
+  );
+}
+
 export default function MyBookingsClient({ shop, liffId }) {
   const liff = useLiff(liffId);
   const [state, setState] = useState({ loading: true, data: null, error: null });
@@ -121,6 +212,8 @@ export default function MyBookingsClient({ shop, liffId }) {
             {liff.login && <button type="button" className="bk-primary" onClick={liff.login}>เข้าสู่ระบบด้วย LINE</button>}
           </section>
         )}
+
+        {data?.points && <PointsCard points={data.points} slug={shop.slug} idToken={liff.idToken} />}
 
         {data && (
           <>

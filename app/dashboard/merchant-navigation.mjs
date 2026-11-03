@@ -3,6 +3,7 @@ const DAILY = [
   { id: "overview", label: "ภาพรวม", icon: "▨" },
   { id: "bookings", label: "การจอง", icon: "▦" },
   { id: "bills", label: "บิลและรายรับ", icon: "▤" },
+  { id: "members", label: "สมาชิกและคะแนน", icon: "★" },
 ];
 const SETTINGS = [
   { id: "flow", label: "ขั้นตอนจอง", icon: "⇄" },

@@ -472,6 +472,7 @@ function BookingsTab({ slug, catalog, initialDay }) {
   return (
     <div className="ad-stack">
       {link && <ManageLinkCard shop={catalog.shop} link={link} onClose={() => setLink(null)} />}
+      <RentalTimeline slug={slug} catalog={catalog} day={day} onDay={setDay} refresh={list} />
       <section className="ad-card">
         <div className="ad-row ad-wrap ad-between">
           <div className="ad-row ad-wrap">
@@ -934,6 +935,93 @@ function BillsTab({ slug, catalog }) {
   );
 }
 
+// ---------- rentals over several days: who has which item when (design 11.7, E2) ----------
+
+const TIMELINE_DAYS = 14;
+const minutesOf = (hhmm) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+const daysBetween = (a, b) => Math.round((new Date(`${b}T00:00:00Z`) - new Date(`${a}T00:00:00Z`)) / 86400000);
+
+/**
+ * A strip per item a rental by the day uses (each car, each camera) over two weeks from the day shown:
+ * a bar for every booking that holds it. Shown only to shops that rent by the day. Tap a day to see it.
+ */
+function RentalTimeline({ slug, catalog, day, onDay, refresh }) {
+  const rentals = catalog.offerings.filter((o) => o.durationMode === "days" && o.active);
+  const items = catalog.resources.filter((r) => r.active && rentals.some((o) => o.resourceIds.includes(r.id)));
+  const [list, setList] = useState(null);
+  const from = day;
+
+  useEffect(() => {
+    if (!items.length) return undefined;
+    let live = true;
+    api("GET", shopPath(slug, `/bookings?from=${from}&days=${TIMELINE_DAYS}`)).then(
+      (r) => live && setList(r),
+      () => live && setList([])
+    );
+    return () => {
+      live = false;
+    };
+    // refresh: the day list was reloaded (a booking moved or was added)
+  }, [slug, from, items.length, refresh]);
+
+  if (!items.length) return null;
+  const span = TIMELINE_DAYS * 1440;
+  const days = Array.from({ length: TIMELINE_DAYS }, (_, i) => addDays(from, i));
+  const at = (date, time) => daysBetween(from, date) * 1440 + minutesOf(time);
+  const bars = (resourceId) =>
+    (list ?? [])
+      .filter((b) => ACTIVE.includes(b.status) && b.resources.some((r) => r.id === resourceId))
+      .map((b) => {
+        const start = Math.max(at(b.date, b.start), 0);
+        const end = Math.min(at(b.endDate ?? b.date, b.end), span);
+        return { b, left: (start / span) * 100, width: Math.max(((end - start) / span) * 100, 1.2) };
+      })
+      .filter((x) => x.left < 100 && x.width > 0);
+
+  return (
+    <section className="ad-card ad-timeline" aria-label="ตารางของให้เช่า 14 วัน">
+      <div className="ad-row ad-between ad-wrap">
+        <h2>ของให้เช่า 14 วัน</h2>
+        <span className="ad-muted">แถบ = ถูกจอง (รับ → คืน) · กดวันที่เพื่อดูรายการวันนั้น</span>
+      </div>
+      <div className="ad-timeline-scroll">
+        <div className="ad-timeline-grid" style={{ "--days": TIMELINE_DAYS }}>
+          <div className="ad-timeline-corner" />
+          <div className="ad-timeline-days">
+            {days.map((d) => (
+              <button key={d} type="button" className="ad-timeline-day" data-today={d === today() || undefined} data-picked={d === day || undefined} onClick={() => onDay(d)}>
+                <small>{["อา.", "จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส."][new Date(`${d}T00:00:00Z`).getUTCDay()]}</small>
+                {Number(d.slice(8, 10))}
+              </button>
+            ))}
+          </div>
+          {items.map((r) => (
+            <div key={r.id} className="ad-timeline-row">
+              <div className="ad-timeline-name" title={r.name}>{r.name}</div>
+              <div className="ad-timeline-track">
+                {list === null && <span className="ad-muted ad-timeline-loading">…</span>}
+                {bars(r.id).map(({ b, left, width }) => (
+                  <button
+                    key={b.id}
+                    type="button"
+                    className="ad-timeline-bar"
+                    data-status={b.status}
+                    style={{ left: `${left}%`, width: `${width}%` }}
+                    title={`${b.customer.name} · รับ ${shortDate(b.date)} ${b.start} → คืน ${shortDate(b.endDate ?? b.date)} ${b.end}`}
+                    onClick={() => onDay(b.date)}
+                  >
+                    {b.customer.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 const PAST_STATUS = [
   ["completed", "ใช้บริการแล้ว"],
   ["checked_in", "กำลังใช้บริการ"],
@@ -941,6 +1029,12 @@ const PAST_STATUS = [
 ];
 
 function durationsOf(offering) {
+  // a rental by the day: whole days (24-hour periods)
+  if (offering?.durationMode === "days") {
+    const out = [];
+    for (let d = offering.minDays; d <= offering.maxDays; d++) out.push(d * 1440);
+    return out;
+  }
   if (offering?.durationMode !== "customer_choice") return [];
   const out = [];
   for (let m = offering.minMinutes; m <= offering.maxMinutes; m += offering.stepMinutes) out.push(m);
@@ -952,13 +1046,18 @@ function BookingForm({ slug, catalog, booking, defaultDate, onClose, onSaved }) 
   const offerings = catalog.offerings.filter((o) => o.active || o.id === booking?.offering.id);
   const [f, setF] = useState(() => {
     const offeringId = booking?.offering.id ?? offerings[0]?.id ?? "";
-    const durations = durationsOf(catalog.offerings.find((o) => o.id === offeringId));
+    const chosen = catalog.offerings.find((o) => o.id === offeringId);
+    const durations = durationsOf(chosen);
+    // moving a rental keeps its days unless the shop picks others
+    const kept = booking && chosen?.durationMode === "days" && booking.startAt && booking.endAt
+      ? Math.round((new Date(booking.endAt) - new Date(booking.startAt)) / 86400000) * 1440
+      : null;
     return {
       offeringId,
       resourceId: "",
       date: booking?.date ?? defaultDate,
       time: booking?.start ?? "",
-      durationMinutes: durations[0] ?? "",
+      durationMinutes: kept ?? (booking ? "" : durations[0] ?? ""),
       partySize: booking?.partySize ?? 1,
       name: "",
       phone: "",
@@ -972,6 +1071,7 @@ function BookingForm({ slug, catalog, booking, defaultDate, onClose, onSaved }) 
   const offering = catalog.offerings.find((o) => o.id === f.offeringId);
   const resources = catalog.resources.filter((r) => r.active && offering?.resourceIds.includes(r.id));
   const durations = durationsOf(offering);
+  const rental = offering?.durationMode === "days";
   // a new booking whose start has passed records a visit afterwards
   const past = !booking && Boolean(f.date && f.time) && `${f.date}T${f.time}` < nowLocal();
 
@@ -1056,14 +1156,19 @@ function BookingForm({ slug, catalog, booking, defaultDate, onClose, onSaved }) 
         </label>
         {durations.length > 0 && (
           <label className="ad-field">
-            ระยะเวลา
+            {rental ? "เช่ากี่วัน" : "ระยะเวลา"}
             <select value={f.durationMinutes} onChange={(e) => set({ durationMinutes: e.target.value })}>
-              {durations.map((m) => <option key={m} value={m}>{minutes(m)}</option>)}
+              {booking && !f.durationMinutes && <option value="">เท่าเดิม</option>}
+              {durations.map((m) => (
+                <option key={m} value={m}>
+                  {rental ? `${m / 1440} วัน${f.date ? ` · คืน ${shortDate(addDays(f.date, m / 1440))}` : ""}` : minutes(m)}
+                </option>
+              ))}
             </select>
           </label>
         )}
-        <label className="ad-field">วันที่<input type="date" required value={f.date} onChange={(e) => set({ date: e.target.value })} /></label>
-        <label className="ad-field">เวลาเริ่ม<input type="time" required step={300} value={f.time} onChange={(e) => set({ time: e.target.value })} /></label>
+        <label className="ad-field">{rental ? "วันรับ" : "วันที่"}<input type="date" required value={f.date} onChange={(e) => set({ date: e.target.value })} /></label>
+        <label className="ad-field">{rental ? "เวลารับ (คืนเวลาเดียวกัน)" : "เวลาเริ่ม"}<input type="time" required step={300} value={f.time} onChange={(e) => set({ time: e.target.value })} /></label>
       </div>
       <div className="ad-field">
         เวลาที่ยังว่าง (กดเลือก หรือพิมพ์เวลาเองในช่องเวลาเริ่ม)

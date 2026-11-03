@@ -31,4 +31,19 @@ function parseScan(text) {
   return null;
 }
 
-module.exports = { scanUrl, bookingCode, parseScan };
+/**
+ * Where Kiwmee is reachable from outside, for links made without a request (the reminder loop):
+ * PUBLIC_ORIGIN if set, otherwise the domain Railway gives the service, otherwise null.
+ */
+function publicOrigin(env = process.env) {
+  const set = String(env.PUBLIC_ORIGIN ?? "").trim().replace(/\/+$/, "");
+  if (/^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(set)) return set;
+  const railway = String(env.RAILWAY_PUBLIC_DOMAIN ?? "").trim();
+  if (/^[a-z0-9.-]+$/i.test(railway)) return `https://${railway}`;
+  return null;
+}
+
+/** The check-in QR as a PNG that LINE can show in a card (app/api/b/[slug]/checkin-qr/[id]) */
+const checkinImageUrl = (origin, slug, id) => `${origin}/api/b/${encodeURIComponent(slug)}/checkin-qr/${id}`;
+
+module.exports = { scanUrl, bookingCode, parseScan, publicOrigin, checkinImageUrl, UUID };

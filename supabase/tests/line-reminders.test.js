@@ -16,7 +16,7 @@ const SALON = "b1000000-0000-4000-8000-000000000001";
 const CUT = "c1000000-0000-4000-8000-000000000001";
 const NAN = "a1000000-0000-4000-8000-000000000001";
 const LINE_USER = `U${"c".repeat(32)}`;
-const env = { ...process.env, SETTINGS_ENCRYPTION_KEY: "k".repeat(40) };
+const env = { ...process.env, SETTINGS_ENCRYPTION_KEY: "k".repeat(40), PUBLIC_ORIGIN: "", RAILWAY_PUBLIC_DOMAIN: "kiwmee.test" };
 
 let db;
 test.before(async () => {
@@ -71,6 +71,12 @@ test("the day before and 2 hours before, once each, with the customer's own link
     const dayTexts = texts(day.sent[0].card.contents);
     assert.ok(dayTexts.includes("🔔 พรุ่งนี้มีนัด"));
     assert.ok(dayTexts.includes(`https://liff.line.me/2010969802-QiiDBSxa/bloom-hair/manage/${made.manageToken}`));
+    // the check-in QR (no PUBLIC_ORIGIN here: Railway's domain); the image draws only the booking's id
+    const qr = JSON.stringify(day.sent[0].card.contents).match(/"url":"(https:[^"]+checkin-qr[^"]+)"/)?.[1];
+    assert.match(qr, /^https:\/\/kiwmee\.test\/api\/b\/bloom-hair\/checkin-qr\/[0-9a-f-]{36}$/);
+    const { rows: [mine] } = await db.query("select id from public.bookings where id::text = $1", [qr.split("/").pop()]);
+    assert.ok(mine, "the QR is this booking's");
+    assert.ok(dayTexts.includes(mine.id.slice(0, 8).toUpperCase()), "with the code to type");
     assert.equal((await run(new Date(start - 22 * HOUR))).sent.length, 0, "never twice");
 
     const soon = await run(new Date(start - 1 * HOUR));

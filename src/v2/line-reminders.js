@@ -6,6 +6,7 @@
 // A reminder is skipped when the booking was made after its moment (booked 10 hours ahead: no
 // day-before card, the confirmation card just went out), and a moved booking is reminded again.
 
+const { publicOrigin, checkinImageUrl, bookingCode } = require("./scan-codes");
 const { bookingCard, manageLink, openLink, pushLine } = require("./line-notify");
 const { directionsLink } = require("./directions");
 
@@ -50,6 +51,7 @@ async function dueReminders(db, now, limit) {
  */
 async function sendDueReminders(db, { now = new Date(), push = (to, messages) => pushLine(db, to, messages), limit = 100, env = process.env } = {}) {
   const due = await dueReminders(db, now, limit);
+  const origin = publicOrigin(env);
   let sent = 0;
   let skipped = 0;
   for (const r of due) {
@@ -79,7 +81,9 @@ async function sendDueReminders(db, { now = new Date(), push = (to, messages) =>
           deposit: null
         },
         link: token ? await manageLink(db, { slug: r.slug, token }, { env }) : null,
-        directions: directionsLink({ address: r.address, mapUrl: r.map_url })
+        directions: directionsLink({ address: r.address, mapUrl: r.map_url }),
+        // no public address known (PUBLIC_ORIGIN / Railway's domain): the card goes without the QR
+        checkin: origin ? { image: checkinImageUrl(origin, r.slug, r.id), code: bookingCode(r.id) } : null
       });
       result = await push(r.line_user_id, [card]);
     } catch (error) {

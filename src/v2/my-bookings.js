@@ -12,6 +12,7 @@ const { verifyLineIdToken } = require("./public-booking");
 const { openLink } = require("./line-notify");
 const { msToLocal } = require("./options-engine");
 const { directionsLink } = require("./directions");
+const { memberCard, issueMemberCode } = require("./loyalty");
 
 const UPCOMING = ["held", "pending", "confirmed", "checked_in"];
 const PAST_LIMIT = 20;
@@ -66,7 +67,10 @@ async function myBookings(db, slug, body = {}, { now = new Date(), verifyLineTok
     };
   };
   const all = rows.map(item);
+  // the member's points at this shop's brand (migration …002800), when it runs a points programme
+  const points = await memberCard(db, shop, line.sub).catch(() => null);
   return {
+    points,
     shop: { slug: shop.slug, name: shop.name, directions: directionsLink({ address: shop.address, mapUrl: shop.map_url }) },
     // soonest first
     upcoming: all.filter((x) => x.upcoming).map((x) => x.booking).reverse(),
@@ -75,4 +79,14 @@ async function myBookings(db, slug, body = {}, { now = new Date(), verifyLineTok
   };
 }
 
-module.exports = { myBookings };
+/** A 6-digit code to show at the counter (walk-in: the shop ties the bill to the member with it) */
+async function myMemberCode(db, slug, body = {}, { verifyLineToken = (token) => verifyLineIdToken(token, db) } = {}) {
+  const shop = await findShop(db, slug);
+  if (!shop) throw notFound("ไม่พบร้าน");
+  if (typeof body.lineIdToken !== "string" || !body.lineIdToken) throw new AppError("FORBIDDEN", "กรุณาเปิดจาก LINE", 403);
+  const line = await verifyLineToken(body.lineIdToken);
+  if (!line?.sub) throw new AppError("FORBIDDEN", "ยืนยันตัวตน LINE ไม่สำเร็จ กรุณาเปิดจาก LINE อีกครั้ง", 403);
+  return issueMemberCode(db, shop, line.sub);
+}
+
+module.exports = { myBookings, myMemberCode };

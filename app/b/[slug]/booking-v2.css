@@ -509,3 +509,22 @@ a.bk-booking-row:hover .bk-row-text strong { color: var(--grape-deep); }
 .bk-doc-name small { font-weight: 400; color: var(--mint-deep); }
 .bk-doc-list .bk-upload { min-height: 44px; padding: 8px 16px; }
 .bk-upload[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
+
+/* ---------- points card (migration …002800) ---------- */
+.bk-points { display: grid; gap: 12px; }
+.bk-points-card { position: relative; overflow: hidden; display: grid; gap: 6px; padding: 20px; border-radius: 22px; color: #fff;
+  background: radial-gradient(circle at 110% -10%, rgba(61, 220, 151, .55) 0, rgba(61, 220, 151, 0) 45%), linear-gradient(135deg, var(--grape) 0%, var(--grape-night) 100%);
+  box-shadow: 0 14px 30px rgba(79, 51, 224, .28); }
+.bk-points-name { font-size: .9rem; opacity: .9; }
+.bk-points-balance { font-family: var(--font-display); font-weight: 500; font-size: 2.4rem; line-height: 1.1; }
+.bk-points-balance small { font-size: 1rem; opacity: .85; }
+.bk-points-rule, .bk-points-expiring { font-size: .84rem; opacity: .9; }
+.bk-points-expiring { color: #ffe08a; opacity: 1; }
+.bk-points-button { justify-self: start; margin-top: 8px; min-height: 44px; padding: 0 16px; border: 0; border-radius: 999px; background: #fff; color: var(--grape-deep); font: inherit; font-weight: 600; cursor: pointer; }
+.bk-points-code { display: grid; gap: 2px; margin-top: 8px; padding: 12px; border-radius: 16px; background: #fff; color: var(--ink); text-align: center; }
+.bk-points-code strong { font-family: var(--font-display); font-weight: 500; font-size: 2.2rem; letter-spacing: .12em; color: var(--grape-deep); }
+.bk-points-code small { color: var(--muted); font-size: .78rem; }
+.bk-points-error { font-size: .84rem; color: #ffd4d4; }
+.bk-points-history summary { cursor: pointer; font-family: var(--font-display); font-weight: 500; }
+.bk-points-delta { font-weight: 600; color: var(--danger); white-space: nowrap; }
+.bk-points-delta[data-plus] { color: var(--mint-deep); }

@@ -4,11 +4,12 @@
 // below 1100px). The tabs come from the same role-checked navigation as the sidebar.
 import { useEffect, useState } from "react";
 
-const SHORT = { bills: "บิล" };
+const SHORT = { bills: "บิล", members: "สมาชิก" };
 const ICONS = {
   overview: <path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" />,
   bookings: <><rect x="3" y="4.5" width="18" height="16" rx="2.5" /><path d="M3 9.5h18M8 2.5v4M16 2.5v4" /></>,
   bills: <><path d="M6 2.5h12v19l-3-2-3 2-3-2-3 2z" /><path d="M9 8h6M9 12h6" /></>,
+  members: <path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z" />,
   more: <><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></>
 };
 const Icon = ({ id }) => (

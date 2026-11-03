@@ -337,8 +337,18 @@ function CopyValue({ label, value }) {
  * pay, pending = slip sent (the shop is checking). onUploaded(view) gets the manage page's new data.
  * uploadUrl: /api/b/<slug>/manage/<token>/slip — the customer's own link is their only key.
  */
+const SLIP_REASON = {
+  AMOUNT_LOW: "ยอดในสลิปน้อยกว่ามัดจำ",
+  RECEIVER_MISMATCH: "บัญชีผู้รับไม่ตรงกับบัญชีร้าน",
+  RECEIVER_UNKNOWN: "ตรวจบัญชีผู้รับไม่ได้",
+  TOO_EARLY: "เวลาโอนก่อนจองคิวนี้",
+  DUPLICATE: "สลิปนี้เคยใช้แล้ว",
+  UNREADABLE: "อ่านสลิปไม่ชัด"
+};
+
 export function DepositBox({ deposit, status, deadline, uploadUrl, onUploaded }) {
   const [state, setState] = useState({ busy: false, error: "" });
+  const [check, setCheck] = useState(null); // the automatic slip check, when the platform runs one
   const info = deposit.paymentInfo ?? {};
   const waiting = status === "held";
 
@@ -360,6 +370,7 @@ export function DepositBox({ deposit, status, deadline, uploadUrl, onUploaded })
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload?.error?.message || "ส่งสลิปไม่สำเร็จ กรุณาลองใหม่");
       setState({ busy: false, error: "" });
+      setCheck(payload.data?.slipCheck ?? null);
       onUploaded?.(payload.data);
     } catch (e) {
       setState({ busy: false, error: e.message });
@@ -400,6 +411,17 @@ export function DepositBox({ deposit, status, deadline, uploadUrl, onUploaded })
         {state.busy ? "กำลังส่งสลิป…" : waiting ? "แนบสลิปการโอน" : "ส่งสลิปเพิ่ม"}
       </label>
       {state.error && <p className="bk-error" role="alert">{state.error}</p>}
+      {check && (
+        <p className={check.status === "passed" ? "bk-notice bk-slip-ok" : "bk-notice"} role="status" data-testid="slip-check">
+          {check.confirmed
+            ? "✓ ตรวจสลิปแล้ว ยอดครบ ยืนยันคิวให้เรียบร้อย"
+            : check.status === "passed"
+              ? "✓ สลิปผ่านการตรวจเบื้องต้น รอร้านยืนยัน"
+              : check.status === "failed"
+                ? `ระบบตรวจพบ: ${check.reasons.map((r) => SLIP_REASON[r] ?? r).join(" · ")} — ร้านจะตรวจอีกครั้ง หรือส่งสลิปที่ถูกต้องเพิ่มได้`
+                : "ส่งสลิปแล้ว ร้านจะตรวจและยืนยันให้"}
+        </p>
+      )}
       {deposit.slips > 0 && <p className="bk-muted">ส่งสลิปแล้ว {deposit.slips} รูป</p>}
     </section>
   );

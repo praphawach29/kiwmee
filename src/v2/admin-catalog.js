@@ -188,7 +188,7 @@ async function getCatalog(client, shop) {
     "select name, kind, media, amenities, about, address, map_url from public.businesses where id = $1",
     `select min_lead_minutes, slot_interval_minutes, max_advance_days, hold_minutes,
             customer_can_cancel, customer_can_reschedule, customer_change_cutoff_hours,
-            deposit_mode, deposit_value::float8 as deposit_value, payment_info, line_reminders, document_retention_days
+            deposit_mode, deposit_value::float8 as deposit_value, payment_info, line_reminders, document_retention_days, slip_auto_confirm
        from public.business_booking_settings where business_id = $1`,
     "select day_of_week, is_open, open_time, close_time from public.business_hours where business_id = $1",
     `select id, date::text as date, is_full_day, start_time, end_time, reason from public.business_closures
@@ -227,7 +227,8 @@ async function getCatalog(client, shop) {
     deposit_mode: "none",
     deposit_value: 0,
     payment_info: {},
-    line_reminders: true
+    line_reminders: true,
+    slip_auto_confirm: false
   };
   const flow = flows[0] ?? { entry: ["date", "offering"], require: ["offering", "date", "time"], optional: ["resource"], then: ["customer"], options: {} };
   // A shop with no hours saved yet is open 10–19 every day (as the options engine assumes)
@@ -247,7 +248,9 @@ async function getCatalog(client, shop) {
       depositValue: s.deposit_value,
       paymentInfo: s.payment_info ?? {},
       lineReminders: s.line_reminders !== false,
-      documentRetentionDays: s.document_retention_days ?? 30
+      documentRetentionDays: s.document_retention_days ?? 30,
+      // a slip that passes every automatic check confirms the deposit by itself (migration …003300)
+      slipAutoConfirm: s.slip_auto_confirm === true
     },
     hours: [0, 1, 2, 3, 4, 5, 6].map((d) => {
       const h = dayHours(d);
@@ -444,20 +447,22 @@ async function saveShop(client, shop, input = {}) {
       int(s.customerChangeCutoffHours ?? 2, "ลูกค้าเปลี่ยนเองได้ถึงก่อนนัด (ชั่วโมง)", { min: 0, max: 720 }),
       ...depositSettings(s),
       s.lineReminders !== false,
-      int(s.documentRetentionDays ?? 30, "เก็บเอกสารเช่ากี่วันหลังคืน", { min: 1, max: 365 })
+      int(s.documentRetentionDays ?? 30, "เก็บเอกสารเช่ากี่วันหลังคืน", { min: 1, max: 365 }),
+      s.slipAutoConfirm === true
     ];
     await client.query(
       `insert into public.business_booking_settings (business_id, min_lead_minutes, slot_interval_minutes, max_advance_days, hold_minutes,
                                                      customer_can_cancel, customer_can_reschedule, customer_change_cutoff_hours,
-                                                     deposit_mode, deposit_value, payment_info, line_reminders, document_retention_days)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13)
+                                                     deposit_mode, deposit_value, payment_info, line_reminders, document_retention_days, slip_auto_confirm)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13, $14)
        on conflict (business_id) do update set min_lead_minutes = excluded.min_lead_minutes,
          slot_interval_minutes = excluded.slot_interval_minutes, max_advance_days = excluded.max_advance_days,
          hold_minutes = excluded.hold_minutes, customer_can_cancel = excluded.customer_can_cancel,
          customer_can_reschedule = excluded.customer_can_reschedule,
          customer_change_cutoff_hours = excluded.customer_change_cutoff_hours,
          deposit_mode = excluded.deposit_mode, deposit_value = excluded.deposit_value, payment_info = excluded.payment_info,
-         line_reminders = excluded.line_reminders, document_retention_days = excluded.document_retention_days`,
+         line_reminders = excluded.line_reminders, document_retention_days = excluded.document_retention_days,
+         slip_auto_confirm = excluded.slip_auto_confirm`,
       [shop.id, ...values]
     );
   }

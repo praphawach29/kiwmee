@@ -893,3 +893,15 @@
 .ad-facts dd { margin: 0; font-weight: 500; }
 .ad-booking[data-focus] { outline: 3px solid var(--grape-deep); outline-offset: 2px; animation: ad-focus 1.6s ease-out 2; }
 @keyframes ad-focus { 50% { background: var(--selected); } }
+
+/* ---------- แผนผังสนาม editor ---------- */
+.ad-layout { grid-column: 1 / -1; }
+.ad-layout-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.ad-layout-chips .ad-chip[aria-pressed="true"] { background: var(--grape-deep); border-color: var(--grape-deep); color: #fff; }
+.ad-layout-chips .ad-chip[data-placed] { border-color: #2bb57d; }
+.ad-layout-grid { display: grid; gap: 6px; padding: 10px; border-radius: 14px; background: #e9f7f0; border: 1px solid #cdeedd; max-width: 720px; }
+.ad-layout-cell { border: 1.5px dashed #b5dfc9; border-radius: 10px; background: rgba(255, 255, 255, .55); color: #2bb57d; font: inherit; font-size: 20px; cursor: pointer; }
+.ad-layout-cell:hover:not(:disabled) { background: #fff; border-color: #2bb57d; }
+.ad-layout-spot { display: grid; place-items: center; min-width: 0; padding: 4px; border: 2px solid #fff; border-radius: 10px; background: #36c88a; color: #fff; font: inherit; font-weight: 600; font-size: 13px; overflow-wrap: anywhere; cursor: pointer; box-shadow: 0 2px 6px rgba(11, 122, 80, .25); }
+.ad-layout-spot[data-picked] { background: var(--grape-deep); box-shadow: 0 0 0 3px var(--selected); }
+.ad-layout-picked { padding: 8px 10px; border-radius: 12px; background: var(--selected); }

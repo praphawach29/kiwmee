@@ -570,3 +570,20 @@ button.bk-cal-day:not([data-unavailable])::after { content: ""; position: absolu
 .bk-cal-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--mint-deep, #1fb57a); }
 .bk-cal-legend i[data-kind="full"] { background: #d6d1ea; }
 .bk-cal-legend .bk-muted { margin-left: auto; }
+
+/* ---------- แผนผังสนาม (venue map) ---------- */
+.bk-venue { display: grid; gap: 12px; min-width: 0; }
+.bk-venue-map { display: grid; gap: 8px; padding: 12px; border-radius: 18px; background: #e9f7f0; border: 1px solid #cdeedd; }
+.bk-venue-spot { position: relative; display: grid; place-content: center; gap: 2px; min-width: 0; min-height: 64px; padding: 8px 4px; border-radius: 12px; border: 2px solid #fff; background: #36c88a; color: #fff; text-align: center; font: inherit; cursor: pointer; overflow: hidden; box-shadow: 0 2px 6px rgba(11, 122, 80, .25); transition: transform .12s, background-color .12s; }
+.bk-venue-spot:not(:disabled):hover { transform: translateY(-1px); }
+.bk-venue-spot strong { position: relative; font-size: .92rem; line-height: 1.25; overflow-wrap: anywhere; text-shadow: 0 1px 2px rgba(0, 0, 0, .25); }
+.bk-venue-spot small { position: relative; font-size: .72rem; opacity: .95; }
+/* court lines: a centre line and a frame, just enough to read as a court / table */
+.bk-venue-lines { position: absolute; inset: 6px; border: 1.5px solid rgba(255, 255, 255, .55); border-radius: 6px; pointer-events: none; }
+.bk-venue-lines::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; border-left: 1.5px solid rgba(255, 255, 255, .45); }
+.bk-venue-spot[data-unavailable] { background: #c9c4d9; box-shadow: none; cursor: not-allowed; }
+.bk-venue-spot[data-unavailable] strong { text-shadow: none; }
+.bk-venue-spot[data-selected="true"] { background: var(--grape); box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--grape); }
+.bk-venue-spot[data-pending] { background: var(--grape-deep); }
+.bk-cal-legend i[data-kind="picked"] { background: var(--grape); }
+.bk-venue .bk-cal-legend i[data-kind="free"] { background: #36c88a; }

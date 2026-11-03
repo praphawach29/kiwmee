@@ -18,7 +18,7 @@ function loadComponents(file = 'booking-presentation.jsx') {
   const mod = new Module(filename, module);
   mod.filename = filename;
   mod.paths = module.paths;
-  if (file.includes('shop-admin-client')) mod.require = (name) => name === '../media-editor.jsx' ? loadComponents('../../dashboard/media-editor.jsx') : name === '../media-upload.mjs' ? require(path.join(__dirname, '../../dashboard/media-upload.mjs')) : name.startsWith('.') ? {} : require(name);
+  if (file.includes('shop-admin-client')) mod.require = (name) => name === '../media-editor.jsx' ? loadComponents('../../dashboard/media-editor.jsx') : name === '../media-upload.mjs' ? require(path.join(__dirname, '../../dashboard/media-upload.mjs')) : name.includes('/src/v2/') ? require(path.resolve(path.dirname(filename), name)) : name.startsWith('.') ? {} : require(name);
   else mod.require = (name) => name.endsWith('.jsx') ? loadComponents(path.relative(__dirname, path.resolve(path.dirname(filename), name))) : Module.prototype.require.call(mod, name);
   mod._compile(code, filename);
   return mod.exports;

@@ -316,6 +316,8 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     pictured.length > 0 &&
     ((ask === "offering" && pictured.every((o) => withMedia(offerings.get(o.value)))) ||
       (ask === "resource" && pictured.every((o) => withMedia(resources.get(o.value)))));
+  // แผนผังสนาม: when at least two of the courts / tables offered have a spot on the shop's map
+  const mapped = ask === "resource" && pictured.filter((o) => resources.get(o.value)?.layout).length >= 2;
   const optionProps = (o) => {
     const tapped = pending?.step === ask && pending.value === o.value;
     const chosen = pending?.step === ask ? tapped : selected[KEY[ask]] === o.value;
@@ -434,6 +436,12 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
               <DateStrip options={view.options} today={todayIn(shop.timezone)} optionProps={optionProps} />
             ) : ask === "time" ? (
               <TimeTabs key={selected.date} options={view.options} chosen={selected.time} optionButton={optionButton} />
+            ) : ask === "resource" && mapped ? (
+              <VenueMap options={shownOptions} resources={resources} resourceWord={resourceWord} optionProps={optionProps} list={
+                <div className={`bk-options bk-options-${ask}`} data-photos={photoCards || undefined}>
+                  {shownOptions.map(optionButton)}
+                </div>
+              } />
             ) : (
               <div className={`bk-options bk-options-${ask}`} data-photos={photoCards || undefined}>
                 {shownOptions.map(optionButton)}
@@ -623,6 +631,63 @@ function TimeTabs({ options, chosen, optionButton }) {
         </div>
       )}
       <div className="bk-options bk-options-time" role="tabpanel" aria-label={part.label}>{part.options.map(optionButton)}</div>
+    </div>
+  );
+}
+
+// แผนผังสนาม (migration …002900): the courts / tables / rooms where they really are, as the shop drew
+// them on a grid. The same choices as the list: a full one is grey and cannot be tapped. "Any" and
+// anything not on the map stay as buttons under it. The customer can switch to the list.
+function VenueMap({ options, resources, resourceWord, optionProps, list }) {
+  const [asList, setAsList] = useState(false);
+  const placed = options.filter((o) => o.value !== null && resources.get(o.value)?.layout);
+  const rest = options.filter((o) => !placed.includes(o));
+  const rows = Math.max(...placed.map((o) => { const s = resources.get(o.value).layout; return s.row + s.h - 1; }));
+  const cols = Math.max(...placed.map((o) => { const s = resources.get(o.value).layout; return s.col + s.w - 1; }));
+  const free = placed.filter((o) => o.available).length;
+  return (
+    <div className="bk-venue">
+      <div className="bk-dates-head">
+        <span className="bk-muted">{free > 0 ? `ว่าง ${free} จาก ${placed.length}` : "ไม่มีที่ว่างในผัง"}</span>
+        <button type="button" className="bk-cal-toggle" aria-pressed={asList} onClick={() => setAsList(!asList)}>
+          {asList ? "ดูผัง" : "ดูเป็นรายการ"}
+        </button>
+      </div>
+      {asList ? list : (
+        <>
+          <div className="bk-venue-map" role="group" aria-label={`ผัง${resourceWord}`} style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, minmax(64px, auto))` }}>
+            {placed.map((o) => {
+              const r = resources.get(o.value);
+              const s = r.layout;
+              const props = optionProps(o);
+              return (
+                <button key={o.value} {...props} data-testid="option-resource-map" className="bk-venue-spot"
+                  style={{ gridRow: `${s.row} / span ${s.h}`, gridColumn: `${s.col} / span ${s.w}` }}
+                  aria-label={`${r.name}${o.available ? "" : ` · ${REASON_TEXT[o.reason] ?? "ไม่ว่าง"}`}`}>
+                  <span className="bk-venue-lines" aria-hidden="true" />
+                  <strong>{r.name}</strong>
+                  <small>{o.available ? (props["data-selected"] ? "เลือกแล้ว" : "ว่าง") : REASON_TEXT[o.reason] ?? "ไม่ว่าง"}</small>
+                </button>
+              );
+            })}
+          </div>
+          <p className="bk-cal-legend">
+            <span><i data-kind="free" /> ว่าง</span>
+            <span><i data-kind="full" /> ไม่ว่าง</span>
+            <span><i data-kind="picked" /> ที่เลือก</span>
+          </p>
+          {rest.length > 0 && (
+            <div className="bk-options bk-options-resource">
+              {rest.map((o) => (
+                <button key={String(o.value)} {...optionProps(o)}>
+                  <ResourceChoice resource={resources.get(o.value)} label={o.label} resourceWord={resourceWord} any={o.value === null} />
+                  {!o.available && <small className="bk-reason">{REASON_TEXT[o.reason] ?? "ไม่ว่าง"}</small>}
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

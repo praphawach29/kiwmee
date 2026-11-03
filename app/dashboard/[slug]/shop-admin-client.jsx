@@ -577,6 +577,7 @@ function BookingsTab({ slug, catalog, initialDay, focusId = null }) {
                     {b.price ? ` · ${money(b.price)}` : ""}
                   </div>
                   {b.addons?.length > 0 && <div className="ad-muted">+ {b.addons.map((a) => `${a.name}${a.quantity > 1 ? ` ×${a.quantity}` : ""}`).join(", ")}</div>}
+                  {b.heldReward && <div className="ad-deposit-line" data-tone="ok">⭐ ลูกค้าใช้คะแนน: {b.heldReward.name} ({b.heldReward.points} คะแนน) · หักให้ตอนปิดบิล</div>}
                   {b.documents && (
                     <div className="ad-deposit-line" data-tone={b.documents.received >= b.documents.asked ? "ok" : "warn"}>
                       เอกสาร {b.documents.received}/{b.documents.asked}
@@ -1214,7 +1215,16 @@ function MemberBox({ slug, bookingId = null, initialCode = null, onChange }) {
 
   useEffect(() => {
     if (!bookingId) return;
-    api("GET", shopPath(slug, `/loyalty/member?bookingId=${bookingId}`)).then((m) => setMember(m), () => setMember(null));
+    api("GET", shopPath(slug, `/loyalty/member?bookingId=${bookingId}`)).then((m) => {
+      setMember(m);
+      // the reward the customer chose when booking: already chosen here (the desk can change it)
+      const held = m?.held && m.rewards.find((r) => r.id === m.held.rewardId);
+      if (held) {
+        setRewardId(held.id);
+        onChange({ memberCode: null, reward: held });
+      }
+    }, () => setMember(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug, bookingId]);
 
   // a member scanned on the scan tab: look them up straight away
@@ -1272,6 +1282,7 @@ function MemberBox({ slug, bookingId = null, initialCode = null, onChange }) {
             ⭐ <strong>{member.name}</strong>{member.tier ? <> <span className="ad-status" data-tone="info">{member.tier.name}</span></> : null} · มี {member.balance.toLocaleString("th-TH")} คะแนน
             {member.expiring > 0 && <span className="ad-muted"> · {member.expiring} คะแนนจะหมดอายุเร็วๆ นี้</span>}
           </p>
+          {member.held && <p className="ad-muted">ลูกค้าเลือก "{member.held.name}" ไว้ตอนจอง ({member.held.points} คะแนนกันไว้แล้ว) — เลือก "ไม่ใช้" คะแนนจะคืนให้ลูกค้า</p>}
           {member.rewards.length > 0 && (
             <label className="ad-field">
               ใช้รางวัล (ไม่บังคับ)

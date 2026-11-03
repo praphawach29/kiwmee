@@ -592,3 +592,9 @@ button.bk-cal-day:not([data-unavailable])::after { content: ""; position: absolu
 .bk-points .mc-card .bk-points-expiring { color: inherit; font-weight: 600; opacity: 1; }
 .bk-tier-perks ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
 .bk-tier-perks li::marker { content: "✦  "; color: var(--grape); }
+
+/* ---------- use points when booking (migration …003200) ---------- */
+.bk-options-reward { grid-template-columns: 1fr; }
+.bk-options-reward .bk-option { display: flex; align-items: center; gap: 12px; }
+.bk-options-reward .bk-option-text { flex: 1; min-width: 0; }
+.bk-options-reward .bk-option > .bk-reason { position: static; flex: none; }

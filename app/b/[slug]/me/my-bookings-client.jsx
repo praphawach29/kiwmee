@@ -59,6 +59,7 @@ function NextBooking({ booking, directions, slug }) {
         <div><dt>บริการ</dt><dd>{booking.offering}</dd></div>
         {resource && <div><dt>{KIND_WORD[resource.kind] ?? "ที่"}</dt><dd>{booking.resources.map((r) => r.name).join(", ")}</dd></div>}
         {booking.total > 0 && <div><dt>ราคา</dt><dd><strong>{money(booking.total)}</strong></dd></div>}
+        {booking.points && <div><dt>ใช้คะแนน</dt><dd>{booking.points.name} (ลด {money(booking.points.discountBaht)})</dd></div>}
       </dl>
       {booking.link && <a className="bk-primary" href={booking.link}>{booking.status === "held" ? "แนบสลิปโอนมัดจำ" : "ดู เลื่อน หรือยกเลิกนัด"}</a>}
       <CheckinQr slug={slug} id={booking.checkin} />

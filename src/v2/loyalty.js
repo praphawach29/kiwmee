@@ -20,8 +20,29 @@ const RPC_TEXT = {
   INVALID_POINTS: "จำนวนคะแนนไม่ถูกต้อง",
   NOT_CHANGEABLE: "บิลนี้ปิดหรือยกเลิกแล้ว",
   TIER_TOO_LOW: "รางวัลนี้สำหรับสมาชิกระดับสูงกว่านี้",
-  INVALID_TIERS: "ข้อมูลระดับสมาชิกไม่ถูกต้อง"
+  INVALID_TIERS: "ข้อมูลระดับสมาชิกไม่ถูกต้อง",
+  ALREADY_HELD: "การจองนี้ใช้คะแนนไปแล้ว"
 };
+
+/**
+ * What a booking set aside when it was made (migration …003200): { rewardId, name, points, discountBaht }
+ * or null. Works on the shop's connection (row level security) and the server's.
+ */
+async function heldReward(db, bookingId) {
+  const { rows: [h] } = await db.query(
+    `select h.reward_id, h.points, r.name, r.discount_baht,
+            coalesce((b.price_snapshot->>'total')::numeric, 0) as total
+       from (select (array_agg(l.reward_id order by l.created_at desc) filter (where l.kind = 'hold'))[1] as reward_id,
+                    coalesce(-sum(l.points), 0)::int as points
+               from public.loyalty_ledger l
+              where l.booking_id = $1 and l.bill_id is null and l.kind in ('hold', 'release')) h
+       join public.bookings b on b.id = $1
+       left join public.loyalty_rewards r on r.id = h.reward_id
+      where h.points > 0`,
+    [bookingId]
+  );
+  return h ? { rewardId: h.reward_id, name: h.name, points: h.points, discountBaht: Math.min(Number(h.discount_baht), Number(h.total)) } : null;
+}
 
 // ---------- membership tiers (migration …003000) ----------
 const THEMES = ["classic", "silver", "gold", "platinum", "black"];
@@ -284,11 +305,14 @@ async function memberAtCounter(client, shop, { code, bookingId } = {}) {
   const balance = await balanceOf(client, brandId, lineUserId);
   const tiers = await tiersOf(client, brandId);
   const standing = tiers.length ? tierStanding(tiers, await tierOf(client, brandId, lineUserId)) : null;
+  // points the customer set aside when booking: theirs to use on this bill
+  const held = bookingId ? await heldReward(client, bookingId) : null;
   return {
     name: person?.name ?? "สมาชิก LINE",
     ...balance,
+    held,
     tier: standing ? { name: standing.name, cardTheme: standing.cardTheme, earnMultiplier: standing.earnMultiplier } : null,
-    rewards: rewards.map(rewardView).map((r) => rewardFor(r, balance.balance, standing, tiers))
+    rewards: rewards.map(rewardView).map((r) => rewardFor(r, balance.balance + (held?.points ?? 0), standing, tiers))
   };
 }
 
@@ -322,7 +346,7 @@ async function memberCard(db, shop, lineUserId) {
     ...balance,
     // the membership tier (migration …003000): name, card look, bonus, perks, the way to the next one
     tier: standing ? { ...standing, qualifyMonths: program.qualify_months ?? 12 } : null,
-    rewards: rewards.map(rewardView).map((r) => rewardFor(r, balance.balance, standing, tiers)).map((r) => ({ name: r.name, pointsCost: r.pointsCost, discountBaht: r.discountBaht, usable: r.usable, tierName: r.tierOk ? null : r.tierName })),
+    rewards: rewards.map(rewardView).map((r) => rewardFor(r, balance.balance, standing, tiers)).map((r) => ({ id: r.id, name: r.name, pointsCost: r.pointsCost, discountBaht: r.discountBaht, usable: r.usable, tierName: r.tierOk ? null : r.tierName })),
     history: history.map((h) => ({ kind: h.kind, points: h.points, at: h.created_at, shop: h.shop }))
   };
 }
@@ -410,6 +434,7 @@ module.exports = {
   memberAtCounter,
   applyAtCounter,
   memberCard,
+  heldReward,
   issueMemberCode,
   earnText,
   tierStanding,

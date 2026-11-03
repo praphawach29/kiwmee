@@ -81,6 +81,8 @@ function bookingCard({ kind, shop, booking, link, directions = null, checkin = n
   if (booking.resources?.length) details.push(row(kindWord(booking.resourceKind), booking.resources.join(", ")));
   if (booking.reason) details.push(row("เหตุผล", booking.reason));
   if (booking.addons?.length) details.push(row("เพิ่มเติม", booking.addons.map((a) => `${a.name}${a.quantity > 1 ? ` ×${a.quantity}` : ""}`).join(", ")));
+  // points set aside for a reward when booking: the discount comes off at the desk
+  if (booking.points) details.push(row("ใช้คะแนน", `${booking.points.name} (${booking.points.points} คะแนน · ลด ${baht(booking.points.discountBaht)})`));
 
   const body = [
     { type: "text", text: booking.offering, weight: "bold", size: "md", color: INK, wrap: true },

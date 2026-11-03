@@ -112,6 +112,8 @@ function startReminderLoop(getDb, { everyMs = 5 * 60 * 1000 } = {}) {
     try {
       const { sent } = await sendDueReminders(getDb());
       if (sent) console.log(`[line-reminders] sent ${sent}`);
+      // points set aside by bookings that ran out without a status change come back (migration …003200)
+      await getDb().query("select public.loyalty_release_stale_holds()");
       // points that run out within 14 days (src/v2/loyalty-expiry.js), daytime only
       const points = await sendExpiryNotices(getDb());
       if (points.sent) console.log(`[loyalty-expiry] sent ${points.sent}`);

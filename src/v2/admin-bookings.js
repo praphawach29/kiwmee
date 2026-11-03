@@ -130,7 +130,11 @@ async function queryBookings(client, shop, where, params) {
             coalesce((select json_agg(json_build_object('name', ba.name, 'quantity', ba.quantity, 'total', ba.total) order by ba.name)
                         from public.booking_addons ba where ba.booking_id = b.id), '[]'::json) as addons,
             o.required_documents,
-            (select count(*)::int from public.booking_documents d where d.booking_id = b.id) as documents
+            (select count(*)::int from public.booking_documents d where d.booking_id = b.id) as documents,
+            (select json_build_object('name', r.name, 'points', -sum(l.points)::int)
+               from public.loyalty_ledger l left join public.loyalty_rewards r on r.id = l.reward_id
+              where l.booking_id = b.id and l.bill_id is null and l.kind in ('hold', 'release')
+              group by r.name having sum(l.points) < 0 limit 1) as held
        from public.bookings b
        join public.offerings o on o.id = b.offering_id
        join public.customers c on c.id = b.customer_id
@@ -166,7 +170,9 @@ async function queryBookings(client, shop, where, params) {
       depositDue: b.deposit_due,
       slips: b.slips,
       // a rental's ID / licence (design 11.7 E3): how many asked for, how many in
-      documents: b.required_documents?.length ? { asked: b.required_documents.length, received: b.documents } : null
+      documents: b.required_documents?.length ? { asked: b.required_documents.length, received: b.documents } : null,
+      // the customer chose a reward with their points when booking (migration …003200)
+      heldReward: b.held ?? null
     };
   });
 }

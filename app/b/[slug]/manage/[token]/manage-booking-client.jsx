@@ -200,6 +200,12 @@ export default function ManageBookingClient({ token, initial }) {
               <dd>{money(booking.price)}</dd>
             </div>
           )}
+          {view.points && (
+            <div>
+              <dt>ใช้คะแนน</dt>
+              <dd>{view.points.name} · {view.points.points} คะแนน<br /><small className="bk-muted">ลด {money(view.points.discountBaht)} ตอนจ่ายที่ร้าน · ยกเลิกแล้วคะแนนคืน</small></dd>
+            </div>
+          )}
         </dl>
         {booking.checkin && <CheckinQr slug={shop.slug} id={booking.checkin} />}
         {!["cancelled", "no_show", "expired", "completed"].includes(booking.status) && <DirectionsButton href={shop.directions} />}

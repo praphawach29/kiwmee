@@ -114,7 +114,7 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 
 /* dates: one swipeable row, a week on screen */
 .bk-dates { display: grid; gap: 10px; min-width: 0; }
-.bk-dates-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.bk-dates-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
 .bk-dates-head strong { font-family: var(--font-display); font-weight: 500; }
 .bk-dates-head > div { display: flex; gap: 6px; }
 .bk-icon-button { width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line); background: #fff; color: var(--grape-deep); font-size: 20px; line-height: 1; cursor: pointer; }
@@ -419,23 +419,36 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   .bk-submit-bar[data-has-price] .bk-primary { flex: none; }
 }
 
-/* ---------- services, courts and staff with photos: big photo cards, two across ---------- */
-:is(.bk-options-offering, .bk-options-resource)[data-photos] { grid-template-columns: repeat(auto-fill, minmax(min(100%, 9.5em), 1fr)); gap: 12px; }
+/* ---------- services, courts and staff with photos: full-bleed photo cards, two across ----------
+   The picture fills the card; the name and price sit on a dark fade at the bottom so they read on any
+   photo. Only when every card has a picture (photoCards in booking-v2-client.jsx): otherwise the list. */
+:is(.bk-options-offering, .bk-options-resource)[data-photos] { --pc-ink: #fff; --pc-fade: rgba(17, 12, 46, .9); grid-template-columns: repeat(auto-fill, minmax(min(100%, 9.5em), 1fr)); gap: 12px; }
 :is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-option-wrap { display: grid; }
 :is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-option,
-:is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-option-wrap > .bk-option { flex-direction: column; align-items: stretch; gap: 8px; min-height: 0; padding: 0 0 12px; border-radius: 18px; overflow: hidden; }
-:is(.bk-options-offering, .bk-options-resource)[data-photos] :is(.bk-offering-media, .bk-resource-media) { width: 100%; height: auto; aspect-ratio: 4 / 3; border-radius: 0; }
-:is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-option-text { padding: 0 12px; }
+:is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-option-wrap > .bk-option { display: block; aspect-ratio: 4 / 5; min-height: 0; padding: 0; border: 0; border-radius: 20px; overflow: hidden; background: #1b1640; box-shadow: 0 6px 18px rgba(27, 22, 64, .14); transition: transform .15s, box-shadow .15s; }
+:is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-option:not(:disabled):hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(27, 22, 64, .2); }
+:is(.bk-options-offering, .bk-options-resource)[data-photos] :is(.bk-offering-media, .bk-resource-media) { position: absolute; inset: 0; width: 100%; height: 100%; aspect-ratio: auto; border-radius: 0; }
+:is(.bk-options-offering, .bk-options-resource)[data-photos] :is(.bk-offering-media, .bk-resource-media) img { width: 100%; height: 100%; object-fit: cover; transition: transform .3s; }
+:is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-option:not(:disabled):hover img { transform: scale(1.04); }
+:is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-option-text { position: absolute; left: 0; right: 0; bottom: 0; display: grid; gap: 2px; padding: 56px 12px 12px; background: linear-gradient(to top, var(--pc-fade) 0%, rgba(17, 12, 46, .62) 50%, rgba(17, 12, 46, 0) 100%); color: var(--pc-ink); }
+:is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-option-text strong { color: var(--pc-ink); font-size: 1rem; line-height: 1.3; text-shadow: 0 1px 2px rgba(0, 0, 0, .35); }
+:is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-option-meta { color: rgba(255, 255, 255, .86); }
+:is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-option-price { color: #8ff0c4; }
 :is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-option-wrap .bk-option-text { padding-right: 52px; }
 :is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-choice-mark,
-:is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-option-wrap .bk-choice-mark { position: absolute; right: 10px; top: 10px; margin: 0; background-color: #fff; box-shadow: 0 2px 8px rgba(27, 22, 64, .2); }
-:is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-media-caption { font-size: .6rem; padding: 2px 6px; text-align: left; }
-:is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-option[data-selected="true"] { box-shadow: 0 0 0 2px var(--grape); }
-:is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-option > .bk-reason { position: static; padding: 0 12px; }
+:is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-option-wrap .bk-choice-mark { position: absolute; right: 10px; top: 10px; margin: 0; background-color: rgba(255, 255, 255, .92); box-shadow: 0 2px 8px rgba(0, 0, 0, .25); }
+/* "ภาพประกอบ" (a demo picture): a small tag at the top, out of the text's way */
+:is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-media-caption { left: 10px; right: auto; top: 10px; bottom: auto; padding: 2px 8px; border-radius: 999px; font-size: .62rem; line-height: 1.5; text-align: left; background: rgba(17, 12, 46, .6); }
+/* the "details" button sits on the photo, bottom right */
+:is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-details-link { right: 10px; bottom: 10px; background: rgba(255, 255, 255, .92); box-shadow: 0 2px 8px rgba(0, 0, 0, .25); }
+:is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-option[data-selected="true"] { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--grape), 0 10px 24px rgba(79, 51, 224, .3); }
+:is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-option[data-unavailable] img { filter: grayscale(1) brightness(.75); }
+:is(.bk-options-offering, .bk-options-resource)[data-photos] .bk-option > .bk-reason { position: absolute; left: 10px; right: auto; top: 10px; bottom: auto; padding: 2px 8px; border-radius: 999px; background: #fff; color: var(--danger); font-weight: 600; }
 /* "any court / any stylist" stays a row across the top of the photo cards */
-.bk-options-resource[data-photos] .bk-option[data-value="any"] { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: 12px; min-height: 64px; padding: 10px 14px; }
-.bk-options-resource[data-photos] .bk-option[data-value="any"] .bk-option-text { padding: 0; }
-.bk-options-resource[data-photos] .bk-option[data-value="any"] .bk-choice-mark { position: static; box-shadow: none; }
+.bk-options-resource[data-photos] .bk-option[data-value="any"] { grid-column: 1 / -1; display: flex; flex-direction: row; align-items: center; gap: 12px; aspect-ratio: auto; min-height: 64px; padding: 10px 14px; border: 1px solid var(--line); background: #fff; box-shadow: none; }
+.bk-options-resource[data-photos] .bk-option[data-value="any"] .bk-option-text { position: static; padding: 0; background: none; color: var(--ink); }
+.bk-options-resource[data-photos] .bk-option[data-value="any"] .bk-option-text strong { color: var(--ink); text-shadow: none; }
+.bk-options-resource[data-photos] .bk-option[data-value="any"] .bk-choice-mark { position: static; margin-left: auto; box-shadow: none; }
 
 
 /* ---------- about the venue + what it offers (migration …002400) ---------- */
@@ -536,3 +549,24 @@ a.bk-booking-row:hover .bk-row-text strong { color: var(--grape-deep); }
 .bk-checkin { display: grid; gap: 4px; justify-items: center; padding: 16px; border: 1px dashed var(--line); border-radius: 18px; background: #fff; text-align: center; }
 .bk-checkin-code { font-family: var(--font-display); font-weight: 500; font-size: 1.4rem; letter-spacing: .14em; color: var(--grape-deep); }
 .bk-checkin small { color: var(--muted); font-size: .82rem; }
+
+/* ---------- month calendar (date step) ---------- */
+.bk-cal-toggle { display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--line); background: #fff; color: var(--grape-deep); font: inherit; font-size: .88rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.bk-cal-toggle[aria-pressed="true"] { background: var(--selected, #ECE8FF); }
+.bk-icon-button:disabled { opacity: .35; cursor: default; }
+.bk-cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.bk-cal-head { text-align: center; font-size: .78rem; color: var(--muted); padding-bottom: 2px; }
+.bk-cal-day { position: relative; display: grid; place-items: center; aspect-ratio: 1; min-height: 40px; border-radius: 12px; border: 1px solid transparent; background: #fff; color: var(--ink); font: inherit; font-weight: 600; font-size: .98rem; cursor: pointer; }
+button.bk-cal-day { border-color: var(--line-soft, #eee); }
+button.bk-cal-day:not([data-unavailable])::after { content: ""; position: absolute; bottom: 6px; width: 5px; height: 5px; border-radius: 50%; background: var(--mint-deep, #1fb57a); }
+.bk-cal-day[data-out] { color: #c9c4dc; background: transparent; font-weight: 400; cursor: default; }
+.bk-cal-day[data-unavailable] { color: #b4aecb; background: #f6f4fc; text-decoration: line-through; text-decoration-color: rgba(180, 174, 203, .6); cursor: not-allowed; }
+.bk-cal-day[data-today] { border-color: var(--grape); }
+.bk-cal-day[data-selected="true"] { background: var(--grape); border-color: var(--grape); color: #fff; }
+.bk-cal-day[data-selected="true"]::after { background: #fff; }
+.bk-cal-day[data-pending] { background: var(--grape-deep); color: #fff; }
+.bk-cal-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin: 0; font-size: .82rem; color: var(--muted); }
+.bk-cal-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.bk-cal-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--mint-deep, #1fb57a); }
+.bk-cal-legend i[data-kind="full"] { background: #d6d1ea; }
+.bk-cal-legend .bk-muted { margin-left: auto; }

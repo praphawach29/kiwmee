@@ -4,6 +4,9 @@
 // connection, after LINE confirmed who they are).
 
 const { AppError, notFound } = require("../errors");
+const { themeOf } = require("./tier-themes");
+const { pushLine, shopLink } = require("./line-notify");
+const { publicOrigin } = require("./scan-codes");
 
 const invalid = (message) => new AppError("INVALID", message, 422);
 const LINE_USER = /^U[0-9a-f]{32}$/;
@@ -15,8 +18,73 @@ const RPC_TEXT = {
   NOT_A_MEMBER: "บิลนี้ยังไม่ได้ผูกสมาชิก",
   MEMBER_CODE_INVALID: "รหัสสมาชิกไม่ถูกต้องหรือหมดอายุ ให้ลูกค้ากดขอรหัสใหม่",
   INVALID_POINTS: "จำนวนคะแนนไม่ถูกต้อง",
-  NOT_CHANGEABLE: "บิลนี้ปิดหรือยกเลิกแล้ว"
+  NOT_CHANGEABLE: "บิลนี้ปิดหรือยกเลิกแล้ว",
+  TIER_TOO_LOW: "รางวัลนี้สำหรับสมาชิกระดับสูงกว่านี้",
+  INVALID_TIERS: "ข้อมูลระดับสมาชิกไม่ถูกต้อง"
 };
+
+// ---------- membership tiers (migration …003000) ----------
+const THEMES = ["classic", "silver", "gold", "platinum", "black"];
+const THEME_LABEL = { classic: "คลาสสิก", silver: "เงิน", gold: "ทอง", platinum: "แพลทินัม", black: "แบล็ก" };
+
+const tierRow = (t) => ({
+  rank: t.rank,
+  name: t.name,
+  minSpend: Number(t.min_spend),
+  minVisits: t.min_visits,
+  earnMultiplier: Number(t.earn_multiplier),
+  cardTheme: t.card_theme,
+  benefits: t.benefits ?? []
+});
+
+async function tiersOf(db, brandId) {
+  const { rows } = await db.query("select * from public.loyalty_tiers where brand_id = $1 order by rank", [brandId]);
+  return rows.map(tierRow);
+}
+
+/** { rank, name, spend, visits } — rank null when the brand has no tiers. excludeBill: the tier before that bill */
+async function tierOf(db, brandId, lineUserId, excludeBill = null) {
+  const { rows: [t] } = await db.query("select rank, name, spend, visits from public.loyalty_tier($1, $2, now(), $3)", [brandId, lineUserId, excludeBill]);
+  return { rank: t?.rank ?? null, name: t?.name ?? null, spend: Number(t?.spend ?? 0), visits: t?.visits ?? 0 };
+}
+
+const baht = (n) => `${Math.ceil(n).toLocaleString("th-TH")} บาท`;
+
+/**
+ * Where the member stands: their tier, the next one and how far (0–1) along, in words:
+ * "อีก 2,300 บาท หรือ 3 ครั้ง ถึง Gold". null when the brand has no tiers.
+ */
+function tierStanding(tiers, t) {
+  if (!tiers.length || t.rank === null) return null;
+  const current = tiers.find((x) => x.rank === t.rank) ?? tiers[0];
+  const next = tiers.find((x) => x.rank === current.rank + 1) ?? null;
+  let progress = 1;
+  let toNext = null;
+  if (next) {
+    const ways = [];
+    const parts = [];
+    if (next.minSpend > 0) {
+      ways.push(Math.min(t.spend / next.minSpend, 1));
+      parts.push(baht(Math.max(next.minSpend - t.spend, 0)));
+    }
+    if (next.minVisits > 0) {
+      ways.push(Math.min(t.visits / next.minVisits, 1));
+      parts.push(`${Math.max(next.minVisits - t.visits, 0)} ครั้ง`);
+    }
+    progress = ways.length ? Math.max(...ways) : 0;
+    toNext = `อีก ${parts.join(" หรือ ")} ถึง ${next.name}`;
+  }
+  return {
+    rank: current.rank,
+    name: current.name,
+    cardTheme: current.cardTheme,
+    earnMultiplier: current.earnMultiplier,
+    benefits: current.benefits,
+    spend: t.spend,
+    visits: t.visits,
+    next: next ? { name: next.name, progress: Math.round(progress * 100) / 100, text: toNext } : null
+  };
+}
 
 function rpcError(error) {
   if (error.code === "42501") return new AppError("FORBIDDEN", "เฉพาะเจ้าของแบรนด์ตั้งค่าคะแนนได้", 403);
@@ -57,7 +125,13 @@ function earnText(p) {
   return p.earnMode === "per_visit" ? `มาใช้บริการ 1 ครั้ง ได้ ${p.earnPoints} คะแนน` : `ทุก ${Number(p.earnPerBaht).toLocaleString("th-TH")} บาท ได้ ${p.earnPoints} คะแนน`;
 }
 
-const rewardView = (r) => ({ id: r.id, name: r.name, pointsCost: r.points_cost, discountBaht: Number(r.discount_baht), active: r.active, sortOrder: r.sort_order });
+const rewardView = (r) => ({ id: r.id, name: r.name, pointsCost: r.points_cost, discountBaht: Number(r.discount_baht), active: r.active, sortOrder: r.sort_order, minTierRank: r.min_tier_rank ?? 0 });
+
+/** usable = enough points and the member's tier is high enough; tierName = the tier it needs, if any */
+function rewardFor(r, balance, standing, tiers) {
+  const tierOk = !r.minTierRank || (standing?.rank ?? 0) >= r.minTierRank;
+  return { ...r, usable: balance >= r.pointsCost && tierOk, tierName: r.minTierRank ? tiers.find((t) => t.rank === r.minTierRank)?.name ?? null : null, tierOk };
+}
 
 async function balanceOf(db, brandId, lineUserId) {
   const { rows: [b] } = await db.query("select balance, expiring, expiring_at from public.loyalty_balance($1, $2)", [brandId, lineUserId]);
@@ -80,9 +154,20 @@ async function getLoyalty(client, shop) {
       group by l.line_user_id order by max(l.created_at) desc limit 50`,
     [brandId, shop.id]
   );
+  const tiers = await tiersOf(client, brandId);
   const members = [];
-  for (const p of people) members.push({ lineUserId: p.line_user_id, name: p.name ?? "สมาชิก LINE", lastAt: p.last_at, ...(await balanceOf(client, brandId, p.line_user_id)) });
-  return { program: programView(program), canEdit: owner[0]?.owner === true, rewards: rewards.map(rewardView), members };
+  for (const p of people) {
+    const tier = tiers.length ? (await tierOf(client, brandId, p.line_user_id)).name : null;
+    members.push({ lineUserId: p.line_user_id, name: p.name ?? "สมาชิก LINE", lastAt: p.last_at, tier, ...(await balanceOf(client, brandId, p.line_user_id)) });
+  }
+  return {
+    program: { ...programView(program), qualifyMonths: program?.qualify_months ?? 12 },
+    canEdit: owner[0]?.owner === true,
+    rewards: rewards.map(rewardView),
+    tiers,
+    themes: THEMES.map((id) => ({ id, label: THEME_LABEL[id] })),
+    members
+  };
 }
 
 function intIn(value, label, min, max) {
@@ -111,16 +196,17 @@ async function saveReward(client, shop, id, input = {}) {
   const cost = intIn(input.pointsCost, "คะแนนที่ใช้", 1, 10000000);
   const discount = Number(input.discountBaht);
   if (!(discount > 0 && discount <= 1000000)) throw invalid("ส่วนลดต้องมากกว่า 0 บาท");
-  const values = [name, cost, Math.round(discount * 100) / 100, input.active !== false, Number.isInteger(input.sortOrder) ? input.sortOrder : 0];
+  const minTier = input.minTierRank === undefined || input.minTierRank === null || input.minTierRank === "" ? 0 : intIn(input.minTierRank, "ระดับขั้นต่ำ", 0, 4);
+  const values = [name, cost, Math.round(discount * 100) / 100, input.active !== false, Number.isInteger(input.sortOrder) ? input.sortOrder : 0, minTier];
   try {
     if (id) {
       const { rowCount } = await client.query(
-        "update public.loyalty_rewards set name = $3, points_cost = $4, discount_baht = $5, active = $6, sort_order = $7 where id = $1 and brand_id = $2",
+        "update public.loyalty_rewards set name = $3, points_cost = $4, discount_baht = $5, active = $6, sort_order = $7, min_tier_rank = $8 where id = $1 and brand_id = $2",
         [id, brandId, ...values]
       );
       if (!rowCount) throw notFound("ไม่พบรางวัลนี้");
     } else {
-      await client.query("insert into public.loyalty_rewards (brand_id, name, points_cost, discount_baht, active, sort_order) values ($1, $2, $3, $4, $5, $6)", [brandId, ...values]);
+      await client.query("insert into public.loyalty_rewards (brand_id, name, points_cost, discount_baht, active, sort_order, min_tier_rank) values ($1, $2, $3, $4, $5, $6, $7)", [brandId, ...values]);
     }
   } catch (error) {
     if (error.code === "42501") throw new AppError("FORBIDDEN", "เฉพาะเจ้าของแบรนด์ตั้งรางวัลได้", 403);
@@ -135,6 +221,40 @@ async function adjustPoints(client, shop, input = {}) {
   const points = intIn(input.points, "คะแนน", -1000000, 1000000);
   if (points === 0) throw invalid("ใส่คะแนนที่ไม่ใช่ 0");
   await rpc(client, "select public.loyalty_adjust($1, $2, $3, $4)", [shop.id, input.lineUserId, points, typeof input.note === "string" ? input.note.slice(0, 200) : null]);
+  return getLoyalty(client, shop);
+}
+
+/**
+ * The brand owner saves the tiers together: { qualifyMonths, tiers: [{ name, minSpend, minVisits,
+ * earnMultiplier, cardTheme, benefits: [text] }] } in order from the starting tier up (at most 5).
+ */
+async function saveTiers(client, shop, input = {}) {
+  const brandId = await brandOf(client, shop.id);
+  const months = intIn(input.qualifyMonths ?? 12, "ช่วงเวลาที่นับยอด (เดือน)", 1, 36);
+  const list = Array.isArray(input.tiers) ? input.tiers : null;
+  if (!list || list.length > 5) throw invalid("ตั้งได้ไม่เกิน 5 ระดับ");
+  const names = new Set();
+  let last = { spend: 0, visits: 0 };
+  const tiers = list.map((t, rank) => {
+    const name = typeof t?.name === "string" ? t.name.trim() : "";
+    if (!name || name.length > 30) throw invalid(`ใส่ชื่อระดับที่ ${rank + 1} (ไม่เกิน 30 ตัวอักษร)`);
+    if (names.has(name)) throw invalid(`ชื่อระดับ "${name}" ซ้ำ`);
+    names.add(name);
+    const minSpend = rank === 0 ? 0 : Number(t.minSpend || 0);
+    const minVisits = rank === 0 ? 0 : intIn(t.minVisits || 0, `จำนวนครั้งของ ${name}`, 0, 10000);
+    if (!(minSpend >= 0 && minSpend <= 100000000)) throw invalid(`ยอดใช้จ่ายของ ${name} ไม่ถูกต้อง`);
+    if (rank > 0 && minSpend === 0 && minVisits === 0) throw invalid(`ใส่ยอดใช้จ่ายหรือจำนวนครั้งที่ต้องถึงสำหรับ ${name}`);
+    if (rank > 1 && minSpend > 0 && last.spend > 0 && minSpend <= last.spend) throw invalid(`ยอดใช้จ่ายของ ${name} ต้องมากกว่าระดับก่อนหน้า`);
+    if (rank > 1 && minVisits > 0 && last.visits > 0 && minVisits <= last.visits) throw invalid(`จำนวนครั้งของ ${name} ต้องมากกว่าระดับก่อนหน้า`);
+    if (rank > 0) last = { spend: minSpend, visits: minVisits };
+    const multiplier = Number(t.earnMultiplier ?? 1);
+    if (!(multiplier >= 1 && multiplier <= 5)) throw invalid(`ตัวคูณคะแนนของ ${name} ต้องอยู่ระหว่าง 1–5`);
+    const theme = THEMES.includes(t.cardTheme) ? t.cardTheme : "classic";
+    const benefits = (Array.isArray(t.benefits) ? t.benefits : []).map((b) => String(b).trim().slice(0, 80)).filter(Boolean);
+    if (benefits.length > 5) throw invalid(`สิทธิพิเศษของ ${name} ใส่ได้ไม่เกิน 5 ข้อ`);
+    return { name, min_spend: Math.round(minSpend * 100) / 100, min_visits: minVisits, earn_multiplier: Math.round(multiplier * 100) / 100, card_theme: theme, benefits };
+  });
+  await rpc(client, "select public.loyalty_save_tiers($1, $2, $3::jsonb)", [brandId, months, JSON.stringify(tiers)]);
   return getLoyalty(client, shop);
 }
 
@@ -162,10 +282,13 @@ async function memberAtCounter(client, shop, { code, bookingId } = {}) {
   const { rows: [person] } = await client.query("select name from public.customers where business_id = $1 and line_user_id = $2", [shop.id, lineUserId]);
   if (!program) return null;
   const balance = await balanceOf(client, brandId, lineUserId);
+  const tiers = await tiersOf(client, brandId);
+  const standing = tiers.length ? tierStanding(tiers, await tierOf(client, brandId, lineUserId)) : null;
   return {
     name: person?.name ?? "สมาชิก LINE",
     ...balance,
-    rewards: rewards.map(rewardView).map((r) => ({ ...r, usable: balance.balance >= r.pointsCost }))
+    tier: standing ? { name: standing.name, cardTheme: standing.cardTheme, earnMultiplier: standing.earnMultiplier } : null,
+    rewards: rewards.map(rewardView).map((r) => rewardFor(r, balance.balance, standing, tiers))
   };
 }
 
@@ -190,12 +313,16 @@ async function memberCard(db, shop, lineUserId) {
   );
   const view = programView(program);
   const balance = await balanceOf(db, brandId, lineUserId);
+  const tiers = await tiersOf(db, brandId);
+  const standing = tiers.length ? tierStanding(tiers, await tierOf(db, brandId, lineUserId)) : null;
   return {
     name: view.name,
     rule: earnText(view),
     expireMonths: view.expireMonths,
     ...balance,
-    rewards: rewards.map(rewardView).map((r) => ({ name: r.name, pointsCost: r.pointsCost, discountBaht: r.discountBaht, usable: balance.balance >= r.pointsCost })),
+    // the membership tier (migration …003000): name, card look, bonus, perks, the way to the next one
+    tier: standing ? { ...standing, qualifyMonths: program.qualify_months ?? 12 } : null,
+    rewards: rewards.map(rewardView).map((r) => rewardFor(r, balance.balance, standing, tiers)).map((r) => ({ name: r.name, pointsCost: r.pointsCost, discountBaht: r.discountBaht, usable: r.usable, tierName: r.tierOk ? null : r.tierName })),
     history: history.map((h) => ({ kind: h.kind, points: h.points, at: h.created_at, shop: h.shop }))
   };
 }
@@ -209,4 +336,84 @@ async function issueMemberCode(db, shop, lineUserId) {
   return { code: r.code, expiresInSeconds: 600 };
 }
 
-module.exports = { getLoyalty, saveProgram, saveReward, adjustPoints, memberAtCounter, applyAtCounter, memberCard, issueMemberCode, earnText, RPC_TEXT };
+// ---------- "you moved up a tier" (LINE) ----------
+
+/** The Flex card: the new tier on its card colours, its perks, and a button to the member's page */
+function tierUpCard({ shopName, programName, standing, link }) {
+  const theme = themeOf(standing.cardTheme);
+  const perks = [
+    ...(standing.earnMultiplier > 1 ? [`ได้คะแนน ×${standing.earnMultiplier}`] : []),
+    ...standing.benefits
+  ];
+  return {
+    type: "flex",
+    altText: `ยินดีด้วย! คุณเป็นสมาชิกระดับ ${standing.name} ของ ${shopName} แล้ว`.slice(0, 400),
+    contents: {
+      type: "bubble",
+      size: "mega",
+      body: {
+        type: "box",
+        layout: "vertical",
+        paddingAll: "xl",
+        background: { type: "linearGradient", angle: "135deg", startColor: theme.from, endColor: theme.to },
+        contents: [
+          { type: "text", text: `🎉 ขึ้นระดับแล้ว · ${shopName}`, size: "sm", color: theme.text, wrap: true },
+          { type: "text", text: standing.name, size: "3xl", weight: "bold", color: theme.text, margin: "md", wrap: true },
+          { type: "text", text: programName, size: "sm", color: theme.text, margin: "xs", wrap: true },
+          ...(perks.length
+            ? [{ type: "box", layout: "vertical", margin: "lg", spacing: "xs", contents: perks.map((p) => ({ type: "text", text: `✦ ${p}`, size: "sm", color: theme.text, wrap: true })) }]
+            : []),
+          ...(standing.next ? [{ type: "text", text: standing.next.text, size: "xs", color: theme.text, margin: "lg", wrap: true }] : [])
+        ]
+      },
+      ...(link
+        ? { footer: { type: "box", layout: "vertical", paddingAll: "md", contents: [{ type: "button", style: "primary", color: "#6A4CFF", height: "sm", action: { type: "uri", label: "ดูบัตรสมาชิก", uri: link } }] } }
+        : {})
+    }
+  };
+}
+
+/**
+ * After a bill is paid (the transaction committed): did it lift the member to a higher tier? Then
+ * send them the card in LINE. db = the server's pool. Never throws: { sent } | { skipped: reason }.
+ */
+async function notifyTierUp(db, billId, { push = (to, messages) => pushLine(db, to, messages), env = process.env } = {}) {
+  try {
+    const { rows: [b] } = await db.query(
+      `select bl.line_user_id, bl.status, s.brand_id, s.name as shop_name, s.slug, p.name as program_name, p.active
+         from public.bills bl join public.businesses s on s.id = bl.business_id
+         left join public.loyalty_programs p on p.brand_id = s.brand_id
+        where bl.id = $1`,
+      [billId]
+    );
+    if (!b?.line_user_id || b.status !== "closed" || !b.active) return { skipped: "NOT_A_MEMBER_BILL" };
+    const tiers = await tiersOf(db, b.brand_id);
+    if (tiers.length < 2) return { skipped: "NO_TIERS" };
+    const before = await tierOf(db, b.brand_id, b.line_user_id, billId);
+    const after = await tierOf(db, b.brand_id, b.line_user_id);
+    if ((after.rank ?? 0) <= (before.rank ?? 0)) return { skipped: "SAME_TIER" };
+    const shop = await shopLink(db, { slug: b.slug, origin: publicOrigin(env) }, { env });
+    const card = tierUpCard({ shopName: b.shop_name, programName: b.program_name, standing: tierStanding(tiers, after), link: shop ? `${shop}/me` : null });
+    return await push(b.line_user_id, [card]);
+  } catch (error) {
+    console.error("[loyalty] tier card not sent:", error.message);
+    return { skipped: "ERROR" };
+  }
+}
+
+module.exports = {
+  getLoyalty,
+  saveProgram,
+  saveReward,
+  saveTiers,
+  adjustPoints,
+  memberAtCounter,
+  applyAtCounter,
+  memberCard,
+  issueMemberCode,
+  earnText,
+  tierStanding,
+  tierUpCard,
+  notifyTierUp,
+  RPC_TEXT
+};

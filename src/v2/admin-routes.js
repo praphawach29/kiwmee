@@ -10,8 +10,10 @@ const { getBookingPool } = require("./db");
 /**
  * action(client, shop, body, params) → result   (params: the URL's [slug]/[id] plus `query`, its search params)
  *   owner: only the shop's owners (default for writes); body: read a JSON body (else only check Origin)
+ *   after(result, shop): runs once the transaction has committed (a LINE card, say); its failure
+ *   never changes the answer
  */
-function shopRoute(action, { owner = true, body = true, read = false } = {}) {
+function shopRoute(action, { owner = true, body = true, read = false, after = null } = {}) {
   return (request, context) =>
     adminRoute(request, async (user) => {
       const params = { ...(await getParams(context)), query: Object.fromEntries(new URL(request.url).searchParams) };
@@ -19,9 +21,12 @@ function shopRoute(action, { owner = true, body = true, read = false } = {}) {
       if (read) input = undefined;
       else if (body) input = await boundedJson(request);
       else sameOrigin(request);
-      const result = await asUser(getBookingPool(), user, async (client) =>
-        action(client, await memberShop(client, params.slug, { owner }), input, params)
-      );
+      let shop;
+      const result = await asUser(getBookingPool(), user, async (client) => {
+        shop = await memberShop(client, params.slug, { owner });
+        return action(client, shop, input, params);
+      });
+      if (after) await Promise.resolve().then(() => after(result, shop)).catch((e) => console.error("[shop-route] after:", e.message));
       return json(result ?? { ok: true }, !read && body && !params.id && request.method === "POST" ? 201 : 200);
     });
 }

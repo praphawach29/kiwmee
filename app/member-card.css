@@ -1,0 +1,18 @@
+/* The membership card: one look on the customer's page and in the shop's preview */
+.mc-card { position: relative; overflow: hidden; display: grid; gap: 6px; padding: 20px; border-radius: 22px; color: var(--mc-text, #fff);
+  background: linear-gradient(135deg, var(--mc-from, #6A4CFF) 0%, var(--mc-to, #2E1A9E) 100%);
+  box-shadow: 0 14px 30px rgba(27, 22, 64, .24); isolation: isolate; }
+.mc-shine { position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(circle at 110% -10%, rgba(255, 255, 255, .35) 0, rgba(255, 255, 255, 0) 45%), repeating-linear-gradient(115deg, rgba(255, 255, 255, .05) 0 2px, transparent 2px 14px); }
+.mc-card[data-theme="black"] .mc-shine { background: radial-gradient(circle at 110% -10%, rgba(217, 184, 101, .35) 0, rgba(217, 184, 101, 0) 45%), repeating-linear-gradient(115deg, rgba(255, 255, 255, .04) 0 1px, transparent 1px 10px); }
+.mc-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.mc-program { font-size: .88rem; opacity: .92; min-width: 0; overflow-wrap: anywhere; }
+.mc-tier { flex: none; padding: 3px 10px; border-radius: 999px; background: rgba(255, 255, 255, .22); border: 1px solid rgba(255, 255, 255, .35); font-weight: 700; font-size: .82rem; letter-spacing: .04em; }
+.mc-card[data-theme="silver"] .mc-tier, .mc-card[data-theme="gold"] .mc-tier { background: rgba(255, 255, 255, .45); border-color: rgba(0, 0, 0, .08); }
+.mc-balance { font-family: var(--font-display, inherit); font-weight: 500; font-size: 2.4rem; line-height: 1.1; }
+.mc-balance small { font-size: 1rem; opacity: .85; }
+.mc-rule { font-size: .84rem; opacity: .9; }
+.mc-next { display: grid; gap: 4px; margin-top: 4px; }
+.mc-next small { font-size: .8rem; opacity: .92; }
+.mc-bar { display: block; height: 8px; border-radius: 999px; background: rgba(255, 255, 255, .28); overflow: hidden; }
+.mc-bar i { display: block; height: 100%; border-radius: inherit; background: var(--mc-accent, #3DDC97); }

@@ -16,6 +16,7 @@ import { bookingFlowDraft, bookingFlowFromDraft, catalogWarnings, kindWord, prev
 import { BOOKING_TEMPLATES, previewBookingTemplate } from "../../../src/v2/booking-templates.js";
 import { AMENITIES } from "../../../src/v2/amenities.js";
 import { parseScan, bookingCode } from "../../../src/v2/scan-codes.js";
+import { MemberCardFace } from "../../member-card.jsx";
 import { MAX as LAYOUT_MAX, MAX_SPAN, overlap as layoutOverlap, gridSize } from "../../../src/v2/resource-layout.js";
 
 // Defense in depth for owner-only settings controls; APIs/RLS enforce permissions.
@@ -762,7 +763,7 @@ function LoyaltyTab({ slug }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [program, setProgram] = useState(null);
-  const [reward, setReward] = useState({ name: "", pointsCost: "", discountBaht: "" });
+  const [reward, setReward] = useState({ name: "", pointsCost: "", discountBaht: "", minTierRank: 0 });
   const save = useSave();
   const base = shopPath(slug, "/loyalty");
 
@@ -793,8 +794,8 @@ function LoyaltyTab({ slug }) {
 
   async function addReward(event) {
     event.preventDefault();
-    const body = { name: reward.name, pointsCost: Number(reward.pointsCost), discountBaht: Number(reward.discountBaht) };
-    if (await save.run(async () => setData(await api("POST", `${base}/rewards`, body)), "เพิ่มรางวัลแล้ว")) setReward({ name: "", pointsCost: "", discountBaht: "" });
+    const body = { name: reward.name, pointsCost: Number(reward.pointsCost), discountBaht: Number(reward.discountBaht), minTierRank: Number(reward.minTierRank) || 0 };
+    if (await save.run(async () => setData(await api("POST", `${base}/rewards`, body)), "เพิ่มรางวัลแล้ว")) setReward({ name: "", pointsCost: "", discountBaht: "", minTierRank: 0 });
   }
 
   async function toggleReward(r) {
@@ -841,6 +842,9 @@ function LoyaltyTab({ slug }) {
         </fieldset>
       </form>
 
+      <TiersCard key={JSON.stringify(data.tiers) + data.program.qualifyMonths} data={data} edit={edit} programName={program.name} rule={program}
+        onSave={(body) => save.run(async () => setData(await api("PUT", `${base}/tiers`, body)), "บันทึกระดับสมาชิกแล้ว")} busy={save.busy} />
+
       <section className="ad-card">
         <h2>รางวัลที่แลกได้</h2>
         <p className="ad-muted">พนักงานเลือกใช้ตอนปิดบิล · 1 บิลใช้ได้ 1 รางวัล · ลูกค้าเห็นรายการนี้ในหน้า LINE</p>
@@ -848,7 +852,10 @@ function LoyaltyTab({ slug }) {
         <ul className="ad-list">
           {data.rewards.map((r) => (
             <li key={r.id} className="ad-row ad-between ad-wrap" data-off={!r.active || undefined}>
-              <span><strong>{r.name}</strong> <span className="ad-muted">· ใช้ {r.pointsCost.toLocaleString("th-TH")} คะแนน · ลด {money(r.discountBaht)}</span></span>
+              <span>
+                <strong>{r.name}</strong> <span className="ad-muted">· ใช้ {r.pointsCost.toLocaleString("th-TH")} คะแนน · ลด {money(r.discountBaht)}</span>
+                {r.minTierRank > 0 && <span className="ad-status" data-tone="info">เฉพาะ {data.tiers.find((t) => t.rank === r.minTierRank)?.name ?? `ระดับ ${r.minTierRank + 1}`} ขึ้นไป</span>}
+              </span>
               {edit && <button type="button" className="ad-link" disabled={save.busy} onClick={() => toggleReward(r)}>{r.active ? "ปิด" : "เปิดใหม่"}</button>}
             </li>
           ))}
@@ -858,6 +865,15 @@ function LoyaltyTab({ slug }) {
             <label className="ad-field">ชื่อรางวัล<input required maxLength={80} placeholder="เช่น ส่วนลด 100 บาท" value={reward.name} onChange={(e) => setReward({ ...reward, name: e.target.value })} /></label>
             <label className="ad-field">ใช้กี่คะแนน<input type="number" min={1} required value={reward.pointsCost} onChange={(e) => setReward({ ...reward, pointsCost: e.target.value })} /></label>
             <label className="ad-field">ลดกี่บาท<input type="number" min={1} step="0.01" required value={reward.discountBaht} onChange={(e) => setReward({ ...reward, discountBaht: e.target.value })} /></label>
+            {data.tiers.length > 1 && (
+              <label className="ad-field">
+                ใครแลกได้
+                <select value={reward.minTierRank} onChange={(e) => setReward({ ...reward, minTierRank: e.target.value })}>
+                  <option value={0}>ทุกระดับ</option>
+                  {data.tiers.filter((t) => t.rank > 0).map((t) => <option key={t.rank} value={t.rank}>เฉพาะ {t.name} ขึ้นไป</option>)}
+                </select>
+              </label>
+            )}
             <button className="ad-secondary" disabled={save.busy}>+ เพิ่มรางวัล</button>
           </form>
         )}
@@ -870,7 +886,7 @@ function LoyaltyTab({ slug }) {
           {data.members.map((m) => (
             <li key={m.lineUserId} className="ad-row ad-between ad-wrap">
               <span>
-                <strong>{m.name}</strong> <span className="ad-muted">· {m.balance.toLocaleString("th-TH")} คะแนน{m.expiring > 0 ? ` · ${m.expiring} จะหมดอายุ` : ""}</span>
+                <strong>{m.name}</strong> {m.tier && <span className="ad-status" data-tone="info">{m.tier}</span>} <span className="ad-muted">· {m.balance.toLocaleString("th-TH")} คะแนน{m.expiring > 0 ? ` · ${m.expiring} จะหมดอายุ` : ""}</span>
               </span>
               {edit && <button type="button" className="ad-link" disabled={save.busy} onClick={() => adjust(m)}>ปรับคะแนน</button>}
             </li>
@@ -880,6 +896,119 @@ function LoyaltyTab({ slug }) {
     </div>
   );
 }
+
+// ---------- membership tiers (migration …003000) ----------
+
+const TIER_PRESETS = [
+  { name: "Member", cardTheme: "classic", minSpend: 0, minVisits: 0, earnMultiplier: 1 },
+  { name: "Silver", cardTheme: "silver", minSpend: 3000, minVisits: 0, earnMultiplier: 1.2 },
+  { name: "Gold", cardTheme: "gold", minSpend: 10000, minVisits: 0, earnMultiplier: 1.5 },
+  { name: "Platinum", cardTheme: "platinum", minSpend: 30000, minVisits: 0, earnMultiplier: 2 },
+  { name: "Black", cardTheme: "black", minSpend: 60000, minVisits: 0, earnMultiplier: 2.5 }
+];
+
+/** Up to 5 tiers from the starting one up, each with its card look; a live preview of the card */
+function TiersCard({ data, edit, programName, rule, onSave, busy }) {
+  const [months, setMonths] = useState(String(data.program.qualifyMonths ?? 12));
+  const [tiers, setTiers] = useState(() => data.tiers.map((t) => ({ ...t, benefits: t.benefits.join("\n") })));
+  const [preview, setPreview] = useState(0);
+  const set = (i, patch) => setTiers((list) => list.map((t, j) => (j === i ? { ...t, ...patch } : t)));
+  const dirty = JSON.stringify(tiers.map((t) => ({ ...t, benefits: t.benefits }))) !== JSON.stringify(data.tiers.map((t) => ({ ...t, benefits: t.benefits.join("\n") }))) || String(data.program.qualifyMonths ?? 12) !== months;
+
+  function add() {
+    if (tiers.length >= 5) return;
+    const preset = TIER_PRESETS[tiers.length];
+    setTiers([...tiers, { ...preset, rank: tiers.length, benefits: "" }]);
+    setPreview(tiers.length);
+  }
+
+  function remove(i) {
+    setTiers(tiers.filter((_, j) => j !== i).map((t, rank) => ({ ...t, rank })));
+    setPreview(0);
+  }
+
+  function submit(event) {
+    event.preventDefault();
+    onSave({
+      qualifyMonths: Number(months),
+      tiers: tiers.map((t) => ({
+        name: t.name,
+        cardTheme: t.cardTheme,
+        minSpend: Number(t.minSpend) || 0,
+        minVisits: Number(t.minVisits) || 0,
+        earnMultiplier: Number(t.earnMultiplier) || 1,
+        benefits: String(t.benefits).split("\n").map((b) => b.trim()).filter(Boolean)
+      }))
+    });
+  }
+
+  const shown = tiers[Math.min(preview, tiers.length - 1)];
+  const nextOf = (i) => tiers[i + 1];
+  const nextText = (t) => {
+    const parts = [];
+    if (Number(t.minSpend) > 0) parts.push(`${Number(t.minSpend).toLocaleString("th-TH")} บาท`);
+    if (Number(t.minVisits) > 0) parts.push(`${t.minVisits} ครั้ง`);
+    return `ตัวอย่าง: อีก ${parts.join(" หรือ ") || "…"} ถึง ${t.name}`;
+  };
+  return (
+    <form className="ad-card" onSubmit={submit}>
+      <div className="ad-row ad-between ad-wrap">
+        <h2>ระดับสมาชิก</h2>
+        <span className="ad-muted">{tiers.length ? `${tiers.length} ระดับ` : "ยังไม่มีระดับ (ทุกคนบัตรเดียวกัน)"}</span>
+      </div>
+      <p className="ad-muted">
+        ระดับคิดจากยอดที่จ่ายจริง (หักคืนเงิน) หรือจำนวนครั้งที่มา ในช่วงเวลาที่ตั้ง — ถึงอย่างใดอย่างหนึ่งก็ขึ้นระดับ · ใช้คะแนนแลกของแล้วระดับไม่ลด ·
+        ระดับสูงได้คะแนนคูณเพิ่ม · ขึ้นระดับแล้วลูกค้าได้การ์ดแจ้งใน LINE
+      </p>
+      <div className="ad-tiers">
+        <fieldset disabled={!edit || busy} className="ad-fieldset ad-tiers-list">
+          <label className="ad-field ad-short">นับยอดย้อนหลัง (เดือน)<input type="number" min={1} max={36} required value={months} onChange={(e) => setMonths(e.target.value)} /></label>
+          {tiers.map((t, i) => (
+            <div key={i} className="ad-tier-row" data-active={preview === i || undefined} onFocus={() => setPreview(i)} onClick={() => setPreview(i)}>
+              <div className="ad-row ad-between">
+                <strong>ระดับ {i + 1}{i === 0 ? " (เริ่มต้น)" : ""}</strong>
+                {edit && i === tiers.length - 1 && i > 0 && <button type="button" className="ad-link" onClick={() => remove(i)}>ลบระดับนี้</button>}
+                {edit && tiers.length === 1 && <button type="button" className="ad-link" onClick={() => remove(0)}>ไม่ใช้ระดับ</button>}
+              </div>
+              <div className="ad-grid">
+                <label className="ad-field">ชื่อระดับ<input required maxLength={30} value={t.name} onChange={(e) => set(i, { name: e.target.value })} /></label>
+                <label className="ad-field">
+                  หน้าตาบัตร
+                  <select value={t.cardTheme} onChange={(e) => set(i, { cardTheme: e.target.value })}>
+                    {data.themes.map((th) => <option key={th.id} value={th.id}>{th.label}</option>)}
+                  </select>
+                </label>
+                {i > 0 && <label className="ad-field">ยอดใช้จ่ายถึง (บาท)<input type="number" min={0} step="1" placeholder="0 = ไม่ใช้" value={t.minSpend} onChange={(e) => set(i, { minSpend: e.target.value })} /></label>}
+                {i > 0 && <label className="ad-field">หรือมาครบ (ครั้ง)<input type="number" min={0} step="1" placeholder="0 = ไม่ใช้" value={t.minVisits} onChange={(e) => set(i, { minVisits: e.target.value })} /></label>}
+                <label className="ad-field">คะแนนคูณ<input type="number" min={1} max={5} step="0.1" value={t.earnMultiplier} onChange={(e) => set(i, { earnMultiplier: e.target.value })} /></label>
+              </div>
+              <label className="ad-field">สิทธิพิเศษ (บรรทัดละข้อ ไม่เกิน 5 ข้อ)<textarea rows={2} value={t.benefits} onChange={(e) => set(i, { benefits: e.target.value })} placeholder="เช่น ส่วนลดวันเกิด 10%" /></label>
+            </div>
+          ))}
+          {edit && (
+            <div className="ad-row ad-wrap">
+              {tiers.length < 5 && <button type="button" className="ad-secondary" onClick={add}>+ เพิ่มระดับ{tiers.length === 0 ? " (เริ่มจากระดับเริ่มต้น)" : ""}</button>}
+              <button className="ad-primary" disabled={!dirty}>บันทึกระดับ</button>
+            </div>
+          )}
+        </fieldset>
+        {shown && (
+          <div className="ad-tier-preview">
+            <p className="ad-muted">พรีวิวบัตรที่ลูกค้าเห็นใน LINE</p>
+            <MemberCardFace programName={programName} tierName={shown.name} theme={shown.cardTheme} balance={1250}
+              rule={earnRule(rule)} multiplier={Number(shown.earnMultiplier) || 1}
+              next={nextOf(tiers.indexOf(shown)) ? { progress: 0.62, text: nextText(nextOf(tiers.indexOf(shown))) } : null} />
+            {String(shown.benefits).trim() && (
+              <ul className="ad-tier-perks">{String(shown.benefits).split("\n").filter((b) => b.trim()).map((b) => <li key={b}>{b}</li>)}</ul>
+            )}
+          </div>
+        )}
+      </div>
+    </form>
+  );
+}
+
+const earnRule = (p) => (p.earnMode === "per_visit" ? `มา 1 ครั้ง ได้ ${p.earnPoints} คะแนน` : `ทุก ${Number(p.earnPerBaht || 0).toLocaleString("th-TH")} บาท ได้ ${p.earnPoints} คะแนน`);
 
 // ---------- points at the counter (migration …002800) ----------
 
@@ -1057,13 +1186,13 @@ function ScanTab({ slug, initial = null, onBooking, onSale }) {
       {m && (
         <section className="ad-card ad-scan-result" data-tone="ok">
           <div className="ad-row ad-wrap ad-between">
-            <h2>⭐ {m.name}</h2>
+            <h2>⭐ {m.name}{m.tier ? ` · ${m.tier.name}` : ""}</h2>
             <span className="ad-status" data-tone="ok">{m.balance.toLocaleString("th-TH")} คะแนน</span>
           </div>
           {m.expiring > 0 && <p className="ad-muted">{m.expiring} คะแนนจะหมดอายุเร็วๆ นี้</p>}
           {m.rewards.length > 0 && (
             <ul className="ad-list">
-              {m.rewards.map((r) => <li key={r.id}>{r.name} · ใช้ {r.pointsCost} คะแนน{r.usable ? "" : " (ยังไม่พอ)"}</li>)}
+              {m.rewards.map((r) => <li key={r.id}>{r.name} · ใช้ {r.pointsCost} คะแนน{r.usable ? "" : r.tierOk === false ? ` (เฉพาะ ${r.tierName} ขึ้นไป)` : " (ยังไม่พอ)"}</li>)}
             </ul>
           )}
           <p className="ad-muted">ลูกค้าที่จองไว้: ปิดบิลจากรายการจองได้เลย ระบบผูกสมาชิกให้อัตโนมัติ · ลูกค้า walk-in: ขายหน้าร้านพร้อมสะสมคะแนน</p>
@@ -1140,7 +1269,7 @@ function MemberBox({ slug, bookingId = null, initialCode = null, onChange }) {
       {member && (
         <>
           <p className="ad-member-line">
-            ⭐ <strong>{member.name}</strong> · มี {member.balance.toLocaleString("th-TH")} คะแนน
+            ⭐ <strong>{member.name}</strong>{member.tier ? <> <span className="ad-status" data-tone="info">{member.tier.name}</span></> : null} · มี {member.balance.toLocaleString("th-TH")} คะแนน
             {member.expiring > 0 && <span className="ad-muted"> · {member.expiring} คะแนนจะหมดอายุเร็วๆ นี้</span>}
           </p>
           {member.rewards.length > 0 && (
@@ -1150,7 +1279,7 @@ function MemberBox({ slug, bookingId = null, initialCode = null, onChange }) {
                 <option value="">ไม่ใช้</option>
                 {member.rewards.map((r) => (
                   <option key={r.id} value={r.id} disabled={!r.usable}>
-                    {r.name} · ใช้ {r.pointsCost} คะแนน · ลด {money(r.discountBaht)}{r.usable ? "" : " (คะแนนไม่พอ)"}
+                    {r.name} · ใช้ {r.pointsCost} คะแนน · ลด {money(r.discountBaht)}{r.usable ? "" : r.tierOk === false ? ` (เฉพาะ ${r.tierName} ขึ้นไป)` : " (คะแนนไม่พอ)"}
                   </option>
                 ))}
               </select>

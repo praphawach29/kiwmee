@@ -905,3 +905,13 @@
 .ad-layout-spot { display: grid; place-items: center; min-width: 0; padding: 4px; border: 2px solid #fff; border-radius: 10px; background: #36c88a; color: #fff; font: inherit; font-weight: 600; font-size: 13px; overflow-wrap: anywhere; cursor: pointer; box-shadow: 0 2px 6px rgba(11, 122, 80, .25); }
 .ad-layout-spot[data-picked] { background: var(--grape-deep); box-shadow: 0 0 0 3px var(--selected); }
 .ad-layout-picked { padding: 8px 10px; border-radius: 12px; background: var(--selected); }
+
+/* ---------- membership tiers ---------- */
+.ad-tiers { display: grid; gap: 16px; align-items: start; }
+@media (min-width: 900px) { .ad-tiers { grid-template-columns: minmax(0, 1.4fr) minmax(260px, 1fr); } }
+.ad-tiers-list { display: grid; gap: 12px; }
+.ad-tier-row { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+.ad-tier-row[data-active] { border-color: var(--grape); box-shadow: 0 0 0 2px var(--selected); }
+.ad-tier-row textarea { min-height: 52px; }
+.ad-tier-preview { position: sticky; top: 16px; display: grid; gap: 8px; }
+.ad-tier-perks { margin: 0; padding-left: 1.2em; color: var(--muted); font-size: 14px; }

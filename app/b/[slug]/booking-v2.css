@@ -587,3 +587,8 @@ button.bk-cal-day:not([data-unavailable])::after { content: ""; position: absolu
 .bk-venue-spot[data-pending] { background: var(--grape-deep); }
 .bk-cal-legend i[data-kind="picked"] { background: var(--grape); }
 .bk-venue .bk-cal-legend i[data-kind="free"] { background: #36c88a; }
+
+/* ---------- membership tier (migration …003000) ---------- */
+.bk-points .mc-card .bk-points-expiring { color: inherit; font-weight: 600; opacity: 1; }
+.bk-tier-perks ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
+.bk-tier-perks li::marker { content: "✦  "; color: var(--grape); }

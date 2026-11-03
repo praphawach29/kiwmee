@@ -8,6 +8,7 @@ import CustomerFrame from "../customer-frame.jsx";
 import { CustomerTabs, DirectionsButton, ShopHeader, ShopHero, withMedia } from "../booking-presentation.jsx";
 import { useLiff } from "../use-liff.jsx";
 import { CheckinQr, QrImage } from "../qr.jsx";
+import { MemberCardFace } from "../../../member-card.jsx";
 import { scanUrl } from "../../../../src/v2/scan-codes.js";
 
 const STATUS = {
@@ -114,10 +115,8 @@ function PointsCard({ points, slug, idToken }) {
 
   return (
     <section className="bk-points" aria-label={points.name}>
-      <div className="bk-points-card">
-        <span className="bk-points-name">⭐ {points.name}</span>
-        <strong className="bk-points-balance">{points.balance.toLocaleString("th-TH")} <small>คะแนน</small></strong>
-        <span className="bk-points-rule">{points.rule}</span>
+      <MemberCardFace programName={points.name} tierName={points.tier?.name} theme={points.tier?.cardTheme ?? "classic"} balance={points.balance}
+        rule={points.rule} multiplier={points.tier?.earnMultiplier ?? 1} next={points.tier?.next ?? null}>
         {points.expiring > 0 && points.expiringAt && (
           <span className="bk-points-expiring">
             {points.expiring} คะแนนจะหมดอายุ {new Date(points.expiringAt).toLocaleDateString("th-TH", { day: "numeric", month: "short" })}
@@ -134,7 +133,17 @@ function PointsCard({ points, slug, idToken }) {
           <button type="button" className="bk-points-button" onClick={showCode}>แสดง QR สมาชิก (ตอนจ่ายที่ร้าน)</button>
         )}
         {error && <span className="bk-points-error" role="alert">{error}</span>}
-      </div>
+      </MemberCardFace>
+      {points.tier && (points.tier.benefits.length > 0 || points.tier.earnMultiplier > 1) && (
+        <div className="bk-card bk-tier-perks">
+          <h2>สิทธิของระดับ {points.tier.name}</h2>
+          <ul>
+            {points.tier.earnMultiplier > 1 && <li>ได้คะแนน ×{points.tier.earnMultiplier} ทุกบิล</li>}
+            {points.tier.benefits.map((b) => <li key={b}>{b}</li>)}
+          </ul>
+          <p className="bk-muted">ระดับนับจากยอดที่จ่ายใน {points.tier.qualifyMonths} เดือนล่าสุด: {Math.round(points.tier.spend).toLocaleString("th-TH")} บาท · {points.tier.visits} ครั้ง · ใช้คะแนนแลกของแล้วระดับไม่ลด</p>
+        </div>
+      )}
       {points.rewards.length > 0 && (
         <div className="bk-card">
           <h2>แลกคะแนน</h2>
@@ -146,7 +155,7 @@ function PointsCard({ points, slug, idToken }) {
                   <strong>{r.name}</strong>
                   <small>ใช้ {r.pointsCost.toLocaleString("th-TH")} คะแนน · ลด {Number(r.discountBaht).toLocaleString("th-TH")} บาท</small>
                 </span>
-                <span className="bk-status" data-status={r.usable ? "confirmed" : "held"}>{r.usable ? "แลกได้" : "คะแนนไม่พอ"}</span>
+                <span className="bk-status" data-status={r.usable ? "confirmed" : "held"}>{r.usable ? "แลกได้" : r.tierName ? `เฉพาะ ${r.tierName} ขึ้นไป` : "คะแนนไม่พอ"}</span>
               </li>
             ))}
           </ul>

@@ -8,6 +8,7 @@
 
 const { publicOrigin, checkinImageUrl, bookingCode } = require("./scan-codes");
 const { bookingCard, manageLink, openLink, pushLine } = require("./line-notify");
+const { sendExpiryNotices } = require("./loyalty-expiry");
 const { directionsLink } = require("./directions");
 
 const KINDS = [
@@ -111,6 +112,9 @@ function startReminderLoop(getDb, { everyMs = 5 * 60 * 1000 } = {}) {
     try {
       const { sent } = await sendDueReminders(getDb());
       if (sent) console.log(`[line-reminders] sent ${sent}`);
+      // points that run out within 14 days (src/v2/loyalty-expiry.js), daytime only
+      const points = await sendExpiryNotices(getDb());
+      if (points.sent) console.log(`[loyalty-expiry] sent ${points.sent}`);
     } catch (error) {
       console.error("[line-reminders] run failed:", error.message);
     } finally {

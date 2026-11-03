@@ -154,7 +154,7 @@ function PointsCard({ points, slug, idToken }) {
               <li key={r.name} className="bk-booking-row">
                 <span className="bk-row-text">
                   <strong>{r.name}</strong>
-                  <small>ใช้ {r.pointsCost.toLocaleString("th-TH")} คะแนน · ลด {Number(r.discountBaht).toLocaleString("th-TH")} บาท</small>
+                  <small>ใช้ {r.pointsCost.toLocaleString("th-TH")} คะแนน · {r.kind === "free_offering" ? `ฟรี ${r.offeringName ?? "บริการ"}` : `ลด ${Number(r.discountBaht).toLocaleString("th-TH")} บาท`}</small>
                 </span>
                 <span className="bk-status" data-status={r.usable ? "confirmed" : "held"}>{r.usable ? "แลกได้" : r.tierName ? `เฉพาะ ${r.tierName} ขึ้นไป` : "คะแนนไม่พอ"}</span>
               </li>

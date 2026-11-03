@@ -257,8 +257,11 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
   const estimate = priceEstimate(offerings.get(selected.offeringId), selected, addonInfo);
   // a reward chosen with points: the price the customer will pay at the desk
   const chosenReward = points?.rewards.find((r) => r.id === rewardId) ?? null;
+  // a free service is worth the service's own price (not its extras), up to the reward's cap
+  const offeringPrice = offeringEstimate(offerings.get(selected.offeringId), selected)?.amount ?? null;
+  const rewardOff = (r) => (r.kind === "free_offering" ? Math.min(offeringPrice ?? 0, r.discountBaht ?? Infinity) : r.discountBaht);
   const shownPrice = chosenReward && estimate?.amount != null
-    ? { ...estimate, label: "ราคาหลังใช้คะแนน", value: money(Math.max(estimate.amount - chosenReward.discountBaht, 0)), short: estimate.short ? money(Math.max(estimate.amount - chosenReward.discountBaht, 0)) : null }
+    ? { ...estimate, label: "ราคาหลังใช้คะแนน", value: money(Math.max(estimate.amount - rewardOff(chosenReward), 0)), short: estimate.short ? money(Math.max(estimate.amount - rewardOff(chosenReward), 0)) : null }
     : estimate;
 
   // the tapped choice lights up at once; the server's answer follows
@@ -274,9 +277,14 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
   // a LINE member at the last step (the customer's details): their points and rewards, once
   const reachedCustomer = Boolean(view?.next && !view?.ask && view.next.step !== "start");
   useEffect(() => {
-    if (!reachedCustomer || !liff.idToken || points) return;
-    post(`${api}/me/rewards`, { lineIdToken: liff.idToken }).then((p) => setPoints(p ?? { rewards: [], none: true }), () => setPoints({ rewards: [], none: true }));
-  }, [reachedCustomer, liff.idToken, api, points]);
+    if (!reachedCustomer || !liff.idToken || points?.offeringId === selected.offeringId) return;
+    const offeringId = selected.offeringId;
+    post(`${api}/me/rewards`, { lineIdToken: liff.idToken, offeringId }).then(
+      (p) => setPoints(p ? { ...p, offeringId } : { rewards: [], none: true, offeringId }),
+      () => setPoints({ rewards: [], none: true, offeringId })
+    );
+    setRewardId(null);
+  }, [reachedCustomer, liff.idToken, api, points?.offeringId, selected.offeringId]);
 
   async function submit(event) {
     event.preventDefault();
@@ -468,7 +476,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
           <>
             <BookingReview items={summaryItems} onEdit={showStep} busy={busy} price={shownPrice} />
             {points && !points.none && points.rewards.length > 0 && (
-              <PointsChoice points={points} chosen={rewardId} onChoose={setRewardId} busy={busy} />
+              <PointsChoice points={points} chosen={rewardId} onChoose={setRewardId} busy={busy} valueOf={rewardOff} />
             )}
             <form id="booking-customer" className="bk-card" onSubmit={submit}>
               <h2>ข้อมูลผู้จอง</h2>
@@ -654,7 +662,7 @@ function TimeTabs({ options, chosen, optionButton }) {
 
 // "ใช้คะแนน" (migration …003200): a LINE member picks one reward; its points are set aside with the
 // booking and the discount comes off at the desk. Rewards they cannot use yet say why.
-function PointsChoice({ points, chosen, onChoose, busy }) {
+function PointsChoice({ points, chosen, onChoose, busy, valueOf }) {
   return (
     <section className="bk-card bk-points-choice" aria-labelledby="points-choice-title">
       <div className="bk-row">
@@ -673,10 +681,10 @@ function PointsChoice({ points, chosen, onChoose, busy }) {
               <strong>{r.name}</strong>
               <span className="bk-option-meta">
                 <span>ใช้ {r.pointsCost.toLocaleString("th-TH")} คะแนน</span>
-                <b className="bk-option-price">ลด {money(r.discountBaht)}</b>
+                <b className="bk-option-price">{r.kind === "free_offering" ? `ฟรี ${r.offeringName ?? "บริการ"}${r.fits !== false && valueOf(r) > 0 ? ` (${money(valueOf(r))})` : ""}` : `ลด ${money(r.discountBaht)}`}</b>
               </span>
             </span>
-            {!r.usable && <small className="bk-reason">{r.tierName ? `เฉพาะ ${r.tierName} ขึ้นไป` : "คะแนนไม่พอ"}</small>}
+            {!r.usable && <small className="bk-reason">{r.fits === false ? `ใช้กับ ${r.offeringName} เท่านั้น` : r.tierName ? `เฉพาะ ${r.tierName} ขึ้นไป` : "คะแนนไม่พอ"}</small>}
             <span className="bk-choice-mark" aria-hidden="true" />
           </button>
         ))}

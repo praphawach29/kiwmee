@@ -21,7 +21,8 @@ const RPC_TEXT = {
   NOT_CHANGEABLE: "บิลนี้ปิดหรือยกเลิกแล้ว",
   TIER_TOO_LOW: "รางวัลนี้สำหรับสมาชิกระดับสูงกว่านี้",
   INVALID_TIERS: "ข้อมูลระดับสมาชิกไม่ถูกต้อง",
-  ALREADY_HELD: "การจองนี้ใช้คะแนนไปแล้ว"
+  ALREADY_HELD: "การจองนี้ใช้คะแนนไปแล้ว",
+  REWARD_NOT_FOR_THIS: "รางวัลนี้ใช้กับบริการอื่น"
 };
 
 /**
@@ -30,8 +31,8 @@ const RPC_TEXT = {
  */
 async function heldReward(db, bookingId) {
   const { rows: [h] } = await db.query(
-    `select h.reward_id, h.points, r.name, r.discount_baht,
-            coalesce((b.price_snapshot->>'total')::numeric, 0) as total
+    `select h.reward_id, h.points, r.name,
+            public.loyalty_reward_value(h.reward_id, b.business_id, b.id, coalesce((b.price_snapshot->>'total')::numeric, 0)) as value
        from (select (array_agg(l.reward_id order by l.created_at desc) filter (where l.kind = 'hold'))[1] as reward_id,
                     coalesce(-sum(l.points), 0)::int as points
                from public.loyalty_ledger l
@@ -41,7 +42,7 @@ async function heldReward(db, bookingId) {
       where h.points > 0`,
     [bookingId]
   );
-  return h ? { rewardId: h.reward_id, name: h.name, points: h.points, discountBaht: Math.min(Number(h.discount_baht), Number(h.total)) } : null;
+  return h ? { rewardId: h.reward_id, name: h.name, points: h.points, discountBaht: Number(h.value) } : null;
 }
 
 // ---------- membership tiers (migration …003000) ----------
@@ -146,7 +147,22 @@ function earnText(p) {
   return p.earnMode === "per_visit" ? `มาใช้บริการ 1 ครั้ง ได้ ${p.earnPoints} คะแนน` : `ทุก ${Number(p.earnPerBaht).toLocaleString("th-TH")} บาท ได้ ${p.earnPoints} คะแนน`;
 }
 
-const rewardView = (r) => ({ id: r.id, name: r.name, pointsCost: r.points_cost, discountBaht: Number(r.discount_baht), active: r.active, sortOrder: r.sort_order, minTierRank: r.min_tier_rank ?? 0 });
+// kind: discount (discountBaht off) · free_offering (offeringId for free; discountBaht = an optional cap)
+const rewardView = (r) => ({
+  id: r.id,
+  name: r.name,
+  kind: r.kind ?? "discount",
+  offeringId: r.offering_id ?? null,
+  offeringName: r.offering_name ?? null,
+  pointsCost: r.points_cost,
+  discountBaht: r.discount_baht === null || r.discount_baht === undefined ? null : Number(r.discount_baht),
+  active: r.active,
+  sortOrder: r.sort_order,
+  minTierRank: r.min_tier_rank ?? 0
+});
+
+/** Does this reward fit a booking of that service? A free service: the same one, or one with its name */
+const fitsOffering = (r, offering) => r.kind !== "free_offering" || !offering || r.offeringId === offering.id || (r.offeringName ?? "").trim().toLowerCase() === (offering.name ?? "").trim().toLowerCase();
 
 /** usable = enough points and the member's tier is high enough; tierName = the tier it needs, if any */
 function rewardFor(r, balance, standing, tiers) {
@@ -159,6 +175,20 @@ async function balanceOf(db, brandId, lineUserId) {
   return { balance: b?.balance ?? 0, expiring: b?.expiring ?? 0, expiringAt: b?.expiring_at ?? null };
 }
 
+/** What a reward takes off at this shop (a booking's bill, or a walk-in when bookingId is null); null = does not fit */
+async function rewardValue(client, rewardId, shopId, bookingId) {
+  await client.query("savepoint reward_value");
+  try {
+    const { rows: [v] } = await client.query("select public.loyalty_reward_value($1, $2, $3, null) as value", [rewardId, shopId, bookingId]);
+    await client.query("release savepoint reward_value");
+    return Number(v.value);
+  } catch (error) {
+    await client.query("rollback to savepoint reward_value");
+    if (error.message === "REWARD_NOT_FOR_THIS" || error.message === "REWARD_UNAVAILABLE") return null;
+    throw error;
+  }
+}
+
 // ---------- the shop's dashboard ----------
 
 /** The rules, the rewards and the members with points, for the shop's brand */
@@ -166,7 +196,7 @@ async function getLoyalty(client, shop) {
   const brandId = await brandOf(client, shop.id);
   // one connection: one query at a time
   const { rows: [program] } = await client.query("select * from public.loyalty_programs where brand_id = $1", [brandId]);
-  const { rows: rewards } = await client.query("select * from public.loyalty_rewards where brand_id = $1 order by active desc, sort_order, points_cost", [brandId]);
+  const { rows: rewards } = await client.query("select r.*, o.name as offering_name from public.loyalty_rewards r left join public.offerings o on o.id = r.offering_id where r.brand_id = $1 order by r.active desc, r.sort_order, r.points_cost", [brandId]);
   const { rows: owner } = await client.query("select public.is_brand_owner($1) as owner", [brandId]);
   const { rows: people } = await client.query(
     `select l.line_user_id, max(l.created_at) as last_at,
@@ -215,22 +245,27 @@ async function saveReward(client, shop, id, input = {}) {
   const name = typeof input.name === "string" ? input.name.trim() : "";
   if (!name || name.length > 80) throw invalid("ใส่ชื่อรางวัล (ไม่เกิน 80 ตัวอักษร)");
   const cost = intIn(input.pointsCost, "คะแนนที่ใช้", 1, 10000000);
-  const discount = Number(input.discountBaht);
-  if (!(discount > 0 && discount <= 1000000)) throw invalid("ส่วนลดต้องมากกว่า 0 บาท");
+  const kind = input.kind === "free_offering" ? "free_offering" : "discount";
+  const offeringId = kind === "free_offering" ? (typeof input.offeringId === "string" && input.offeringId ? input.offeringId : null) : null;
+  if (kind === "free_offering" && !offeringId) throw invalid("เลือกบริการที่ให้ฟรี");
+  const capped = input.discountBaht !== undefined && input.discountBaht !== null && input.discountBaht !== "";
+  const discount = kind === "discount" || capped ? Number(input.discountBaht) : null;
+  if (discount !== null && !(discount > 0 && discount <= 1000000)) throw invalid(kind === "discount" ? "ส่วนลดต้องมากกว่า 0 บาท" : "มูลค่าสูงสุดต้องมากกว่า 0 บาท");
   const minTier = input.minTierRank === undefined || input.minTierRank === null || input.minTierRank === "" ? 0 : intIn(input.minTierRank, "ระดับขั้นต่ำ", 0, 4);
-  const values = [name, cost, Math.round(discount * 100) / 100, input.active !== false, Number.isInteger(input.sortOrder) ? input.sortOrder : 0, minTier];
+  const values = [name, cost, discount === null ? null : Math.round(discount * 100) / 100, input.active !== false, Number.isInteger(input.sortOrder) ? input.sortOrder : 0, minTier, kind, offeringId];
   try {
     if (id) {
       const { rowCount } = await client.query(
-        "update public.loyalty_rewards set name = $3, points_cost = $4, discount_baht = $5, active = $6, sort_order = $7, min_tier_rank = $8 where id = $1 and brand_id = $2",
+        "update public.loyalty_rewards set name = $3, points_cost = $4, discount_baht = $5, active = $6, sort_order = $7, min_tier_rank = $8, kind = $9, offering_id = $10 where id = $1 and brand_id = $2",
         [id, brandId, ...values]
       );
       if (!rowCount) throw notFound("ไม่พบรางวัลนี้");
     } else {
-      await client.query("insert into public.loyalty_rewards (brand_id, name, points_cost, discount_baht, active, sort_order, min_tier_rank) values ($1, $2, $3, $4, $5, $6, $7)", [brandId, ...values]);
+      await client.query("insert into public.loyalty_rewards (brand_id, name, points_cost, discount_baht, active, sort_order, min_tier_rank, kind, offering_id) values ($1, $2, $3, $4, $5, $6, $7, $8, $9)", [brandId, ...values]);
     }
   } catch (error) {
     if (error.code === "42501") throw new AppError("FORBIDDEN", "เฉพาะเจ้าของแบรนด์ตั้งรางวัลได้", 403);
+    if (error.message === "OFFERING_REQUIRED" || error.code === "22P02") throw invalid("เลือกบริการของแบรนด์นี้ที่ให้ฟรี");
     throw error;
   }
   return getLoyalty(client, shop);
@@ -299,7 +334,7 @@ async function memberAtCounter(client, shop, { code, bookingId } = {}) {
   if (!lineUserId) return null;
   const brandId = await brandOf(client, shop.id);
   const { rows: [program] } = await client.query("select * from public.loyalty_programs where brand_id = $1 and active", [brandId]);
-  const { rows: rewards } = await client.query("select * from public.loyalty_rewards where brand_id = $1 and active order by sort_order, points_cost", [brandId]);
+  const { rows: rewards } = await client.query("select r.*, o.name as offering_name from public.loyalty_rewards r left join public.offerings o on o.id = r.offering_id where r.brand_id = $1 and r.active order by r.sort_order, r.points_cost", [brandId]);
   const { rows: [person] } = await client.query("select name from public.customers where business_id = $1 and line_user_id = $2", [shop.id, lineUserId]);
   if (!program) return null;
   const balance = await balanceOf(client, brandId, lineUserId);
@@ -307,12 +342,21 @@ async function memberAtCounter(client, shop, { code, bookingId } = {}) {
   const standing = tiers.length ? tierStanding(tiers, await tierOf(client, brandId, lineUserId)) : null;
   // points the customer set aside when booking: theirs to use on this bill
   const held = bookingId ? await heldReward(client, bookingId) : null;
+  // what each reward takes off here: a free service only fits a booking of that service
+  const priced = [];
+  for (const r of rewards.map(rewardView)) {
+    const value = await rewardValue(client, r.id, shop.id, bookingId ?? null);
+    priced.push({ ...r, discountBaht: value ?? r.discountBaht, fits: value !== null });
+  }
   return {
     name: person?.name ?? "สมาชิก LINE",
     ...balance,
     held,
     tier: standing ? { name: standing.name, cardTheme: standing.cardTheme, earnMultiplier: standing.earnMultiplier } : null,
-    rewards: rewards.map(rewardView).map((r) => rewardFor(r, balance.balance + (held?.points ?? 0), standing, tiers))
+    rewards: priced.map((r) => {
+      const x = rewardFor(r, balance.balance + (held?.points ?? 0), standing, tiers);
+      return { ...x, usable: x.usable && r.fits, fits: r.fits };
+    })
   };
 }
 
@@ -329,7 +373,7 @@ async function memberCard(db, shop, lineUserId) {
   const brandId = shop.brand_id ?? (await brandOf(db, shop.id));
   const { rows: [program] } = await db.query("select * from public.loyalty_programs where brand_id = $1 and active", [brandId]);
   if (!program) return null;
-  const { rows: rewards } = await db.query("select * from public.loyalty_rewards where brand_id = $1 and active order by sort_order, points_cost", [brandId]);
+  const { rows: rewards } = await db.query("select r.*, o.name as offering_name from public.loyalty_rewards r left join public.offerings o on o.id = r.offering_id where r.brand_id = $1 and r.active order by r.sort_order, r.points_cost", [brandId]);
   const { rows: history } = await db.query(
     `select l.kind, l.points, l.created_at, b.name as shop from public.loyalty_ledger l left join public.businesses b on b.id = l.business_id
       where l.brand_id = $1 and l.line_user_id = $2 order by l.created_at desc limit 10`,
@@ -346,7 +390,7 @@ async function memberCard(db, shop, lineUserId) {
     ...balance,
     // the membership tier (migration …003000): name, card look, bonus, perks, the way to the next one
     tier: standing ? { ...standing, qualifyMonths: program.qualify_months ?? 12 } : null,
-    rewards: rewards.map(rewardView).map((r) => rewardFor(r, balance.balance, standing, tiers)).map((r) => ({ id: r.id, name: r.name, pointsCost: r.pointsCost, discountBaht: r.discountBaht, usable: r.usable, tierName: r.tierOk ? null : r.tierName })),
+    rewards: rewards.map(rewardView).map((r) => rewardFor(r, balance.balance, standing, tiers)).map((r) => ({ id: r.id, name: r.name, kind: r.kind, offeringId: r.offeringId, offeringName: r.offeringName, pointsCost: r.pointsCost, discountBaht: r.discountBaht, usable: r.usable, tierName: r.tierOk ? null : r.tierName })),
     history: history.map((h) => ({ kind: h.kind, points: h.points, at: h.created_at, shop: h.shop }))
   };
 }
@@ -437,6 +481,7 @@ module.exports = {
   heldReward,
   issueMemberCode,
   earnText,
+  fitsOffering,
   tierStanding,
   tierUpCard,
   notifyTierUp,

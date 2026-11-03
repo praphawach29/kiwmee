@@ -12,7 +12,7 @@ const { verifyLineIdToken } = require("./public-booking");
 const { openLink } = require("./line-notify");
 const { msToLocal } = require("./options-engine");
 const { directionsLink } = require("./directions");
-const { memberCard, issueMemberCode, heldReward } = require("./loyalty");
+const { memberCard, issueMemberCode, heldReward, fitsOffering } = require("./loyalty");
 
 const UPCOMING = ["held", "pending", "confirmed", "checked_in"];
 const PAST_LIMIT = 20;
@@ -104,7 +104,16 @@ async function myRewards(db, slug, body = {}, { verifyLineToken = (token) => ver
   if (!line?.sub) throw new AppError("FORBIDDEN", "ยืนยันตัวตน LINE ไม่สำเร็จ กรุณาเปิดจาก LINE อีกครั้ง", 403);
   const card = await memberCard(db, shop, line.sub);
   if (!card) return null;
-  return { name: card.name, balance: card.balance, tier: card.tier ? { name: card.tier.name } : null, rewards: card.rewards };
+  // the service being booked: a free-service reward fits only that service
+  let offering = null;
+  if (typeof body.offeringId === "string" && /^[0-9a-f-]{36}$/i.test(body.offeringId)) {
+    offering = (await db.query("select id, name from public.offerings where id = $1 and business_id = $2", [body.offeringId, shop.id])).rows[0] ?? null;
+  }
+  const rewards = card.rewards.map((r) => {
+    const fits = fitsOffering(r, offering);
+    return { ...r, fits, usable: r.usable && fits };
+  });
+  return { name: card.name, balance: card.balance, tier: card.tier ? { name: card.tier.name } : null, rewards };
 }
 
 module.exports = { myBookings, myMemberCode, myRewards };

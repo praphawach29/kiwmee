@@ -5,13 +5,19 @@
 import { themeOf } from "../src/v2/tier-themes.js";
 import "./member-card.css";
 
-export function MemberCardFace({ programName, shopName, tierName = null, theme = "classic", balance = 0, rule = "", multiplier = 1, next = null, children = null }) {
+// only an uploaded image (Storage, https) or a bundled demo picture
+const safeLogo = (url) => typeof url === "string" && (/^https:\/\/[^\s"'<>]+$/.test(url) || /^\/demo-media\/[A-Za-z0-9._/-]+$/.test(url));
+
+export function MemberCardFace({ programName, shopName, tierName = null, theme = "classic", balance = 0, rule = "", multiplier = 1, next = null, logoUrl = null, children = null }) {
   const t = themeOf(theme);
   return (
     <div className="mc-card" data-theme={theme} style={{ "--mc-from": t.from, "--mc-to": t.to, "--mc-text": t.text, "--mc-accent": t.accent }}>
       <span className="mc-shine" aria-hidden="true" />
       <div className="mc-top">
-        <span className="mc-program">{shopName ? `${shopName} · ` : ""}{programName}</span>
+        <span className="mc-brand">
+          {safeLogo(logoUrl) && <img className="mc-logo" src={logoUrl} alt="" width="36" height="36" />}
+          <span className="mc-program">{shopName ? `${shopName} · ` : ""}{programName}</span>
+        </span>
         {tierName && <span className="mc-tier">{tierName} ✦</span>}
       </div>
       <strong className="mc-balance">{Number(balance).toLocaleString("th-TH")} <small>คะแนน</small></strong>

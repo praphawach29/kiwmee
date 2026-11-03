@@ -8,7 +8,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api.mjs";
 import OwnerMediaEditor from "../media-editor.jsx";
-import { isSafeMediaUrl } from "../media-upload.mjs";
+import { isSafeMediaUrl, uploadMediaFile, MEDIA_ACCEPT } from "../media-upload.mjs";
 import MerchantSidebar from "../merchant-sidebar.jsx";
 import { MobileShopHeader, MobileTabBar } from "../merchant-mobile.jsx";
 import { shopNavigation, shopTabs, resolveShopTab } from "../merchant-navigation.mjs";
@@ -878,6 +878,8 @@ function LoyaltyTab({ slug, catalog }) {
         </fieldset>
       </form>
 
+      <LogoCard data={data} edit={edit} slug={slug} onSaved={setData} programName={program.name} />
+
       <TiersCard key={JSON.stringify(data.tiers) + data.program.qualifyMonths} data={data} edit={edit} programName={program.name} rule={program}
         onSave={(body) => save.run(async () => setData(await api("PUT", `${base}/tiers`, body)), "บันทึกระดับสมาชิกแล้ว")} busy={save.busy} />
 
@@ -951,6 +953,68 @@ function LoyaltyTab({ slug, catalog }) {
         </ul>
       </section>
     </div>
+  );
+}
+
+// ---------- the brand's logo on its membership card (migration …003500) ----------
+
+function LogoCard({ data, edit, slug, onSaved, programName }) {
+  const [state, setState] = useState({ busy: false, error: "", done: "" });
+  const logo = data.brand?.logoUrl ?? null;
+
+  async function save(logoUrl, done) {
+    const updated = await api("PUT", shopPath(slug, "/loyalty/logo"), { logoUrl });
+    onSaved(updated);
+    setState({ busy: false, error: "", done });
+  }
+
+  async function upload(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setState({ busy: true, error: "", done: "" });
+    try {
+      const uploaded = await uploadMediaFile(slug, file);
+      await save(uploaded.url, "บันทึกโลโก้แล้ว");
+    } catch (e) {
+      setState({ busy: false, error: e.message, done: "" });
+    }
+  }
+
+  async function remove() {
+    setState({ busy: true, error: "", done: "" });
+    try {
+      await save(null, "เอาโลโก้ออกแล้ว");
+    } catch (e) {
+      setState({ busy: false, error: e.message, done: "" });
+    }
+  }
+
+  return (
+    <section className="ad-card">
+      <div className="ad-row ad-between ad-wrap">
+        <h2>โลโก้บนบัตรสมาชิก</h2>
+        {data.brand?.name && <span className="ad-muted">แบรนด์ {data.brand.name}</span>}
+      </div>
+      <p className="ad-muted">แสดงบนบัตรในหน้า LINE ของลูกค้า และบนการ์ดแจ้งขึ้นระดับ / คะแนนใกล้หมดอายุ · ใช้รูปสี่เหลี่ยมจัตุรัส พื้นเรียบ จะดูดีที่สุด</p>
+      <div className="ad-logo-row">
+        <div className="ad-logo-preview">
+          <MemberCardFace programName={programName} balance={1250} logoUrl={logo} />
+        </div>
+        {edit && (
+          <div className="ad-stack">
+            <label className="ad-secondary ad-upload-button" aria-disabled={state.busy}>
+              <input type="file" accept={MEDIA_ACCEPT} onChange={upload} disabled={state.busy} hidden />
+              {state.busy ? "กำลังอัปโหลด…" : logo ? "เปลี่ยนโลโก้" : "อัปโหลดโลโก้"}
+            </label>
+            {logo && <button type="button" className="ad-link" disabled={state.busy} onClick={remove}>เอาโลโก้ออก</button>}
+          </div>
+        )}
+      </div>
+      {!edit && <p className="ad-notice">เฉพาะเจ้าของแบรนด์เปลี่ยนโลโก้ได้</p>}
+      {state.error && <p className="ad-error" role="alert">{state.error}</p>}
+      {state.done && <p className="ad-ok" role="status">{state.done}</p>}
+    </section>
   );
 }
 
@@ -1052,7 +1116,7 @@ function TiersCard({ data, edit, programName, rule, onSave, busy }) {
         {shown && (
           <div className="ad-tier-preview">
             <p className="ad-muted">พรีวิวบัตรที่ลูกค้าเห็นใน LINE</p>
-            <MemberCardFace programName={programName} tierName={shown.name} theme={shown.cardTheme} balance={1250}
+            <MemberCardFace programName={programName} tierName={shown.name} theme={shown.cardTheme} balance={1250} logoUrl={data.brand?.logoUrl}
               rule={earnRule(rule)} multiplier={Number(shown.earnMultiplier) || 1}
               next={nextOf(tiers.indexOf(shown)) ? { progress: 0.62, text: nextText(nextOf(tiers.indexOf(shown))) } : null} />
             {String(shown.benefits).trim() && (

@@ -3,7 +3,7 @@
 // "การจองของฉัน" (/b/<slug>/me): the next booking as a big card, the others coming up, then the past.
 // Who the customer is comes from LINE (src/v2/my-bookings.js checks the ID token on every request).
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import CustomerFrame from "../customer-frame.jsx";
 import { CustomerTabs, DirectionsButton, ShopHeader, ShopHero, withMedia } from "../booking-presentation.jsx";
 import { useLiff } from "../use-liff.jsx";
@@ -85,7 +85,8 @@ function BookingRow({ booking }) {
 const KIND = { earn: "ได้คะแนน", redeem: "ใช้คะแนน", release: "คืนคะแนน", reverse: "หักคืน (คืนเงิน)", adjust: "ร้านปรับคะแนน" };
 
 // The member's points at this brand (migration …002800) and a 6-digit code to show at the counter
-function PointsCard({ points, slug, idToken }) {
+// part: "face" (the card with its code), "details" (perks, rewards, history), or both
+function PointsCard({ points, slug, idToken, part = null }) {
   const [code, setCode] = useState(null); // { code, until }
   const [left, setLeft] = useState(0);
   const [error, setError] = useState("");
@@ -114,10 +115,12 @@ function PointsCard({ points, slug, idToken }) {
     }
   }
 
+  const face = part !== "details";
+  const details = part !== "face";
   return (
     <section className="bk-points" aria-label={points.name}>
-      <MemberCardFace programName={points.name} tierName={points.tier?.name} theme={points.tier?.cardTheme ?? "classic"} balance={points.balance}
-        rule={points.rule} multiplier={points.tier?.earnMultiplier ?? 1} next={points.tier?.next ?? null}>
+      {face && <MemberCardFace programName={points.name} tierName={points.tier?.name} theme={points.tier?.cardTheme ?? "classic"} balance={points.balance}
+        rule={points.rule} multiplier={points.tier?.earnMultiplier ?? 1} next={points.tier?.next ?? null} logoUrl={points.logoUrl}>
         {points.expiring > 0 && points.expiringAt && (
           <span className="bk-points-expiring">
             {points.expiring} คะแนนจะหมดอายุ {new Date(points.expiringAt).toLocaleDateString("th-TH", { day: "numeric", month: "short" })}
@@ -134,8 +137,8 @@ function PointsCard({ points, slug, idToken }) {
           <button type="button" className="bk-points-button" onClick={showCode}>แสดง QR สมาชิก (ตอนจ่ายที่ร้าน)</button>
         )}
         {error && <span className="bk-points-error" role="alert">{error}</span>}
-      </MemberCardFace>
-      {points.tier && (points.tier.benefits.length > 0 || points.tier.earnMultiplier > 1) && (
+      </MemberCardFace>}
+      {details && points.tier && (points.tier.benefits.length > 0 || points.tier.earnMultiplier > 1) && (
         <div className="bk-card bk-tier-perks">
           <h2>สิทธิของระดับ {points.tier.name}</h2>
           <ul>
@@ -145,7 +148,7 @@ function PointsCard({ points, slug, idToken }) {
           <p className="bk-muted">ระดับนับจากยอดที่จ่ายใน {points.tier.qualifyMonths} เดือนล่าสุด: {Math.round(points.tier.spend).toLocaleString("th-TH")} บาท · {points.tier.visits} ครั้ง · ใช้คะแนนแลกของแล้วระดับไม่ลด</p>
         </div>
       )}
-      {points.rewards.length > 0 && (
+      {details && points.rewards.length > 0 && (
         <div className="bk-card">
           <h2>แลกคะแนน</h2>
           <p className="bk-muted">บอกพนักงานตอนจ่ายเงิน (1 บิลใช้ได้ 1 รางวัล)</p>
@@ -162,7 +165,7 @@ function PointsCard({ points, slug, idToken }) {
           </ul>
         </div>
       )}
-      {points.history.length > 0 && (
+      {details && points.history.length > 0 && (
         <details className="bk-card bk-points-history">
           <summary>ประวัติคะแนน</summary>
           <ul className="bk-booking-list">
@@ -178,6 +181,43 @@ function PointsCard({ points, slug, idToken }) {
           </ul>
         </details>
       )}
+    </section>
+  );
+}
+
+// The member's cards at other brands (migration …003500): swipe sideways, one card at a time, like a
+// wallet. This shop's card (with its code and rewards) comes first; the others open their own page.
+function Wallet({ here, details, others }) {
+  const strip = useRef(null);
+  const [at, setAt] = useState(0);
+  const count = others.length + (here ? 1 : 0);
+  const onScroll = () => {
+    const el = strip.current;
+    if (el) setAt(Math.round(el.scrollLeft / el.clientWidth));
+  };
+  return (
+    <section className="bk-wallet" aria-label="บัตรสมาชิกของฉัน">
+      <div className="bk-wallet-strip" ref={strip} onScroll={onScroll}>
+        {here && <div className="bk-wallet-slide">{here}</div>}
+        {others.map((o) => (
+          <div key={o.slug} className="bk-wallet-slide">
+            <MemberCardFace programName={o.card.name} shopName={o.shopName} tierName={o.card.tier?.name} theme={o.card.tier?.cardTheme ?? "classic"}
+              balance={o.card.balance} rule={o.card.rule} multiplier={o.card.tier?.earnMultiplier ?? 1} next={o.card.tier?.next ?? null} logoUrl={o.card.logoUrl}>
+              {o.card.expiring > 0 && o.card.expiringAt && (
+                <span className="bk-points-expiring">{o.card.expiring} คะแนนจะหมดอายุ {new Date(o.card.expiringAt).toLocaleDateString("th-TH", { day: "numeric", month: "short" })}</span>
+              )}
+              <a className="bk-points-button" href={`/b/${o.slug}/me`}>เปิดบัตรนี้ (QR · รางวัล)</a>
+            </MemberCardFace>
+          </div>
+        ))}
+      </div>
+      {count > 1 && (
+        <div className="bk-wallet-dots" aria-hidden="true">
+          {Array.from({ length: count }, (_, i) => <span key={i} data-on={i === at || undefined} />)}
+        </div>
+      )}
+      <p className="bk-muted bk-wallet-hint">ปัดซ้าย-ขวาเพื่อดูบัตรของร้านอื่น ({count} ใบ)</p>
+      {here && at === 0 && details}
     </section>
   );
 }
@@ -227,7 +267,14 @@ export default function MyBookingsClient({ shop, liffId }) {
           </section>
         )}
 
-        {data?.points && <PointsCard points={data.points} slug={shop.slug} idToken={liff.idToken} />}
+        {data?.points && !data.otherCards?.length && <PointsCard points={data.points} slug={shop.slug} idToken={liff.idToken} />}
+        {data?.otherCards?.length > 0 && (
+          <Wallet
+            here={data.points ? <PointsCard points={data.points} slug={shop.slug} idToken={liff.idToken} part="face" /> : null}
+            details={data.points ? <PointsCard points={data.points} slug={shop.slug} idToken={liff.idToken} part="details" /> : null}
+            others={data.otherCards}
+          />
+        )}
 
         {data && (
           <>

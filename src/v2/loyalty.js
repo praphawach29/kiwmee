@@ -211,8 +211,10 @@ async function getLoyalty(client, shop) {
     const tier = tiers.length ? (await tierOf(client, brandId, p.line_user_id)).name : null;
     members.push({ lineUserId: p.line_user_id, name: p.name ?? "สมาชิก LINE", lastAt: p.last_at, tier, ...(await balanceOf(client, brandId, p.line_user_id)) });
   }
+  const { rows: [brand] } = await client.query("select name, logo_url from public.brands where id = $1", [brandId]);
   return {
     program: { ...programView(program), qualifyMonths: program?.qualify_months ?? 12 },
+    brand: { name: brand?.name ?? null, logoUrl: brand?.logo_url ?? null },
     canEdit: owner[0]?.owner === true,
     rewards: rewards.map(rewardView),
     tiers,
@@ -314,6 +316,21 @@ async function saveTiers(client, shop, input = {}) {
   return getLoyalty(client, shop);
 }
 
+/** The brand's logo on its membership card (migration …003500): an uploaded image's URL, or null to remove */
+async function saveLogo(client, shop, input = {}) {
+  const brandId = await brandOf(client, shop.id);
+  const url = input.logoUrl === null || input.logoUrl === "" ? null : String(input.logoUrl ?? "");
+  if (url !== null && (url.length > 2048 || !/^(https:\/\/[^\s]+|\/demo-media\/[A-Za-z0-9._/-]+)$/.test(url))) throw invalid("ที่อยู่รูปโลโก้ไม่ถูกต้อง");
+  try {
+    await client.query("select public.brand_set_logo($1, $2)", [brandId, url]);
+  } catch (error) {
+    if (error.code === "42501") throw new AppError("FORBIDDEN", "เฉพาะเจ้าของแบรนด์เปลี่ยนโลโก้ได้", 403);
+    if (error.code === "23514") throw invalid("ที่อยู่รูปโลโก้ไม่ถูกต้อง");
+    throw error;
+  }
+  return getLoyalty(client, shop);
+}
+
 /**
  * At the counter: who is this member and what can they use? { code } (walk-in, the code is NOT used up
  * here) or { bookingId } (a booking made inside LINE). Returns null when there is no member.
@@ -381,10 +398,14 @@ async function memberCard(db, shop, lineUserId) {
   );
   const view = programView(program);
   const balance = await balanceOf(db, brandId, lineUserId);
+  const { rows: [brand] } = await db.query("select name, logo_url from public.brands where id = $1", [brandId]);
   const tiers = await tiersOf(db, brandId);
   const standing = tiers.length ? tierStanding(tiers, await tierOf(db, brandId, lineUserId)) : null;
   return {
     name: view.name,
+    brandId,
+    brandName: brand?.name ?? null,
+    logoUrl: brand?.logo_url ?? null,
     rule: earnText(view),
     expireMonths: view.expireMonths,
     ...balance,
@@ -393,6 +414,35 @@ async function memberCard(db, shop, lineUserId) {
     rewards: rewards.map(rewardView).map((r) => rewardFor(r, balance.balance, standing, tiers)).map((r) => ({ id: r.id, name: r.name, kind: r.kind, offeringId: r.offeringId, offeringName: r.offeringName, pointsCost: r.pointsCost, discountBaht: r.discountBaht, usable: r.usable, tierName: r.tierOk ? null : r.tierName })),
     history: history.map((h) => ({ kind: h.kind, points: h.points, at: h.created_at, shop: h.shop }))
   };
+}
+
+/**
+ * Every brand the member has points with (migration …003500, "swipe through cards"): this shop's brand
+ * first, then the others by their latest activity. Each with a shop of that brand to open.
+ */
+async function memberCards(db, shop, lineUserId) {
+  const brandId = shop.brand_id ?? (await brandOf(db, shop.id));
+  const { rows } = await db.query(
+    `select l.brand_id, max(l.created_at) as last_at,
+            (select s.slug from public.businesses s where s.brand_id = l.brand_id
+              order by (s.id = (select l2.business_id from public.loyalty_ledger l2 where l2.brand_id = l.brand_id and l2.line_user_id = $1
+                                 order by l2.created_at desc limit 1)) desc nulls last, s.created_at limit 1) as slug,
+            (select s.name from public.businesses s where s.brand_id = l.brand_id
+              order by (s.id = (select l2.business_id from public.loyalty_ledger l2 where l2.brand_id = l.brand_id and l2.line_user_id = $1
+                                 order by l2.created_at desc limit 1)) desc nulls last, s.created_at limit 1) as shop_name
+       from public.loyalty_ledger l join public.loyalty_programs p on p.brand_id = l.brand_id and p.active
+      where l.line_user_id = $1 and l.brand_id <> $2
+      group by l.brand_id order by max(l.created_at) desc limit 10`,
+    [lineUserId, brandId]
+  );
+  const cards = [];
+  const here = await memberCard(db, { ...shop, brand_id: brandId }, lineUserId);
+  if (here) cards.push({ slug: shop.slug, shopName: shop.name, here: true, card: here });
+  for (const r of rows) {
+    const card = await memberCard(db, { id: null, brand_id: r.brand_id }, lineUserId);
+    if (card) cards.push({ slug: r.slug, shopName: r.shop_name, here: false, card });
+  }
+  return cards;
 }
 
 /** A 6-digit code the member shows at the counter, good for 10 minutes */
@@ -407,7 +457,7 @@ async function issueMemberCode(db, shop, lineUserId) {
 // ---------- "you moved up a tier" (LINE) ----------
 
 /** The Flex card: the new tier on its card colours, its perks, and a button to the member's page */
-function tierUpCard({ shopName, programName, standing, link }) {
+function tierUpCard({ shopName, programName, standing, link, logoUrl = null }) {
   const theme = themeOf(standing.cardTheme);
   const perks = [
     ...(standing.earnMultiplier > 1 ? [`ได้คะแนน ×${standing.earnMultiplier}`] : []),
@@ -425,6 +475,7 @@ function tierUpCard({ shopName, programName, standing, link }) {
         paddingAll: "xl",
         background: { type: "linearGradient", angle: "135deg", startColor: theme.from, endColor: theme.to },
         contents: [
+          ...(logoUrl?.startsWith("https://") ? [{ type: "image", url: logoUrl, size: "xxs", aspectRatio: "1:1", aspectMode: "cover", align: "start", margin: "none" }] : []),
           { type: "text", text: `🎉 ขึ้นระดับแล้ว · ${shopName}`, size: "sm", color: theme.text, wrap: true },
           { type: "text", text: standing.name, size: "3xl", weight: "bold", color: theme.text, margin: "md", wrap: true },
           { type: "text", text: programName, size: "sm", color: theme.text, margin: "xs", wrap: true },
@@ -448,7 +499,8 @@ function tierUpCard({ shopName, programName, standing, link }) {
 async function notifyTierUp(db, billId, { push = (to, messages) => pushLine(db, to, messages), env = process.env } = {}) {
   try {
     const { rows: [b] } = await db.query(
-      `select bl.line_user_id, bl.status, s.brand_id, s.name as shop_name, s.slug, p.name as program_name, p.active
+      `select bl.line_user_id, bl.status, s.brand_id, s.name as shop_name, s.slug, p.name as program_name, p.active,
+              (select logo_url from public.brands where id = s.brand_id) as logo_url
          from public.bills bl join public.businesses s on s.id = bl.business_id
          left join public.loyalty_programs p on p.brand_id = s.brand_id
         where bl.id = $1`,
@@ -461,7 +513,7 @@ async function notifyTierUp(db, billId, { push = (to, messages) => pushLine(db, 
     const after = await tierOf(db, b.brand_id, b.line_user_id);
     if ((after.rank ?? 0) <= (before.rank ?? 0)) return { skipped: "SAME_TIER" };
     const shop = await shopLink(db, { slug: b.slug, origin: publicOrigin(env) }, { env });
-    const card = tierUpCard({ shopName: b.shop_name, programName: b.program_name, standing: tierStanding(tiers, after), link: shop ? `${shop}/me` : null });
+    const card = tierUpCard({ shopName: b.shop_name, programName: b.program_name, standing: tierStanding(tiers, after), link: shop ? `${shop}/me` : null, logoUrl: b.logo_url });
     return await push(b.line_user_id, [card]);
   } catch (error) {
     console.error("[loyalty] tier card not sent:", error.message);
@@ -478,6 +530,8 @@ module.exports = {
   memberAtCounter,
   applyAtCounter,
   memberCard,
+  memberCards,
+  saveLogo,
   heldReward,
   issueMemberCode,
   earnText,

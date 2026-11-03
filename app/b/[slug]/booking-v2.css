@@ -599,3 +599,15 @@ button.bk-cal-day:not([data-unavailable])::after { content: ""; position: absolu
 .bk-options-reward .bk-option-text { flex: 1; min-width: 0; }
 .bk-options-reward .bk-option > .bk-reason { position: static; flex: none; }
 .bk-slip-ok { border-color: var(--mint-deep); color: var(--mint-deep); }
+
+/* ---------- membership cards of several brands (migration …003500) ---------- */
+.bk-wallet { display: grid; gap: 8px; min-width: 0; }
+.bk-wallet-strip { display: grid; grid-auto-flow: column; grid-auto-columns: 100%; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; }
+.bk-wallet-strip::-webkit-scrollbar { display: none; }
+.bk-wallet-slide { scroll-snap-align: start; min-width: 0; }
+.bk-wallet-dots { display: flex; justify-content: center; gap: 6px; }
+.bk-wallet-dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--line); transition: width .2s; }
+.bk-wallet-dots span[data-on] { width: 18px; border-radius: 999px; background: var(--grape); }
+.bk-wallet-hint { text-align: center; font-size: .8rem; }
+a.bk-points-button { display: inline-flex; align-items: center; text-decoration: none; }
+.bk-wallet-slide { align-self: start; }

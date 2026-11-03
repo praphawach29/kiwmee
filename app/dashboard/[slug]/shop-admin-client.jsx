@@ -26,6 +26,7 @@ const DAYS = ["อาทิตย์", "จันทร์", "อังคาร
 const DAY_SHORT = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
 const SHOP_KINDS = { salon: "ร้านเสริมสวย", barber: "ร้านตัดผมชาย", spa: "สปา / นวด", court: "สนามกีฬา", other: "อื่น ๆ" };
 const RESOURCE_KINDS = { staff: "ช่าง / พนักงาน", court: "สนาม", room: "ห้อง", equipment: "อุปกรณ์" };
+const DOCUMENT_KINDS = { id_card: "บัตรประชาชน", driving_license: "ใบขับขี่", passport: "พาสปอร์ต" };
 const UNITS = { per_booking: "ต่อครั้ง", per_hour: "ต่อชั่วโมง", per_person: "ต่อคน", per_day: "ต่อวัน" };
 
 
@@ -409,6 +410,7 @@ function BookingsTab({ slug, catalog, initialDay }) {
   const [checkout, setCheckout] = useState(null); // the booking whose bill is being closed
   const [showOff, setShowOff] = useState(false);
   const [link, setLink] = useState(null); // { path, name, phone, date, time } while the link is on screen
+  const [docs, setDocs] = useState(null); // the booking whose rental documents are open
   const save = useSave();
 
   const load = useCallback(async () => {
@@ -473,6 +475,7 @@ function BookingsTab({ slug, catalog, initialDay }) {
     <div className="ad-stack">
       {link && <ManageLinkCard shop={catalog.shop} link={link} onClose={() => setLink(null)} />}
       <RentalTimeline slug={slug} catalog={catalog} day={day} onDay={setDay} refresh={list} />
+      {docs && <DocumentsPanel slug={slug} booking={docs} onClose={() => { setDocs(null); load(); }} />}
       <section className="ad-card">
         <div className="ad-row ad-wrap ad-between">
           <div className="ad-row ad-wrap">
@@ -542,6 +545,14 @@ function BookingsTab({ slug, catalog, initialDay }) {
                     {b.price ? ` · ${money(b.price)}` : ""}
                   </div>
                   {b.addons?.length > 0 && <div className="ad-muted">+ {b.addons.map((a) => `${a.name}${a.quantity > 1 ? ` ×${a.quantity}` : ""}`).join(", ")}</div>}
+                  {b.documents && (
+                    <div className="ad-deposit-line" data-tone={b.documents.received >= b.documents.asked ? "ok" : "warn"}>
+                      เอกสาร {b.documents.received}/{b.documents.asked}
+                      {b.documents.received > 0
+                        ? <> · <button type="button" className="ad-link" onClick={() => setDocs(b)}>ดูเอกสาร</button></>
+                        : " · ลูกค้ายังไม่ได้ส่ง (ส่งได้จากลิงก์การจองของลูกค้า)"}
+                    </div>
+                  )}
                   {waitingDeposit && (
                     <div className="ad-deposit-line">
                       มัดจำ {money(b.depositDue)}
@@ -932,6 +943,59 @@ function BillsTab({ slug, catalog }) {
       {form?.sale && <SaleForm slug={slug} onClose={() => setForm(null)} onSaved={saved} />}
       {form?.refund && <RefundForm key={form.refund.id} slug={slug} bill={form.refund} onClose={() => setForm(null)} onSaved={() => { setForm(null); load(); }} />}
     </div>
+  );
+}
+
+// ---------- rental documents (design 11.7 E3): look, mark checked, delete early ----------
+
+function DocumentsPanel({ slug, booking, onClose }) {
+  const [list, setList] = useState(null);
+  const save = useSave();
+  const base = shopPath(slug, `/bookings/${booking.id}/documents`);
+  const load = useCallback(() => api("GET", base).then(setList, () => setList([])), [base]);
+  const box = useRef(null);
+  useEffect(() => {
+    load();
+    box.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [load]);
+
+  return (
+    <section ref={box} className="ad-card ad-docs" aria-label={`เอกสารของ ${booking.customer.name}`}>
+      <div className="ad-row ad-between">
+        <h2>เอกสารของ {booking.customer.name}</h2>
+        <button type="button" className="ad-link" onClick={onClose}>ปิด</button>
+      </div>
+      <p className="ad-muted">ข้อมูลส่วนบุคคล: ดูเพื่อยืนยันตัวตนตอนส่งมอบของเท่านั้น ห้ามบันทึกหรือส่งต่อ · ระบบลบเองตามวันที่แสดง</p>
+      <Status save={save} />
+      {list === null && <p className="ad-muted">กำลังโหลด…</p>}
+      {list && list.length === 0 && <p className="ad-empty">ไม่มีเอกสาร (อาจถูกลบตามกำหนดแล้ว)</p>}
+      <div className="ad-docs-grid">
+        {(list ?? []).map((d) => (
+          <figure key={d.id} className="ad-doc">
+            <img src={`${base}/${d.id}`} alt={`${d.label} ของ ${booking.customer.name}`} referrerPolicy="no-referrer" />
+            <figcaption>
+              <strong>{d.label}</strong>
+              <span className="ad-muted">ยินยอมเมื่อ {new Date(d.consentAt).toLocaleString("th-TH")} · ลบอัตโนมัติ {new Date(d.deleteAfter).toLocaleDateString("th-TH")}</span>
+              <span className="ad-row ad-wrap">
+                {d.reviewedAt ? (
+                  <span className="ad-status" data-tone="ok">ตรวจแล้ว</span>
+                ) : (
+                  <button type="button" className="ad-secondary" disabled={save.busy} onClick={async () => (await save.run(() => api("POST", `${base}/${d.id}/review`), "ตรวจแล้ว")) && load()}>ตรวจแล้ว</button>
+                )}
+                <button
+                  type="button"
+                  className="ad-link"
+                  disabled={save.busy}
+                  onClick={async () => window.confirm(`ลบ${d.label}ของ ${booking.customer.name} ตอนนี้เลย?`) && (await save.run(() => api("DELETE", `${base}/${d.id}`), "ลบแล้ว")) && load()}
+                >
+                  ลบตอนนี้
+                </button>
+              </span>
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -1729,6 +1793,22 @@ function OfferingEditor({ slug, catalog, initial, onSaved, onClose }) {
         )}
       </div>
 
+      <div className="ad-field">
+        ขอเอกสารจากลูกค้า (เช่น เช่ารถ เช่ากล้อง · ลูกค้าส่งรูปพร้อมให้ความยินยอม เก็บแบบเข้ารหัส และลบอัตโนมัติ)
+        <div className="ad-checks">
+          {Object.entries(DOCUMENT_KINDS).map(([kind, label]) => (
+            <label key={kind}>
+              <input
+                type="checkbox"
+                checked={(o.requiredDocuments ?? []).includes(kind)}
+                onChange={(e) => set({ requiredDocuments: e.target.checked ? [...(o.requiredDocuments ?? []), kind] : (o.requiredDocuments ?? []).filter((k) => k !== kind) })}
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+      </div>
+
       {kinds.length > 0 && (
         <div className="ad-field">
           ใครหรืออะไรทำบริการนี้ได้
@@ -2067,7 +2147,7 @@ function HoursTab({ slug, catalog, onSaved }) {
   async function submit(event) {
     event.preventDefault();
     // numbers typed into the form go back as numbers; the deposit's mode and bank details stay text
-    const numeric = ["minLeadMinutes", "slotIntervalMinutes", "maxAdvanceDays", "holdMinutes", "customerChangeCutoffHours", "depositValue"];
+    const numeric = ["minLeadMinutes", "slotIntervalMinutes", "maxAdvanceDays", "holdMinutes", "customerChangeCutoffHours", "depositValue", "documentRetentionDays"];
     const settings = Object.fromEntries(Object.entries(form.settings).map(([k, v]) => [k, numeric.includes(k) ? toInt(v) : v]));
     if (await save.run(() => api("PUT", shopPath(slug), { ...form, settings }))) onSaved();
   }
@@ -2161,6 +2241,12 @@ function HoursTab({ slug, catalog, onSaved }) {
         <h2>แจ้งเตือนลูกค้าทาง LINE</h2>
         <p className="ad-muted">ลูกค้าที่จองผ่าน LINE ได้การ์ดยืนยันทันที และการ์ดเตือนนัด 1 วันก่อน กับ 2 ชั่วโมงก่อนถึงเวลา (ต้องเป็นเพื่อนกับ LINE OA ของ Kiwmee)</p>
         <label className="ad-check"><input type="checkbox" checked={form.settings.lineReminders !== false} onChange={(e) => setSetting("lineReminders", e.target.checked)} />ส่งการ์ดเตือนนัด</label>
+        <h2>เอกสารประกอบการเช่า</h2>
+        <p className="ad-muted">รูปบัตรประชาชน/ใบขับขี่ที่ลูกค้าส่งมา (เฉพาะบริการที่ติ๊ก “ขอเอกสาร”) เก็บแบบเข้ารหัส เห็นได้เฉพาะคนในร้าน และลบเองอัตโนมัติตามนี้ · ยกเลิกการจอง = ลบทันที</p>
+        <label className="ad-field ad-short">
+          เก็บไว้กี่วันหลังคืนของ
+          <input type="number" min={1} max={365} value={form.settings.documentRetentionDays ?? 30} onChange={(e) => setSetting("documentRetentionDays", e.target.value)} />
+        </label>
         <Status save={save} />
         <button className="ad-primary" disabled={save.busy}>บันทึก</button>
         </Locked>

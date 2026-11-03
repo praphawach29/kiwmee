@@ -187,7 +187,7 @@ async function getCatalog(client, shop) {
     "select name, kind, media, amenities, about, address, map_url from public.businesses where id = $1",
     `select min_lead_minutes, slot_interval_minutes, max_advance_days, hold_minutes,
             customer_can_cancel, customer_can_reschedule, customer_change_cutoff_hours,
-            deposit_mode, deposit_value::float8 as deposit_value, payment_info, line_reminders
+            deposit_mode, deposit_value::float8 as deposit_value, payment_info, line_reminders, document_retention_days
        from public.business_booking_settings where business_id = $1`,
     "select day_of_week, is_open, open_time, close_time from public.business_hours where business_id = $1",
     `select id, date::text as date, is_full_day, start_time, end_time, reason from public.business_closures
@@ -196,7 +196,7 @@ async function getCatalog(client, shop) {
     "select resource_id, day_of_week, is_working, start_time, end_time from public.resource_schedules where business_id = $1",
     `select id, resource_id, date::text as date, is_full_day, start_time, end_time, reason from public.resource_time_off
         where business_id = $1 and date >= current_date - 1 order by date, start_time nulls first`,
-    `select id, category, name, description, duration_mode, duration_minutes, min_minutes, max_minutes, step_minutes, min_days, max_days,
+    `select id, category, name, description, duration_mode, duration_minutes, min_minutes, max_minutes, step_minutes, min_days, max_days, required_documents,
               buffer_after_minutes, max_party_size, sort_order, active, media
          from public.offerings where business_id = $1 order by active desc, sort_order, name`,
     "select offering_id, kind, customer_picks, units_per_booking from public.offering_requirements where business_id = $1 order by kind",
@@ -245,7 +245,8 @@ async function getCatalog(client, shop) {
       depositMode: s.deposit_mode,
       depositValue: s.deposit_value,
       paymentInfo: s.payment_info ?? {},
-      lineReminders: s.line_reminders !== false
+      lineReminders: s.line_reminders !== false,
+      documentRetentionDays: s.document_retention_days ?? 30
     },
     hours: [0, 1, 2, 3, 4, 5, 6].map((d) => {
       const h = dayHours(d);
@@ -291,6 +292,7 @@ async function getCatalog(client, shop) {
       stepMinutes: o.step_minutes,
       minDays: o.min_days,
       maxDays: o.max_days,
+      requiredDocuments: o.required_documents ?? [],
       bufferAfterMinutes: o.buffer_after_minutes,
       maxPartySize: o.max_party_size,
       sortOrder: o.sort_order,
@@ -439,20 +441,21 @@ async function saveShop(client, shop, input = {}) {
       s.customerCanReschedule !== false,
       int(s.customerChangeCutoffHours ?? 2, "ลูกค้าเปลี่ยนเองได้ถึงก่อนนัด (ชั่วโมง)", { min: 0, max: 720 }),
       ...depositSettings(s),
-      s.lineReminders !== false
+      s.lineReminders !== false,
+      int(s.documentRetentionDays ?? 30, "เก็บเอกสารเช่ากี่วันหลังคืน", { min: 1, max: 365 })
     ];
     await client.query(
       `insert into public.business_booking_settings (business_id, min_lead_minutes, slot_interval_minutes, max_advance_days, hold_minutes,
                                                      customer_can_cancel, customer_can_reschedule, customer_change_cutoff_hours,
-                                                     deposit_mode, deposit_value, payment_info, line_reminders)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12)
+                                                     deposit_mode, deposit_value, payment_info, line_reminders, document_retention_days)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13)
        on conflict (business_id) do update set min_lead_minutes = excluded.min_lead_minutes,
          slot_interval_minutes = excluded.slot_interval_minutes, max_advance_days = excluded.max_advance_days,
          hold_minutes = excluded.hold_minutes, customer_can_cancel = excluded.customer_can_cancel,
          customer_can_reschedule = excluded.customer_can_reschedule,
          customer_change_cutoff_hours = excluded.customer_change_cutoff_hours,
          deposit_mode = excluded.deposit_mode, deposit_value = excluded.deposit_value, payment_info = excluded.payment_info,
-         line_reminders = excluded.line_reminders`,
+         line_reminders = excluded.line_reminders, document_retention_days = excluded.document_retention_days`,
       [shop.id, ...values]
     );
   }
@@ -557,6 +560,13 @@ const deleteResource = (client, shop, id) => removeOrArchive(client, "resources"
 
 // ---------- offerings and prices ----------
 
+const DOCUMENT_KINDS = ["id_card", "driving_license", "passport"];
+function documentsOf(value) {
+  if (value === undefined || value === null) return null; // not sent: keep what is saved
+  if (!Array.isArray(value) || value.some((k) => !DOCUMENT_KINDS.includes(k))) throw invalid("เอกสารที่ขอไม่ถูกต้อง");
+  return DOCUMENT_KINDS.filter((k) => value.includes(k));
+}
+
 function offeringRow(input) {
   const durationMode = oneOf(input.durationMode ?? "fixed", ["fixed", "customer_choice", "days"], "แบบระยะเวลา");
   const row = {
@@ -570,6 +580,8 @@ function offeringRow(input) {
     stepMinutes: null,
     minDays: null,
     maxDays: null,
+    // the customer's ID / licence the shop asks for with this service (design 11.7 E3)
+    requiredDocuments: documentsOf(input.requiredDocuments),
     bufferAfterMinutes: int(input.bufferAfterMinutes ?? 0, "เวลาพักหลังจบ (นาที)", { min: 0, max: 480 }),
     maxPartySize: int(input.maxPartySize ?? 1, "จำนวนคนสูงสุดต่อการจอง", { min: 1, max: 1000 }),
     sortOrder: int(input.sortOrder ?? 0, "ลำดับ", { min: -1000, max: 1000 }),
@@ -619,7 +631,7 @@ async function saveOffering(client, shop, id, input = {}) {
   const o = offeringRow(input);
   const media = validateMedia(input.media);
   const values = [o.category, o.name, o.description, o.durationMode, o.durationMinutes, o.minMinutes, o.maxMinutes, o.stepMinutes,
-    o.bufferAfterMinutes, o.maxPartySize, o.sortOrder, o.active, media === undefined ? null : JSON.stringify(media), o.minDays, o.maxDays];
+    o.bufferAfterMinutes, o.maxPartySize, o.sortOrder, o.active, media === undefined ? null : JSON.stringify(media), o.minDays, o.maxDays, o.requiredDocuments];
 
   let offeringId = id;
   if (id) {
@@ -627,7 +639,8 @@ async function saveOffering(client, shop, id, input = {}) {
     const { rowCount } = await client.query(
       `update public.offerings set category = $3, name = $4, description = $5, duration_mode = $6, duration_minutes = $7,
               min_minutes = $8, max_minutes = $9, step_minutes = $10, buffer_after_minutes = $11, max_party_size = $12,
-              sort_order = $13, active = $14, media = coalesce($15::jsonb, media), min_days = $16, max_days = $17
+              sort_order = $13, active = $14, media = coalesce($15::jsonb, media), min_days = $16, max_days = $17,
+              required_documents = coalesce($18::text[], required_documents)
         where id = $1 and business_id = $2`,
       [id, shop.id, ...values]
     );
@@ -635,8 +648,8 @@ async function saveOffering(client, shop, id, input = {}) {
   } else {
     const { rows } = await client.query(
       `insert into public.offerings (business_id, category, name, description, duration_mode, duration_minutes, min_minutes, max_minutes,
-              step_minutes, buffer_after_minutes, max_party_size, sort_order, active, media, min_days, max_days)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, coalesce($14::jsonb, '[]'::jsonb), $15, $16) returning id`,
+              step_minutes, buffer_after_minutes, max_party_size, sort_order, active, media, min_days, max_days, required_documents)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, coalesce($14::jsonb, '[]'::jsonb), $15, $16, coalesce($17::text[], '{}')) returning id`,
       [shop.id, ...values]
     );
     offeringId = rows[0].id;

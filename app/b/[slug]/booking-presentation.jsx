@@ -239,6 +239,74 @@ export function BookingSubmitBar({ formId, disabled, busy, price, label = "ร�
   );
 }
 
+// ---------- rental documents (migration …002700, design 11.7 E3) ----------
+
+/**
+ * The ID / licence a rental asks for. Nothing is sent before the customer ticks the consent, which says
+ * who keeps it, why, and when it is deleted. uploadUrl: /api/b/<slug>/manage/<token>/document
+ * onUploaded(view) gets the manage page's new data (with view.documents).
+ */
+export function DocumentsBox({ documents, shopName, uploadUrl, onUploaded }) {
+  const [consent, setConsent] = useState(false);
+  const [state, setState] = useState({ busy: null, error: "" });
+  if (!documents?.required?.length) return null;
+  const sent = new Set((documents.uploaded ?? []).map((d) => d.kind));
+  const done = documents.required.every((d) => sent.has(d.kind));
+  const labels = documents.required.map((d) => d.label).join(" และ ");
+
+  async function upload(kind, event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) return setState({ busy: null, error: "เลือกรูปเป็น JPG หรือ PNG" });
+    if (file.size > 10 * 1024 * 1024) return setState({ busy: null, error: "รูปใหญ่เกิน 10 MB" });
+    setState({ busy: kind, error: "" });
+    try {
+      const response = await fetch(`${uploadUrl}?kind=${kind}&consent=yes`, { method: "POST", headers: { "content-type": file.type }, body: file });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error?.message || "ส่งเอกสารไม่สำเร็จ กรุณาลองใหม่");
+      setState({ busy: null, error: "" });
+      onUploaded?.(payload.data);
+    } catch (e) {
+      setState({ busy: null, error: e.message });
+    }
+  }
+
+  return (
+    <section className="bk-docs" data-done={done || undefined} aria-labelledby="docs-title">
+      <div className="bk-deposit-head">
+        <h2 id="docs-title">เอกสารประกอบการเช่า</h2>
+        <span className="bk-status" data-status={done ? "confirmed" : "held"}>{done ? "ส่งครบแล้ว" : `ส่งแล้ว ${sent.size}/${documents.required.length}`}</span>
+      </div>
+      <p className="bk-muted">ร้านขอรูป{labels}ของผู้เช่า เพื่อยืนยันตัวตนก่อนรับของ</p>
+      <label className="bk-consent">
+        <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
+        <span>
+          ยินยอมให้ <b>{shopName}</b> เก็บรูป{labels}ของฉัน เพื่อยืนยันตัวตนสำหรับการเช่านี้เท่านั้น · เห็นได้เฉพาะร้าน · เข้ารหัสเก็บไว้ และ
+          <b> ลบอัตโนมัติ {documents.retentionDays} วันหลังคืนของ</b> หรือทันทีเมื่อยกเลิกการจอง
+        </span>
+      </label>
+      <ul className="bk-doc-list">
+        {documents.required.map((d) => (
+          <li key={d.kind}>
+            <span className="bk-doc-name">
+              <span aria-hidden="true">{sent.has(d.kind) ? "✅" : "🪪"}</span>
+              {d.label}
+              {sent.has(d.kind) && <small> · ส่งแล้ว</small>}
+            </span>
+            <label className={sent.has(d.kind) ? "bk-secondary bk-upload" : "bk-primary bk-upload"} aria-disabled={!consent || state.busy !== null}>
+              <input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" disabled={!consent || state.busy !== null} onChange={(e) => upload(d.kind, e)} />
+              {state.busy === d.kind ? "กำลังส่ง…" : sent.has(d.kind) ? "ส่งใหม่" : "ถ่าย/แนบรูป"}
+            </label>
+          </li>
+        ))}
+      </ul>
+      {!consent && !done && <p className="bk-fine">ติ๊กยินยอมก่อน แล้วจึงแนบรูปได้</p>}
+      {state.error && <p className="bk-error" role="alert">{state.error}</p>}
+    </section>
+  );
+}
+
 // ---------- transfer deposit (migration …002200) ----------
 
 const baht = (n) => `${Number(n).toLocaleString("th-TH")} บาท`;

@@ -108,7 +108,9 @@ async function listBookings(client, shop, { from, days = 1 } = {}) {
                         from public.booking_resources br join public.resources r on r.id = br.resource_id
                        where br.booking_id = b.id and br.addon_id is null), '[]'::json) as resources,
             coalesce((select json_agg(json_build_object('name', ba.name, 'quantity', ba.quantity, 'total', ba.total) order by ba.name)
-                        from public.booking_addons ba where ba.booking_id = b.id), '[]'::json) as addons
+                        from public.booking_addons ba where ba.booking_id = b.id), '[]'::json) as addons,
+            o.required_documents,
+            (select count(*)::int from public.booking_documents d where d.booking_id = b.id) as documents
        from public.bookings b
        join public.offerings o on o.id = b.offering_id
        join public.customers c on c.id = b.customer_id
@@ -143,7 +145,9 @@ async function listBookings(client, shop, { from, days = 1 } = {}) {
       // the customer already has a link (from booking online, or one the shop sent)
       hasLink: b.has_link,
       depositDue: b.deposit_due,
-      slips: b.slips
+      slips: b.slips,
+      // a rental's ID / licence (design 11.7 E3): how many asked for, how many in
+      documents: b.required_documents?.length ? { asked: b.required_documents.length, received: b.documents } : null
     };
   });
 }

@@ -6,7 +6,7 @@
 
 import { useState } from "react";
 import CustomerFrame from "../../customer-frame.jsx";
-import { DepositBox, DirectionsButton, ShopHeader, ResourceSummary } from "../../booking-presentation.jsx";
+import { DepositBox, DirectionsButton, DocumentsBox, ShopHeader, ResourceSummary } from "../../booking-presentation.jsx";
 
 const STATUS = {
   held: "รอโอนมัดจำ",
@@ -132,6 +132,18 @@ export default function ManageBookingClient({ token, initial }) {
           onUploaded={(next) => {
             setView(next);
             setNotice("ส่งสลิปแล้ว ร้านจะยืนยันคิวเมื่อตรวจยอด");
+          }}
+        />
+      )}
+
+      {view.documents && (
+        <DocumentsBox
+          documents={view.documents}
+          shopName={shop.name}
+          uploadUrl={`${api}/document`}
+          onUploaded={(next) => {
+            setView(next);
+            setNotice("ส่งเอกสารแล้ว ร้านจะตรวจก่อนส่งมอบของ");
           }}
         />
       )}

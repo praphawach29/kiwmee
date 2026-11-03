@@ -861,3 +861,11 @@
 .ad-timeline-bar[data-status="checked_in"] { background: #0b7a50; }
 .ad-timeline-bar[data-status="completed"] { background: #9e98bd; }
 .ad-timeline-loading { position: absolute; left: 8px; top: 8px; }
+
+/* rental documents viewer (design 11.7 E3) */
+.ad-docs { border: 2px solid var(--accent, #6a4cff); }
+.ad-docs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 12px; }
+.ad-doc { margin: 0; display: grid; gap: 8px; padding: 10px; border-radius: 12px; border: 1px solid var(--line, #e6e3f2); }
+.ad-doc img { display: block; width: 100%; max-height: 360px; object-fit: contain; border-radius: 8px; background: #f3f1fb; }
+.ad-doc figcaption { display: grid; gap: 4px; }
+.ad-deposit-line[data-tone="ok"] { color: var(--ok, #0b7a50); }

@@ -99,6 +99,7 @@ async function shopInfo(db, slug) {
     about: gallery.about ?? "",
     address: gallery.address ?? "",
     directions: directionsLink({ address: gallery.address, mapUrl: gallery.map_url }),
+    documentRetentionDays: catalog.settings?.document_retention_days ?? 30,
     flow: {
       entry: catalog.flow.entry,
       then: catalog.flow.then,
@@ -124,6 +125,7 @@ async function shopInfo(db, slug) {
       minMinutes: o.duration_mode === "customer_choice" ? o.min_minutes : null,
       maxMinutes: o.duration_mode === "customer_choice" ? o.max_minutes : null,
       // rented by the day (design 11.7)
+      requiredDocuments: o.required_documents ?? [],
       minDays: o.duration_mode === "days" ? o.min_days : null,
       maxDays: o.duration_mode === "days" ? o.max_days : null,
       maxPartySize: o.max_party_size,

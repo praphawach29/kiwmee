@@ -611,3 +611,11 @@ button.bk-cal-day:not([data-unavailable])::after { content: ""; position: absolu
 .bk-wallet-hint { text-align: center; font-size: .8rem; }
 a.bk-points-button { display: inline-flex; align-items: center; text-decoration: none; }
 .bk-wallet-slide { align-self: start; }
+
+/* ---------- the booking's own link (after booking): smaller, both buttons on one line ---------- */
+.bk-link-box { gap: 6px; padding: 14px; }
+.bk-link-box strong { font-size: .98rem; }
+.bk-link-box p { font-size: .8rem; line-height: 1.55; }
+.bk-link-actions { flex-wrap: nowrap; gap: 8px; margin-top: 4px; }
+.bk-link-actions .bk-primary, .bk-link-actions .bk-secondary { flex: 1 1 0; min-width: 0; min-height: 42px; padding: 6px 10px; border-radius: 12px; font-size: .88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bk-link-actions .bk-secondary { flex: 0 1 auto; }

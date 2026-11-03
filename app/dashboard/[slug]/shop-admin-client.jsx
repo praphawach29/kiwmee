@@ -15,6 +15,7 @@ import { shopNavigation, shopTabs, resolveShopTab } from "../merchant-navigation
 import { bookingFlowDraft, bookingFlowFromDraft, catalogWarnings, kindWord, previewPaths, resourceWord } from "./flow-preview.mjs";
 import { BOOKING_TEMPLATES, previewBookingTemplate } from "../../../src/v2/booking-templates.js";
 import { AMENITIES } from "../../../src/v2/amenities.js";
+import { parseScan, bookingCode } from "../../../src/v2/scan-codes.js";
 
 // Defense in depth for owner-only settings controls; APIs/RLS enforce permissions.
 const ReadOnly = createContext(false);
@@ -89,6 +90,9 @@ export default function ShopAdmin({ slug }) {
   const [signOutError, setSignOutError] = useState("");
   const [version, setVersion] = useState(0);
   const [bookingDay, setBookingDay] = useState(null); // a day picked from the activity panel
+  const [focusBooking, setFocusBooking] = useState(null); // a booking opened from the scanner
+  const [scanned, setScanned] = useState(null); // ?scan=… when a phone camera opened a check-in QR
+  const [saleCode, setSaleCode] = useState(null); // a member scanned at the desk → a sale for them
   const activity = useActivity(slug, Boolean(catalog?.shop.role));
 
   const reload = useCallback(async () => {
@@ -107,6 +111,12 @@ export default function ShopAdmin({ slug }) {
 
   useEffect(() => {
     const syncHash = () => setRequestedTab(window.location.hash.slice(1));
+    // a check-in or member QR read by the phone's own camera lands here with ?scan=…
+    const scan = new URLSearchParams(window.location.search).get("scan");
+    if (scan) {
+      setScanned(scan);
+      window.history.replaceState(null, "", `${window.location.pathname}#scan`);
+    }
     syncHash();
     window.addEventListener("hashchange", syncHash);
     return () => window.removeEventListener("hashchange", syncHash);
@@ -130,7 +140,19 @@ export default function ShopAdmin({ slug }) {
 
   function pickActivity(event) {
     setBookingDay(event.date);
+    setFocusBooking(null);
     show("bookings");
+  }
+
+  function openBooking(booking) {
+    setBookingDay(booking.date);
+    setFocusBooking(booking.id);
+    show("bookings");
+  }
+
+  function saleFor(code) {
+    setSaleCode(code);
+    show("bills");
   }
 
   async function signOut() {
@@ -186,8 +208,9 @@ export default function ShopAdmin({ slug }) {
       {!tab && <p className="ad-error" role="alert">คุณไม่มีสิทธิ์เข้าถึงเมนูจัดการร้านนี้ กรุณาติดต่อเจ้าของร้าน</p>}
       <ReadOnly.Provider value={readOnly}>
         {tab === "overview" && <OverviewTab slug={slug} catalog={catalog} onNavigate={show} />}
-        {tab === "bookings" && <BookingsTab key={bookingDay ?? "today"} slug={slug} catalog={catalog} initialDay={bookingDay} />}
-        {tab === "bills" && <BillsTab slug={slug} catalog={catalog} />}
+        {tab === "bookings" && <BookingsTab key={`${bookingDay ?? "today"}:${focusBooking ?? ""}`} slug={slug} catalog={catalog} initialDay={bookingDay} focusId={focusBooking} />}
+        {tab === "scan" && <ScanTab slug={slug} initial={scanned} onBooking={openBooking} onSale={saleFor} />}
+        {tab === "bills" && <BillsTab key={saleCode ?? "bills"} slug={slug} catalog={catalog} saleCode={saleCode} onSaleDone={() => setSaleCode(null)} />}
         {tab === "members" && <LoyaltyTab slug={slug} />}
         {tab === "flow" && <FlowTab slug={slug} catalog={catalog} version={version} onSaved={reload} />}
         {tab === "offerings" && <OfferingsTab slug={slug} catalog={catalog} onSaved={reload} />}
@@ -403,7 +426,7 @@ function addDays(date, n) {
 const longDate = (date) =>
   new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date(`${date}T00:00:00Z`));
 
-function BookingsTab({ slug, catalog, initialDay }) {
+function BookingsTab({ slug, catalog, initialDay, focusId = null }) {
   const [day, setDay] = useState(() => initialDay ?? today());
   const [list, setList] = useState(null);
   const [error, setError] = useState("");
@@ -431,6 +454,12 @@ function BookingsTab({ slug, catalog, initialDay }) {
     const timer = setInterval(() => document.visibilityState === "visible" && load(), 60000);
     return () => clearInterval(timer);
   }, [load]);
+
+  // a booking opened from the scanner: bring it into view once the day's list is in
+  useEffect(() => {
+    if (!focusId || !list) return;
+    document.getElementById(`booking-${focusId}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [focusId, list]);
 
   async function act(booking, path, body, done) {
     if (await save.run(() => api("POST", shopPath(slug, `/bookings/${booking.id}/${path}`), body), done)) load();
@@ -519,7 +548,7 @@ function BookingsTab({ slug, catalog, initialDay }) {
             const paid = b.bill?.status === "closed";
             const billable = !paid && ["pending", "confirmed", "checked_in", "completed"].includes(b.status);
             return (
-              <li key={b.id} className="ad-booking" data-tone={tone}>
+              <li key={b.id} id={`booking-${b.id}`} className="ad-booking" data-tone={tone} data-focus={b.id === focusId || undefined}>
                 <div className="ad-booking-time">
                   {b.endDate && b.endDate !== b.date ? (
                     // a rental over several days: what happens on the day shown
@@ -857,25 +886,230 @@ function LoyaltyTab({ slug }) {
  * The member on this bill: from a booking made in LINE, or the 6-digit code a walk-in shows from their
  * LINE page. onChange({ memberCode, reward }) — the parent takes the reward's discount off the total.
  */
-function MemberBox({ slug, bookingId = null, onChange }) {
+// ---------- check-in / member QR (src/v2/scan-codes.js) ----------
+
+// The back camera, read a few times a second: the browser's own QR reader where there is one
+// (Chrome on Android), otherwise jsQR on a small copy of the frame (iPhone). Nothing is uploaded.
+function QrScanner({ onResult }) {
+  const video = useRef(null);
+  const handler = useRef(onResult);
+  handler.current = onResult;
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let stream = null;
+    let timer = null;
+    let stopped = false;
+    const canvas = document.createElement("canvas");
+    (async () => {
+      try {
+        if (!navigator.mediaDevices?.getUserMedia) throw new Error("อุปกรณ์หรือเบราว์เซอร์นี้เปิดกล้องไม่ได้ — พิมพ์รหัสแทนได้");
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+        if (stopped) return stream.getTracks().forEach((t) => t.stop());
+        video.current.srcObject = stream;
+        await video.current.play().catch(() => {});
+        let detector = null;
+        if ("BarcodeDetector" in window) {
+          try { detector = new window.BarcodeDetector({ formats: ["qr_code"] }); } catch { detector = null; }
+        }
+        const jsQR = detector ? null : (await import("jsqr")).default;
+        const tick = async () => {
+          if (stopped) return;
+          const v = video.current;
+          let text = null;
+          if (v && v.readyState >= 2 && v.videoWidth) {
+            if (detector) {
+              const codes = await detector.detect(v).catch(() => []);
+              text = codes[0]?.rawValue ?? null;
+            } else {
+              const scale = Math.min(1, 640 / Math.max(v.videoWidth, v.videoHeight));
+              canvas.width = Math.round(v.videoWidth * scale);
+              canvas.height = Math.round(v.videoHeight * scale);
+              const ctx = canvas.getContext("2d", { willReadFrequently: true });
+              ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+              const frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+              text = jsQR(frame.data, frame.width, frame.height, { inversionAttempts: "dontInvert" })?.data ?? null;
+            }
+          }
+          if (text && !stopped) return handler.current(text);
+          timer = setTimeout(tick, 180);
+        };
+        tick();
+      } catch (e) {
+        setError(e?.name === "NotAllowedError"
+          ? "ไม่ได้รับอนุญาตให้ใช้กล้อง — อนุญาตกล้องให้เว็บนี้ในการตั้งค่าเบราว์เซอร์ หรือพิมพ์รหัสแทน"
+          : e?.message || "เปิดกล้องไม่สำเร็จ — พิมพ์รหัสแทนได้");
+      }
+    })();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      stream?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+
+  return (
+    <div className="ad-scanner">
+      {error ? <p className="ad-error" role="alert">{error}</p> : (
+        <div className="ad-scanner-view">
+          <video ref={video} muted playsInline aria-label="กล้องสแกน QR" />
+          <span className="ad-scanner-frame" aria-hidden="true" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ScanTab({ slug, initial = null, onBooking, onSale }) {
+  const [scanning, setScanning] = useState(!initial);
+  const [typed, setTyped] = useState("");
+  const [result, setResult] = useState(null); // { booking } | { member, code }
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const save = useSave();
+
+  const handle = useCallback(async (text) => {
+    setScanning(false);
+    setResult(null);
+    setError("");
+    const found = parseScan(text);
+    if (!found) return setError("อ่านได้ แต่ไม่ใช่ QR การจองหรือ QR สมาชิกของ Kiwmee");
+    setBusy(true);
+    try {
+      if (found.kind === "booking") {
+        setResult({ booking: await api("GET", shopPath(slug, `/bookings/${found.ref}`)) });
+      } else {
+        const member = await api("GET", shopPath(slug, `/loyalty/member?code=${found.code}`));
+        if (!member) throw new Error("ร้านยังไม่เปิดระบบสะสมคะแนน (ตั้งได้ที่แท็บสมาชิกและคะแนน)");
+        setResult({ member, code: found.code });
+      }
+    } catch (e) {
+      if (e.status === 401) window.location.href = "/dashboard";
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }, [slug]);
+
+  useEffect(() => {
+    if (initial) handle(initial);
+  }, [initial, handle]);
+
+  async function checkIn(b) {
+    const ok = await save.run(() => api("POST", shopPath(slug, `/bookings/${b.id}/status`), { status: "checked_in" }), `${b.customer.name} มาถึงแล้ว`);
+    if (ok) setResult({ booking: { ...b, status: "checked_in" } });
+  }
+
+  function again() {
+    setResult(null);
+    setError("");
+    setTyped("");
+    setScanning(true);
+  }
+
+  const b = result?.booking;
+  const m = result?.member;
+  const [label, tone] = b ? STATUS[b.status] ?? [b.status, "off"] : [];
+  const checkable = b && ["pending", "confirmed"].includes(b.status);
+  return (
+    <div className="ad-stack">
+      <section className="ad-card">
+        <h2>สแกน QR ของลูกค้า</h2>
+        <p className="ad-muted">QR เช็กอินอยู่ในหน้า "การจองของฉัน" และลิงก์การจองของลูกค้า · QR สมาชิกอยู่ที่บัตรคะแนน (ใช้ได้ 10 นาที) · หรือใช้กล้องมือถือสแกนก็เปิดหน้านี้ได้เลย</p>
+        {scanning && <QrScanner onResult={handle} />}
+        <form className="ad-row ad-wrap" onSubmit={(e) => { e.preventDefault(); if (typed.trim()) handle(typed); }}>
+          <label className="ad-field ad-short">
+            หรือพิมพ์รหัส
+            <input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="8 ตัว หรือ 6 หลัก" autoCapitalize="characters" />
+          </label>
+          <button className="ad-secondary" disabled={!typed.trim() || busy}>ค้นหา</button>
+          {!scanning && <button type="button" className="ad-primary" onClick={again}>สแกนใหม่</button>}
+        </form>
+        {busy && <p className="ad-muted">กำลังค้นหา…</p>}
+        {error && <p className="ad-error" role="alert">{error}</p>}
+        <Status save={save} />
+      </section>
+
+      {b && (
+        <section className="ad-card ad-scan-result" data-tone={tone}>
+          <div className="ad-row ad-wrap ad-between">
+            <h2>{b.customer.name}</h2>
+            <span className="ad-status" data-tone={tone}>{label}</span>
+          </div>
+          <p className="ad-muted">รหัสการจอง {bookingCode(b.id)}</p>
+          {b.date !== today() && <p className="ad-notice">การจองนี้เป็นของ{longDate(b.date)} ไม่ใช่วันนี้</p>}
+          <dl className="ad-facts">
+            <div><dt>วัน</dt><dd>{longDate(b.date)}</dd></div>
+            <div><dt>เวลา</dt><dd>{b.endDate && b.endDate !== b.date ? `รับ ${b.start} · คืน ${longDate(b.endDate)} ${b.end}` : `${b.start}–${b.end}`}</dd></div>
+            <div><dt>บริการ</dt><dd>{b.offering.name}{b.resources.length ? ` · ${b.resources.map((r) => r.name).join(", ")}` : ""}</dd></div>
+            {b.price ? <div><dt>ราคา</dt><dd>{money(b.price)}{b.bill?.status === "closed" ? " · ชำระแล้ว" : ""}</dd></div> : null}
+            {b.customer.phone && <div><dt>โทร</dt><dd><a className="ad-link" href={`tel:${b.customer.phone}`}>{b.customer.phone}</a></dd></div>}
+          </dl>
+          {b.status === "held" && <p className="ad-notice">ยังรอมัดจำ — ยืนยันมัดจำในรายการจองก่อนเช็กอิน</p>}
+          <div className="ad-row ad-wrap">
+            {checkable && <button type="button" className="ad-primary" disabled={save.busy} onClick={() => checkIn(b)}>เช็กอิน (มาถึงแล้ว)</button>}
+            <button type="button" className={checkable ? "ad-secondary" : "ad-primary"} onClick={() => onBooking(b)}>ดูในรายการจอง{b.status === "checked_in" ? " / ปิดบิล" : ""}</button>
+          </div>
+        </section>
+      )}
+
+      {m && (
+        <section className="ad-card ad-scan-result" data-tone="ok">
+          <div className="ad-row ad-wrap ad-between">
+            <h2>⭐ {m.name}</h2>
+            <span className="ad-status" data-tone="ok">{m.balance.toLocaleString("th-TH")} คะแนน</span>
+          </div>
+          {m.expiring > 0 && <p className="ad-muted">{m.expiring} คะแนนจะหมดอายุเร็วๆ นี้</p>}
+          {m.rewards.length > 0 && (
+            <ul className="ad-list">
+              {m.rewards.map((r) => <li key={r.id}>{r.name} · ใช้ {r.pointsCost} คะแนน{r.usable ? "" : " (ยังไม่พอ)"}</li>)}
+            </ul>
+          )}
+          <p className="ad-muted">ลูกค้าที่จองไว้: ปิดบิลจากรายการจองได้เลย ระบบผูกสมาชิกให้อัตโนมัติ · ลูกค้า walk-in: ขายหน้าร้านพร้อมสะสมคะแนน</p>
+          <div className="ad-row ad-wrap">
+            <button type="button" className="ad-primary" onClick={() => onSale(result.code)}>ขายหน้าร้าน + สะสมคะแนน</button>
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function MemberBox({ slug, bookingId = null, initialCode = null, onChange }) {
   const [member, setMember] = useState(null);
-  const [code, setCode] = useState("");
+  const [code, setCode] = useState(initialCode ?? "");
   const [rewardId, setRewardId] = useState("");
   const [state, setState] = useState({ busy: false, error: "" });
+  const [scanning, setScanning] = useState(false);
 
   useEffect(() => {
     if (!bookingId) return;
     api("GET", shopPath(slug, `/loyalty/member?bookingId=${bookingId}`)).then((m) => setMember(m), () => setMember(null));
   }, [slug, bookingId]);
 
-  async function lookUp() {
+  // a member scanned on the scan tab: look them up straight away
+  useEffect(() => {
+    if (initialCode) lookUp(initialCode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialCode]);
+
+  function scanned(text) {
+    setScanning(false);
+    const found = parseScan(text);
+    if (found?.kind !== "member") return setState({ busy: false, error: "QR นี้ไม่ใช่ QR สมาชิก — ให้ลูกค้ากด \"แสดง QR สมาชิก\" ในหน้า LINE" });
+    setCode(found.code);
+    lookUp(found.code);
+  }
+
+  async function lookUp(value = code) {
+    const typed = value.trim();
     setState({ busy: true, error: "" });
     try {
-      const m = await api("GET", shopPath(slug, `/loyalty/member?code=${encodeURIComponent(code.trim())}`));
+      const m = await api("GET", shopPath(slug, `/loyalty/member?code=${encodeURIComponent(typed)}`));
       if (!m) throw new Error("ร้านยังไม่เปิดระบบสะสมคะแนน");
       setMember(m);
       setRewardId("");
-      onChange({ memberCode: code.trim(), reward: null });
+      onChange({ memberCode: typed, reward: null });
       setState({ busy: false, error: "" });
     } catch (e) {
       setState({ busy: false, error: e.message });
@@ -896,9 +1130,11 @@ function MemberBox({ slug, bookingId = null, onChange }) {
             รหัสสมาชิก (ไม่บังคับ)
             <input inputMode="numeric" pattern="[0-9]{6}" maxLength={6} placeholder="6 หลัก จากหน้า LINE ของลูกค้า" value={code} onChange={(e) => setCode(e.target.value.replace(/[^0-9]/g, ""))} />
           </label>
-          <button type="button" className="ad-secondary" disabled={code.length !== 6 || state.busy} onClick={lookUp}>ตรวจรหัส</button>
+          <button type="button" className="ad-secondary" disabled={code.length !== 6 || state.busy} onClick={() => lookUp()}>ตรวจรหัส</button>
+          <button type="button" className="ad-secondary" onClick={() => setScanning(!scanning)}>{scanning ? "ปิดกล้อง" : "สแกน QR"}</button>
         </div>
       )}
+      {scanning && !member && <QrScanner onResult={scanned} />}
       {state.error && <p className="ad-error">{state.error}</p>}
       {member && (
         <>
@@ -982,7 +1218,7 @@ function CheckoutForm({ slug, booking, onClose, onSaved }) {
 }
 
 /** A sale with no booking: a walk-in, or a shop that takes no bookings */
-function SaleForm({ slug, onClose, onSaved }) {
+function SaleForm({ slug, memberCode = null, onClose, onSaved }) {
   const [f, setF] = useState({ title: "", customerName: "", amount: "", note: "" });
   const [lines, setLines] = useState([{ method: "cash", amount: "" }]);
   const [points, setPoints] = useState({ memberCode: null, reward: null });
@@ -1021,7 +1257,7 @@ function SaleForm({ slug, onClose, onSaved }) {
         <label className="ad-field">ชื่อลูกค้า (ไม่บังคับ)<input value={f.customerName} maxLength={100} onChange={(e) => setF({ ...f, customerName: e.target.value })} autoComplete="off" /></label>
         <label className="ad-field">โน้ต (ไม่บังคับ)<input value={f.note} maxLength={300} onChange={(e) => setF({ ...f, note: e.target.value })} /></label>
       </div>
-      <MemberBox slug={slug} onChange={changePoints} />
+      <MemberBox slug={slug} initialCode={memberCode} onChange={changePoints} />
       {points.reward && <p className="ad-muted">ส่วนลดจากคะแนน −{money(off(f.amount, points.reward))}</p>}
       <PaymentLines lines={lines} setLines={setLines} due={due} />
       <Status save={save} />
@@ -1077,11 +1313,11 @@ const paymentText = (payments) =>
     .map((p) => `${METHODS[p.method] ?? p.method} ${money(p.amount)}`)
     .join(" + ");
 
-function BillsTab({ slug, catalog }) {
+function BillsTab({ slug, catalog, saleCode = null, onSaleDone = () => {} }) {
   const [day, setDay] = useState(today);
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
-  const [form, setForm] = useState(null); // { sale: true } or { refund: bill }
+  const [form, setForm] = useState(saleCode ? { sale: true } : null); // { sale: true } or { refund: bill }
   const owner = catalog.shop.role === "owner";
 
   const load = useCallback(async () => {
@@ -1162,7 +1398,7 @@ function BillsTab({ slug, catalog }) {
           ))}
         </ul>
       </section>
-      {form?.sale && <SaleForm slug={slug} onClose={() => setForm(null)} onSaved={saved} />}
+      {form?.sale && <SaleForm slug={slug} memberCode={saleCode} onClose={() => { setForm(null); onSaleDone(); }} onSaved={(r) => { onSaleDone(); saved(r); }} />}
       {form?.refund && <RefundForm key={form.refund.id} slug={slug} bill={form.refund} onClose={() => setForm(null)} onSaved={() => { setForm(null); load(); }} />}
     </div>
   );

@@ -4,6 +4,7 @@
 // see it, move it to another free time with the same stylist, or cancel it, as far as the shop's
 // rules allow. The server checks the rules again on every change (src/v2/manage-booking.js).
 
+import { CheckinQr } from "../../qr.jsx";
 import { useState } from "react";
 import CustomerFrame from "../../customer-frame.jsx";
 import { DepositBox, DirectionsButton, DocumentsBox, ShopHeader, ResourceSummary } from "../../booking-presentation.jsx";
@@ -200,6 +201,7 @@ export default function ManageBookingClient({ token, initial }) {
             </div>
           )}
         </dl>
+        {booking.checkin && <CheckinQr slug={shop.slug} id={booking.checkin} />}
         {!["cancelled", "no_show", "expired", "completed"].includes(booking.status) && <DirectionsButton href={shop.directions} />}
         {open && (
           <p className="bk-muted">

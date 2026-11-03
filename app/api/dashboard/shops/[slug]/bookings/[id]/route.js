@@ -1,5 +1,6 @@
 const { shopRoute } = require("../../../../../../../src/v2/admin-routes");
-const { rescheduleBooking, notifyChange } = require("../../../../../../../src/v2/admin-bookings");
+const { rescheduleBooking, notifyChange, findBooking } = require("../../../../../../../src/v2/admin-bookings");
+const { notFound } = require("../../../../../../../src/errors");
 const { getBookingPool } = require("../../../../../../../src/v2/db");
 
 // Move a booking: { date, time, resourceId?, durationMinutes? }
@@ -10,4 +11,11 @@ const PUT = shopRoute(async (client, shop, body, { id }) => {
   return { id: result.id, ...(line ? { line } : {}) };
 }, { owner: false });
 
-module.exports = { PUT };
+// One booking from the check-in QR (its id) or the 8-character code under it — for the scanner at the desk
+const GET = shopRoute(async (client, shop, body, { id }) => {
+  const booking = await findBooking(client, shop, id);
+  if (!booking) throw notFound("ไม่พบการจองนี้ในร้าน (QR อาจเป็นของร้านอื่น)");
+  return booking;
+}, { owner: false, read: true });
+
+module.exports = { GET, PUT };

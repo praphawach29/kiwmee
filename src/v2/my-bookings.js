@@ -54,6 +54,8 @@ async function myBookings(db, slug, body = {}, { now = new Date(), verifyLineTok
     return {
       upcoming,
       booking: {
+        // what the check-in QR carries (the shop scans it at the desk; it opens nothing for anyone else)
+        checkin: upcoming ? b.id : null,
         status,
         date: start.date,
         start: start.time,

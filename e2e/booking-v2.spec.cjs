@@ -45,6 +45,34 @@ test("salon: start from a date, then offering, anyone, time", async ({ page }) =
   expect(errors).toEqual([]);
 });
 
+test("date step: the month calendar shows the same days, picks one, and is remembered on this phone", async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto("/b/bloom-hair");
+  await page.getByRole("button", { name: /เลือกวันก่อน/ }).click();
+  await page.getByRole("button", { name: /ปฏิทิน/ }).click();
+
+  const calendar = page.locator(".bk-calendar");
+  await expect(calendar.getByRole("columnheader")).toHaveCount(7);
+  await expect(page.getByRole("button", { name: "เดือนก่อนหน้า" })).toBeDisabled();
+  // the strip's days are the calendar's buttons; nothing before today can be tapped
+  const days = calendar.locator('[data-testid="option-date"]:not([disabled])');
+  expect(await days.count()).toBeGreaterThan(5);
+  const value = await days.nth(3).getAttribute("data-value");
+  await days.nth(3).click();
+  await expect(page.getByRole("heading", { name: "เลือกบริการ" })).toBeVisible();
+  const day = Number(value.slice(8));
+  await expect(page.locator(".bk-chips")).toContainText(String(day));
+
+  // back on the date step later: the calendar again
+  await page.reload();
+  await page.getByRole("button", { name: /เลือกวันก่อน/ }).click();
+  await expect(page.locator(".bk-calendar")).toBeVisible();
+  await page.getByRole("button", { name: /แถบวัน/ }).click();
+  await expect(page.locator(".bk-date-strip")).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
 test("salon: start from an offering, pick the colourist, then date and time", async ({ page }) => {
   await page.goto("/b/bloom-hair");
   await page.getByRole("button", { name: /เลือกบริการก่อน/ }).click();

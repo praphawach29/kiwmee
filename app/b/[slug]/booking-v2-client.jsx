@@ -627,21 +627,40 @@ function TimeTabs({ options, chosen, optionButton }) {
   );
 }
 
+// The days the shop takes bookings: a strip to swipe (the next days, the usual case) or a month
+// calendar (booking far ahead, a rental). Both show the same days from the engine, so a full or
+// closed day looks the same in either and cannot be tapped.
 function DateStrip({ options, today, optionProps }) {
+  // the customer's last choice, on this phone only
+  const [calendar, setCalendarState] = useState(false);
+  useEffect(() => {
+    try { if (window.localStorage.getItem("kiwmee.dates") === "calendar") setCalendarState(true); } catch { /* private mode */ }
+  }, []);
+  const setCalendar = (on) => {
+    setCalendarState(on);
+    try { window.localStorage.setItem("kiwmee.dates", on ? "calendar" : "strip"); } catch { /* private mode */ }
+  };
   const strip = useRef(null);
   useEffect(() => {
-    strip.current?.querySelector('[data-selected="true"]')?.scrollIntoView?.({ inline: "center", block: "nearest" });
-  }, []);
+    if (!calendar) strip.current?.querySelector('[data-selected="true"]')?.scrollIntoView?.({ inline: "center", block: "nearest" });
+  }, [calendar]);
   const month = (value, opts) => new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", ...opts }).format(new Date(`${value}T00:00:00Z`));
   const first = options[0]?.value;
   const last = options[options.length - 1]?.value;
   const range = first ? (month(first, { month: "long" }) === month(last, { month: "long" }) ? month(first, { month: "long", year: "numeric" }) : `${month(first, { month: "short" })} – ${month(last, { month: "short", year: "numeric" })}`) : "";
   const scroll = (direction) => strip.current?.scrollBy({ left: direction * strip.current.clientWidth, behavior: "smooth" });
+  const toggle = (
+    <button type="button" className="bk-cal-toggle" aria-pressed={calendar} onClick={() => setCalendar(!calendar)}>
+      {calendar ? <><StripIcon /> แถบวัน</> : <><CalendarIcon /> ปฏิทิน</>}
+    </button>
+  );
+  if (calendar) return <MonthCalendar options={options} today={today} optionProps={optionProps} toggle={toggle} />;
   return (
     <div className="bk-dates">
       <div className="bk-dates-head">
         <strong>{range}</strong>
         <div>
+          {toggle}
           <button type="button" className="bk-icon-button" aria-label="วันก่อนหน้า" onClick={() => scroll(-1)}>‹</button>
           <button type="button" className="bk-icon-button" aria-label="วันถัดไป" onClick={() => scroll(1)}>›</button>
         </div>
@@ -655,6 +674,81 @@ function DateStrip({ options, today, optionProps }) {
         ))}
       </div>
     </div>
+  );
+}
+
+const WEEK_HEAD = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
+const monthKey = (value) => value.slice(0, 7);
+const shiftMonth = (key, n) => {
+  const d = new Date(`${key}-01T00:00:00Z`);
+  d.setUTCMonth(d.getUTCMonth() + n);
+  return d.toISOString().slice(0, 7);
+};
+
+/** One month at a time, Sunday first; days outside the booking window are greyed out, not buttons */
+function MonthCalendar({ options, today, optionProps, toggle }) {
+  const byDay = new Map(options.map((o) => [o.value, o]));
+  const firstMonth = options.length ? monthKey(options[0].value) : monthKey(today);
+  const lastMonth = options.length ? monthKey(options[options.length - 1].value) : firstMonth;
+  const start = options.find((o) => optionProps(o)["data-selected"]) ?? options.find((o) => o.available) ?? options[0];
+  const [shown, setShown] = useState(start ? monthKey(start.value) : firstMonth);
+
+  const d = new Date(`${shown}-01T00:00:00Z`);
+  const lead = d.getUTCDay();
+  const days = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+  const cells = [...Array(lead).fill(null), ...Array.from({ length: days }, (_, i) => `${shown}-${String(i + 1).padStart(2, "0")}`)];
+  const title = new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", month: "long", year: "numeric" }).format(d);
+  const free = options.filter((o) => o.available && monthKey(o.value) === shown).length;
+
+  return (
+    <div className="bk-dates bk-calendar">
+      <div className="bk-dates-head">
+        <strong aria-live="polite">{title}</strong>
+        <div>
+          {toggle}
+          <button type="button" className="bk-icon-button" aria-label="เดือนก่อนหน้า" disabled={shown <= firstMonth} onClick={() => setShown(shiftMonth(shown, -1))}>‹</button>
+          <button type="button" className="bk-icon-button" aria-label="เดือนถัดไป" disabled={shown >= lastMonth} onClick={() => setShown(shiftMonth(shown, 1))}>›</button>
+        </div>
+      </div>
+      <div className="bk-cal-grid" role="grid" aria-label={`ปฏิทิน ${title}`}>
+        {WEEK_HEAD.map((w) => <span key={w} className="bk-cal-head" role="columnheader">{w}</span>)}
+        {cells.map((value, i) => {
+          if (!value) return <span key={`blank-${i}`} aria-hidden="true" />;
+          const o = byDay.get(value);
+          const day = Number(value.slice(8));
+          if (!o) return <span key={value} className="bk-cal-day" data-out="true" aria-hidden="true">{day}</span>;
+          const props = optionProps(o);
+          const reason = o.available ? "ว่าง" : DAY_REASON_TEXT[o.reason] ?? "ไม่ว่าง";
+          return (
+            <button key={value} {...props} className="bk-cal-day" data-today={value === today || undefined} title={reason}
+              aria-label={`${new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long" }).format(new Date(`${value}T00:00:00Z`))} · ${reason}`}>
+              {day}
+            </button>
+          );
+        })}
+      </div>
+      <p className="bk-cal-legend">
+        <span><i data-kind="free" /> ว่าง</span>
+        <span><i data-kind="full" /> เต็ม / ปิด</span>
+        <span className="bk-muted">{free > 0 ? `เดือนนี้ว่าง ${free} วัน` : "เดือนนี้ไม่มีวันว่าง"}</span>
+      </p>
+    </div>
+  );
+}
+
+function CalendarIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <rect x="3" y="4.5" width="18" height="16" rx="2.5" /><path d="M3 9.5h18M8 2.5v4M16 2.5v4" />
+    </svg>
+  );
+}
+
+function StripIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <rect x="2.5" y="6" width="5" height="12" rx="1.5" /><rect x="9.5" y="6" width="5" height="12" rx="1.5" /><rect x="16.5" y="6" width="5" height="12" rx="1.5" />
+    </svg>
   );
 }
 

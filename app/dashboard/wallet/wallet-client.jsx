@@ -168,8 +168,26 @@ export default function WalletClient() {
             <div className="ad-card">
               <h2>โควตาเดือนนี้</h2>
               <p className="ad-muted">
-                ข้อความ LINE ใช้ {money(wallet.usage.messagesUsed)} / {money(wallet.usage.messagesIncluded + wallet.usage.messagesPurchased)} ข้อความ
+                ข้อความ LINE ใช้ {money(wallet.quota.used)} / {money(wallet.quota.total)} ข้อความ
+                {wallet.quota.level === "warn" ? " · ใกล้เต็มแล้ว" : ""}
+                {wallet.quota.level === "full" ? " · เต็มแล้ว" : ""}
               </p>
+              <div
+                role="progressbar"
+                aria-valuenow={wallet.quota.percent}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label="โควตาข้อความ LINE"
+                style={{ height: 8, borderRadius: 999, background: "#EDE9F7", overflow: "hidden", margin: "6px 0 10px" }}
+              >
+                <div
+                  style={{
+                    width: `${wallet.quota.percent}%`,
+                    height: "100%",
+                    background: wallet.quota.level === "full" ? "#B42318" : wallet.quota.level === "warn" ? "#B54708" : "#6A4CFF"
+                  }}
+                />
+              </div>
               <p className="ad-muted">
                 ตรวจสลิปอัตโนมัติใช้ {money(wallet.usage.slipsUsed)} / {money(wallet.usage.slipsPurchased)} ครั้ง
               </p>

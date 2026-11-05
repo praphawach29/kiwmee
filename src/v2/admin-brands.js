@@ -7,6 +7,7 @@
 // plan's branch limit again.
 
 const { AppError, badRequest, notFound } = require("../errors");
+const { quotaOf } = require("./wallet");
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SLUG = /^[a-z0-9][a-z0-9-]{1,40}$/;
@@ -62,23 +63,41 @@ async function listBrands(client) {
     `select br.id, br.name, public.brand_plan(br.id) as plan, public.is_brand_owner(br.id) as owner,
             public.brand_branch_limit(public.brand_plan(br.id)) as branch_limit,
             (select count(*)::int from public.businesses x where x.brand_id = br.id) as branch_count,
+            coalesce(u.messages_used, 0) as messages_used,
+            coalesce(u.messages_included, 0) as messages_included,
+            coalesce(u.messages_purchased, 0) as messages_purchased,
             coalesce((select json_agg(json_build_object('slug', b.slug, 'name', b.name, 'kind', b.kind, 'role', m.role) order by b.name)
                         from public.businesses b
                         join public.business_members m on m.business_id = b.id and m.user_id = auth.uid()
                        where b.brand_id = br.id), '[]'::json) as shops
        from public.brands br
+       left join public.usage_counters u
+              on u.brand_id = br.id
+             and u.period = date_trunc('month', (now() at time zone 'Asia/Bangkok'))::date
       order by br.name`
   );
-  return rows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    plan: r.plan,
-    planName: PLAN_NAMES[r.plan] ?? r.plan,
-    owner: r.owner,
-    branchLimit: r.branch_limit,
-    branchCount: r.branch_count,
-    shops: r.shops
-  }));
+  return rows.map((r) => {
+    // how much of this month's LINE messages the brand used (shown in /dashboard; nothing is blocked)
+    const quota = quotaOf(r.plan, {
+      messagesUsed: r.messages_used,
+      messagesIncluded: r.messages_included,
+      messagesPurchased: r.messages_purchased
+    });
+    return {
+      id: r.id,
+      name: r.name,
+      plan: r.plan,
+      planName: PLAN_NAMES[r.plan] ?? r.plan,
+      owner: r.owner,
+      branchLimit: r.branch_limit,
+      branchCount: r.branch_count,
+      messagesUsed: quota.used,
+      messagesTotal: quota.total,
+      quotaPercent: quota.percent,
+      quotaLevel: quota.level,
+      shops: r.shops
+    };
+  });
 }
 
 async function renameBrand(client, id, input = {}) {

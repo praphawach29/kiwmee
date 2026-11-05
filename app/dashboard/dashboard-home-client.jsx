@@ -332,6 +332,18 @@ function BrandCard({ brand, brands, onChanged }) {
         </div>
         <span className="ad-status" data-tone="info">แพ็กเกจ{brand.planName} · {brand.branchCount}/{brand.branchLimit} สาขา</span>
       </div>
+      {brand.owner && brand.messagesTotal > 0 && (
+        <p
+          className="ad-muted"
+          style={{ color: brand.quotaLevel === "full" ? "#B42318" : brand.quotaLevel === "warn" ? "#B54708" : undefined }}
+        >
+          ข้อความ LINE เดือนนี้ {brand.messagesUsed.toLocaleString("th-TH")}/{brand.messagesTotal.toLocaleString("th-TH")} ({brand.quotaPercent}%)
+          {brand.quotaLevel === "warn" ? " · ใกล้เต็มแล้ว" : ""}
+          {brand.quotaLevel === "full" ? " · เต็มแล้ว — ซื้อแพ็กเพิ่มได้ที่กระเป๋าเงิน" : ""}
+          {" · "}
+          <a href={`/dashboard/wallet?brand=${brand.id}`}>กระเป๋าเงิน</a>
+        </p>
+      )}
       <ul className="ad-list">
         {brand.shops.map((s) => (
           <li key={s.slug}>

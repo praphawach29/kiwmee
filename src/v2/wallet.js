@@ -423,4 +423,4 @@ async function reviewTopup(adminUserId, topupId, action) {
   });
 }
 
-module.exports = { SKUS, PLAN_MESSAGES, quotaOf, messageAllowed, allowanceForBusiness, walletOf, submitTopup, buy, judgeTopup, recordMessages, recordSlipCheck, meterMessage, listTopups, reviewTopup, MIN_TOPUP, MAX_TOPUP };
+module.exports = { ownerTx, SKUS, PLAN_MESSAGES, quotaOf, messageAllowed, allowanceForBusiness, walletOf, submitTopup, buy, judgeTopup, recordMessages, recordSlipCheck, meterMessage, listTopups, reviewTopup, MIN_TOPUP, MAX_TOPUP };

@@ -31,6 +31,7 @@ const NAV = [
   ]},
   { group: "การเงิน", items: [
     { id: "topups", icon: "฿", label: "สลิปรอเติมเงิน" },
+    { id: "revenue", icon: "฿", label: "รายงานรายได้" },
   ]},
   { group: "ระบบ", items: [
     { id: "settings", icon: "⚙", label: "การตั้งค่า", children: [
@@ -206,6 +207,7 @@ export default function SuperAdmin() {
           {page === "line" && <LineSection data={data} error={error} load={load} />}
           {page === "billing" && <BillingSection data={data} error={error} load={load} />}
           {page === "topups" && <TopupsSection />}
+          {page === "revenue" && <RevenueSection />}
           {page === "security" && <SecuritySection data={data} signOut={signOut} signingOut={signingOut} />}
           {page === "admins" && <AdminsSection user={user} />}
           {["brands", "shops"].includes(page) && <CatalogSection mode={page} catalog={catalog} reload={loadCatalog} brandFilter={brandFilter} setBrandFilter={setBrandFilter} viewBranches={(id) => { setBrandFilter(id); go("shops"); }} />}
@@ -216,7 +218,7 @@ export default function SuperAdmin() {
 }
 
 function pageTitle(p) {
-  const map = { dash: "แดชบอร์ด", brands: "แบรนด์และแพ็กเกจ", shops: "ร้านและสาขา", topups: "สลิปรอเติมเงิน", line: "การเชื่อมต่อ LINE", billing: "บัญชีรับเงิน", security: "ความปลอดภัยและกุญแจ", admins: "ผู้ดูแลแพลตฟอร์ม" };
+  const map = { dash: "แดชบอร์ด", brands: "แบรนด์และแพ็กเกจ", shops: "ร้านและสาขา", topups: "สลิปรอเติมเงิน", revenue: "รายงานรายได้", line: "การเชื่อมต่อ LINE", billing: "บัญชีรับเงิน", security: "ความปลอดภัยและกุญแจ", admins: "ผู้ดูแลแพลตฟอร์ม" };
   return map[p] || p;
 }
 
@@ -295,6 +297,98 @@ function BillingSection({ data, error, load }) {
       {billing.map((setting) => (
         <SettingCard key={setting.key} setting={setting} canSaveSecret={data.encryptionReady} onChanged={load} />
       ))}
+    </>
+  );
+}
+
+// รายได้ของ Kiwmee: MRR + เงินที่ร้านเติม (cash in) + ยอดที่ใช้จากกระเป๋า + ยอดคงเหลือ (หนี้สิน)
+const SKU_LABEL = {
+  "plan:starter": "แพ็กเกจเริ่มต้น",
+  "plan:pro": "แพ็กเกจโปร",
+  "plan:loyalty": "แพ็กเกจสมาชิก",
+  "msg:500": "ข้อความ LINE +500",
+  "msg:1500": "ข้อความ LINE +1,500",
+  "msg:5000": "ข้อความ LINE +5,000",
+  "slip:100": "ตรวจสลิป +100"
+};
+
+function RevenueSection() {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    api("GET", "/api/super/revenue").then(setData).catch((e) => setError(e.message));
+  }, []);
+
+  if (error) return <p className="ad-error">{error}</p>;
+  if (!data) return <p className="ad-muted">กำลังโหลด…</p>;
+
+  const baht = (n) => `${Number(n ?? 0).toLocaleString("th-TH", { maximumFractionDigits: 0 })} บาท`;
+  const kpi = { background: "#fff", border: "1px solid #e6e3f0", borderRadius: 14, padding: "14px 16px" };
+
+  return (
+    <>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 12, marginBottom: 16 }}>
+        <div style={kpi}>
+          <small style={{ color: "#6b6880" }}>MRR · แพ็กเกจที่ยังไม่หมดอายุ</small>
+          <div style={{ fontSize: 26, fontWeight: 700 }}>{baht(data.mrr)}</div>
+          <em style={{ color: "#6b6880", fontSize: 12 }}>{data.payingBrands} แบรนด์จ่ายเงิน จาก {data.brands} แบรนด์</em>
+        </div>
+        <div style={kpi}>
+          <small style={{ color: "#6b6880" }}>เงินที่ร้านเติมเดือนนี้</small>
+          <div style={{ fontSize: 26, fontWeight: 700 }}>{baht(data.cashIn)}</div>
+          <em style={{ color: "#6b6880", fontSize: 12 }}>ยังไม่ใช่รายได้ จนกว่าจะใช้จากกระเป๋า</em>
+        </div>
+        <div style={kpi}>
+          <small style={{ color: "#6b6880" }}>ใช้จากกระเป๋าเดือนนี้</small>
+          <div style={{ fontSize: 26, fontWeight: 700 }}>{baht(data.spend)}</div>
+          <em style={{ color: "#6b6880", fontSize: 12 }}>ซื้อแพ็กเกจ/แพ็กเสริม</em>
+        </div>
+        <div style={kpi}>
+          <small style={{ color: "#6b6880" }}>ยอดคงเหลือในกระเป๋าทั้งระบบ</small>
+          <div style={{ fontSize: 26, fontWeight: 700 }}>{baht(data.liability)}</div>
+          <em style={{ color: "#6b6880", fontSize: 12 }}>หนี้สินที่ยังไม่ได้ให้บริการ · สลิปรอตรวจ {data.pendingTopups} ใบ</em>
+        </div>
+      </div>
+
+      <section className="super-card">
+        <h3>ขายอะไรได้บ้าง · {data.month}</h3>
+        {data.bySku.length === 0 ? (
+          <p className="ad-muted">ยังไม่มีการซื้อจากกระเป๋าในเดือนนี้</p>
+        ) : (
+          <table className="ad-table">
+            <thead><tr><th>สินค้า</th><th>จำนวน</th><th>ยอดเงิน</th></tr></thead>
+            <tbody>
+              {data.bySku.map((s) => (
+                <tr key={s.sku}>
+                  <td>{SKU_LABEL[s.sku] ?? s.sku}</td>
+                  <td>{s.count}</td>
+                  <td>{baht(s.amount)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      <section className="super-card">
+        <h3>รายแบรนด์</h3>
+        <table className="ad-table">
+          <thead><tr><th>แบรนด์</th><th>แพ็กเกจ</th><th>หมดอายุ</th><th>เติมเดือนนี้</th><th>ใช้เดือนนี้</th><th>คงเหลือ</th></tr></thead>
+          <tbody>
+            {data.perBrand.map((b) => (
+              <tr key={b.id}>
+                <td>{b.name}</td>
+                <td>{b.planName}{b.active ? "" : " (หมดอายุ)"}</td>
+                <td>{b.validUntil ? new Date(b.validUntil).toLocaleDateString("th-TH") : "—"}</td>
+                <td>{b.topup ? baht(b.topup) : "—"}</td>
+                <td>{b.spend ? baht(b.spend) : "—"}</td>
+                <td>{baht(b.balance)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
     </>
   );
 }

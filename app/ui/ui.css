@@ -301,3 +301,68 @@
     flex: 1 1 auto;
   }
 }
+
+/* ---- คลาสเดิมของแดชบอร์ด (ad-*) ให้ได้มาตรฐานเดียวกับ .ui-* ----
+   ไม่แก้ JSX 200KB: ปรับขนาดการแตะ ระยะห่าง และฟอนต์ในช่องกรอกให้เท่ากันทุกหน้า */
+.ad-primary,
+.ad-secondary,
+.ad-danger {
+  min-height: 44px;
+  border-radius: 12px;
+  padding: 10px 16px;
+}
+
+.ad-field > input,
+.ad-field > select,
+.ad-field > textarea {
+  min-height: 44px;
+  padding: 10px 12px;
+  font-size: 1rem;
+  font-family: inherit;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.ad-field > input:focus-visible,
+.ad-field > select:focus-visible,
+.ad-field > textarea:focus-visible {
+  outline: 2px solid var(--grape);
+  outline-offset: 1px;
+}
+
+.ad-chip {
+  min-height: 40px;
+  padding: 8px 12px;
+}
+
+.ad-link {
+  padding: 8px 4px;
+}
+
+.ad-table {
+  width: 100%;
+}
+
+.ad-table th,
+.ad-table td {
+  padding: 8px 10px;
+}
+
+@media (max-width: 720px) {
+  .ad-row > .ad-primary,
+  .ad-row > .ad-secondary {
+    flex: 1 1 auto;
+  }
+
+  .ad-table th,
+  .ad-table td {
+    padding: 8px;
+    font-size: 0.86rem;
+  }
+
+  .ad-card {
+    padding: 14px;
+  }
+}

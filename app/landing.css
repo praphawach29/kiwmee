@@ -415,3 +415,6 @@
   align-items: center;
   justify-content: space-between;
 }
+
+.lp-footer-links a { color: #C9C3E8; text-decoration: underline; text-underline-offset: 2px; }
+.lp-footer-links a:hover { color: #fff; }

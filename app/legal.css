@@ -1,0 +1,65 @@
+/* หน้าข้อตกลง/นโยบาย (PDPA) — ใช้ตัวแปรสีเดียวกับแบรนด์ และอ่านง่ายบนมือถือ */
+.legal-shell {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 28px 18px 64px;
+  color: var(--ink, #1b1533);
+  line-height: 1.75;
+  font-size: 0.97rem;
+}
+
+.legal-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line, #e6e3f0);
+  margin-bottom: 24px;
+}
+
+.legal-top img {
+  height: 28px;
+}
+
+.legal-top a {
+  color: var(--brand, #6a4cff);
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+
+.legal-shell h1 {
+  font-size: 1.6rem;
+  margin: 0 0 6px;
+}
+
+.legal-shell h2 {
+  font-size: 1.1rem;
+  margin: 26px 0 8px;
+}
+
+.legal-shell p,
+.legal-shell li {
+  color: var(--ink, #1b1533);
+}
+
+.legal-shell ul {
+  padding-left: 1.2rem;
+}
+
+.legal-shell li {
+  margin: 4px 0;
+}
+
+.legal-muted {
+  color: var(--muted, #6b6880);
+  font-size: 0.9rem;
+}
+
+.legal-note {
+  background: #f4f1ff;
+  border: 1px solid #e2dcff;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin: 16px 0;
+}

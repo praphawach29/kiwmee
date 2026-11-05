@@ -169,6 +169,11 @@ export default function LandingPage() {
         <div className="lp-wrap lp-footer-row">
           <img src="/brand/kiwmee-logo-dark.svg" alt="kiwmee" className="lp-logo" />
           <span>© 2569 Kiwmee · จองคิวง่าย ได้ทุกที่</span>
+          <span className="lp-footer-links">
+            <Link href="/terms">ข้อตกลงการใช้บริการ</Link>
+            {" · "}
+            <Link href="/privacy">นโยบายความเป็นส่วนตัว</Link>
+          </span>
         </div>
       </footer>
     </div>

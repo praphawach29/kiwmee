@@ -208,7 +208,7 @@ async function book(
   db,
   slug,
   body = {},
-  { now = new Date(), verifyLineToken = (token) => verifyLineIdToken(token, db), notifyLine = (to, messages) => pushLine(db, to, messages), origin = null } = {}
+  { now = new Date(), verifyLineToken = (token) => verifyLineIdToken(token, db), notifyLine = (to, messages, businessId) => pushLine(db, to, messages, { businessId }), origin = null } = {}
 ) {
   const { shop, catalog } = await requireShopWithCatalog(db, slug);
   const selected = cleanSelected(body.selected);
@@ -311,7 +311,7 @@ async function book(
         link: await manageLink(db, { slug: shop.slug, token: result.manageToken, origin }),
         directions: directionsLink({ address: shop.address, mapUrl: shop.map_url })
       });
-      result.line = await notifyLine(line.sub, [card]);
+      result.line = await notifyLine(line.sub, [card], shop.id);
     } catch (error) {
       console.error("[line-notify] card not sent:", error.message);
       result.line = { sent: false, reason: "ERROR" };

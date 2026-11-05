@@ -298,4 +298,15 @@ async function recordSlipCheck(brandId) {
   }
 }
 
-module.exports = { SKUS, walletOf, submitTopup, buy, judgeTopup, recordMessages, recordSlipCheck, MIN_TOPUP, MAX_TOPUP };
+/** One LINE push went out for a shop: count it on the brand's month. Never throws. */
+async function meterMessage(db, businessId, count = 1) {
+  try {
+    const { rows } = await db.query("select brand_id from public.businesses where id = $1", [businessId]);
+    const brand = rows[0]?.brand_id;
+    if (brand) await db.query("select public.usage_add($1, $2)", [brand, Math.max(1, count)]);
+  } catch (error) {
+    console.error("[wallet] message not counted:", error.message);
+  }
+}
+
+module.exports = { SKUS, walletOf, submitTopup, buy, judgeTopup, recordMessages, recordSlipCheck, meterMessage, MIN_TOPUP, MAX_TOPUP };

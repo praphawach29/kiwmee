@@ -50,7 +50,7 @@ async function dueReminders(db, now, limit) {
  * Sends what is due now. Returns { checked, sent, skipped } for the log.
  * push(to, messages) is injectable for tests; db is the server's pool (the database owner).
  */
-async function sendDueReminders(db, { now = new Date(), push = (to, messages) => pushLine(db, to, messages), limit = 100, env = process.env } = {}) {
+async function sendDueReminders(db, { now = new Date(), push = (to, messages, businessId) => pushLine(db, to, messages, { businessId }), limit = 100, env = process.env } = {}) {
   const due = await dueReminders(db, now, limit);
   const origin = publicOrigin(env);
   let sent = 0;
@@ -86,7 +86,7 @@ async function sendDueReminders(db, { now = new Date(), push = (to, messages) =>
         // no public address known (PUBLIC_ORIGIN / Railway's domain): the card goes without the QR
         checkin: origin ? { image: checkinImageUrl(origin, r.slug, r.id), code: bookingCode(r.id) } : null
       });
-      result = await push(r.line_user_id, [card]);
+      result = await push(r.line_user_id, [card], r.business_id);
     } catch (error) {
       console.error("[line-reminders] not sent:", error.message);
       result = { sent: false, reason: "ERROR" };

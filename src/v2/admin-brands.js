@@ -57,8 +57,15 @@ function brandId(value) {
 
 /** The user's brands: plan, whether they own it, and the branches they work at (taking up open invites first). */
 async function listBrands(client) {
-  // invites to the caller's confirmed email (admin-team.js) become memberships before we list
-  await client.query("select public.accept_my_invites()");
+  // invites to the caller's confirmed email (admin-team.js) become memberships before we list.
+  // A database that has not run migration …001700 yet must still open its dashboard — the invite
+  // step is a convenience, not a reason to show an English Postgres error to the shop owner.
+  try {
+    await client.query("select public.accept_my_invites()");
+  } catch (error) {
+    if (error.code !== "42883" && error.code !== "42P01") throw error; // not "missing function/table"
+    console.warn("[brands] invites not taken up — migration …001700 is missing:", error.message);
+  }
   const { rows } = await client.query(
     `select br.id, br.name, public.brand_plan(br.id) as plan, public.is_brand_owner(br.id) as owner,
             public.brand_branch_limit(public.brand_plan(br.id)) as branch_limit,

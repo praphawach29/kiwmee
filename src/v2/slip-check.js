@@ -152,4 +152,4 @@ async function checkSlip(db, slipId, jpeg, { env = process.env, fetchImpl = fetc
   }
 }
 
-module.exports = { checkSlip, judge, readEasySlip, receiverMatch, maskedMatches, REASON_TEXT };
+module.exports = { checkSlip, judge, readSlip, readEasySlip, receiverMatch, maskedMatches, REASON_TEXT };

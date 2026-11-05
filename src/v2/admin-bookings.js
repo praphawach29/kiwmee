@@ -391,7 +391,7 @@ async function notifyChange(client, shop, id, kind, { previous = null, reason = 
     }
     const moved = previous && kind === "moved" ? previous : null;
     const message = await lineCard(client, shop, id, kind, { previous: moved, reason, link });
-    const send = push ?? ((to, messages) => pushLine(db, to, messages, { env }));
+    const send = push ?? ((to, messages) => pushLine(db, to, messages, { env, businessId: shop.id }));
     return await send(message.to, [message.card]);
   } catch (error) {
     console.error("[line-notify] shop change card not sent:", error.message);

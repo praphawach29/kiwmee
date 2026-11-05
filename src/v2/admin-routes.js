@@ -37,7 +37,7 @@ function brandRoute(action, { read = false, created = false } = {}) {
     adminRoute(request, async (user) => {
       const params = await getParams(context);
       const input = read ? undefined : await boundedJson(request);
-      const result = await asUser(getBookingPool(), user, (client) => action(client, input, params));
+      const result = await asUser(getBookingPool(), user, (client) => action(client, input, params, user));
       return json(result ?? { ok: true }, created ? 201 : 200);
     });
 }

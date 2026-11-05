@@ -8,6 +8,7 @@
 
 const crypto = require("node:crypto");
 const { getSetting, encrypt, decrypt } = require("./platform-settings");
+const { meterMessage } = require("./wallet");
 
 const GRAPE = "#6A4CFF";
 const GRAPE_DEEP = "#4F33E0";
@@ -210,7 +211,7 @@ async function manageLink(db, { slug, token, origin }, { env = process.env } = {
   return origin ? `${origin}/b/${slug}/manage/${token}` : null;
 }
 
-async function pushLine(db, to, messages, { fetchImpl = fetch, env = process.env } = {}) {
+async function pushLine(db, to, messages, { fetchImpl = fetch, env = process.env, businessId = null } = {}) {
   if (typeof to !== "string" || !/^U[0-9a-f]{32}$/.test(to)) return { sent: false, reason: "NO_LINE_USER" };
   const token = await getSetting(db, "line.messaging_access_token", { env });
   if (!token) return { sent: false, reason: "NO_TOKEN" };
@@ -221,7 +222,12 @@ async function pushLine(db, to, messages, { fetchImpl = fetch, env = process.env
       body: JSON.stringify({ to, messages }),
       signal: AbortSignal.timeout(5000)
     });
-    if (response.ok) return { sent: true, status: response.status };
+    if (response.ok) {
+      // one push = one message on the brand's monthly quota (migration …003700); counting never
+      // changes the answer to the caller, so a counter problem must not fail a send
+      if (businessId) await meterMessage(db, businessId);
+      return { sent: true, status: response.status };
+    }
     // 400 = the customer has not added the OA as a friend (or blocked it), 429 = the month's quota
     console.error(`[line-notify] push refused: ${response.status}`);
     return { sent: false, status: response.status, reason: "LINE_REFUSED" };

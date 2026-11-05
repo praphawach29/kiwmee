@@ -51,6 +51,29 @@ const SETTINGS = {
     secret: true,
     env: "EASYSLIP_API_KEY",
     valid: (v) => v.length >= 10 && v.length <= 500 && NO_SPACE.test(v)
+  },
+  // Where shops transfer money when they top up their wallet (migration …003700):
+  // src/v2/wallet.js compares the slip's receiver with these before crediting automatically.
+  "billing.promptpay": {
+    label: "บัญชีรับเงิน · พร้อมเพย์",
+    help: "เบอร์มือถือ 10 หลัก หรือเลขบัตรประชาชน 13 หลัก (ใช้ตรวจว่าสลิปโอนเข้าบัญชีนี้)",
+    secret: false,
+    env: "BILLING_PROMPTPAY",
+    valid: (v) => /^[0-9]{10}$|^[0-9]{13}$/.test(v.replace(/[^0-9]/g, ""))
+  },
+  "billing.account_name": {
+    label: "บัญชีรับเงิน · ชื่อบัญชี",
+    help: "ชื่อบัญชีที่รับโอน (แสดงให้ร้านเห็นตอนเติมเงิน)",
+    secret: false,
+    env: "BILLING_ACCOUNT_NAME",
+    valid: (v) => v.length >= 2 && v.length <= 120
+  },
+  "billing.bank": {
+    label: "บัญชีรับเงิน · ธนาคารและเลขบัญชี",
+    help: "เช่น ธนาคารกสิกรไทย 123-4-56789-0 (ใช้ตรวจเลขบัญชีผู้รับบนสลิป)",
+    secret: false,
+    env: "BILLING_BANK",
+    valid: (v) => v.length >= 4 && v.length <= 160
   }
 };
 

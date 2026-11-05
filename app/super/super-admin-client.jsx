@@ -20,6 +20,7 @@ const NAV = [
   { group: "ระบบ", items: [
     { id: "settings", icon: "⚙", label: "การตั้งค่า", children: [
       { id: "line", label: "การเชื่อมต่อ LINE" },
+      { id: "billing", label: "บัญชีรับเงิน" },
       { id: "security", label: "ความปลอดภัยและกุญแจ" },
     ]},
     { id: "admins", icon: "☺", label: "ผู้ดูแลแพลตฟอร์ม" },
@@ -188,6 +189,7 @@ export default function SuperAdmin() {
           <h1 className="super-page-title">{pageTitle(page)}</h1>
           {page === "dash" && <Dashboard data={data} catalog={catalog} go={go} />}
           {page === "line" && <LineSection data={data} error={error} load={load} />}
+          {page === "billing" && <BillingSection data={data} error={error} load={load} />}
           {page === "security" && <SecuritySection data={data} signOut={signOut} signingOut={signingOut} />}
           {page === "admins" && <AdminsSection user={user} />}
           {["brands", "shops"].includes(page) && <CatalogSection mode={page} catalog={catalog} reload={loadCatalog} brandFilter={brandFilter} setBrandFilter={setBrandFilter} viewBranches={(id) => { setBrandFilter(id); go("shops"); }} />}
@@ -198,7 +200,7 @@ export default function SuperAdmin() {
 }
 
 function pageTitle(p) {
-  const map = { dash: "แดชบอร์ด", brands: "แบรนด์และแพ็กเกจ", shops: "ร้านและสาขา", line: "การเชื่อมต่อ LINE", security: "ความปลอดภัยและกุญแจ", admins: "ผู้ดูแลแพลตฟอร์ม" };
+  const map = { dash: "แดชบอร์ด", brands: "แบรนด์และแพ็กเกจ", shops: "ร้านและสาขา", line: "การเชื่อมต่อ LINE", billing: "บัญชีรับเงิน", security: "ความปลอดภัยและกุญแจ", admins: "ผู้ดูแลแพลตฟอร์ม" };
   return map[p] || p;
 }
 
@@ -218,7 +220,7 @@ function Dashboard({ data, catalog, go }) {
     </div>
     <div className="super-two">
       <section className="super-card"><h3>สถานะการตั้งค่า</h3><p className="super-sub">การตั้งค่าไม่ใช่ผลตรวจสุขภาพหรือการเชื่อมต่อ</p>
-        <div className="super-li"><span className="super-ico info" aria-hidden="true">?</span><div className="super-t">ฐานข้อมูล booking-v2<small>ยังไม่มีผลตรวจสุขภาพฐานข้อมูล</small></div></div>
+        <div className="super-li"><span className="super-ico info" aria-hidden="true">?</span><div className="super-t">ฐานข้อมูล Kiwmee<small>สถานะจริงดูที่ /api/health</small></div></div>
         <div className="super-li"><span className="super-ico info" aria-hidden="true">i</span><div className="super-t">Channel access token<small>{token ? SOURCE[token.source] : "ไม่ทราบสถานะ"} · ยังไม่ยืนยันกับ LINE</small></div></div>
         <div className="super-li"><span className={"super-ico " + (configured(secret) ? "info" : "warn")} aria-hidden="true">i</span><div className="super-t">Channel secret<small>{secret ? SOURCE[secret.source] : "ไม่ทราบสถานะ"}</small></div></div>
         <div className="super-li"><span className={"super-ico " + (data?.encryptionReady ? "ok" : "warn")} aria-hidden="true">i</span><div className="super-t">กุญแจเข้ารหัส<small>{data?.encryptionReady ? "ตั้งไว้ที่เซิร์ฟเวอร์แล้ว" : "ยังไม่ได้ตั้ง"}</small></div></div>
@@ -231,10 +233,12 @@ function Dashboard({ data, catalog, go }) {
 function LineSection({ data, error, load }) {
   if (error) return <p className="ad-error">{error}</p>;
   if (!data) return <p className="ad-muted">กำลังโหลด…</p>;
+  // the billing account has its own page (BillingSection) — keep it out of the LINE checklist
+  const settings = data.settings.filter((s) => !s.key.startsWith("billing."));
   return (
     <>
       <div className="super-steps">
-        {data.settings.map((s, i) => (
+        {settings.map((s, i) => (
           <div key={s.key} className={"super-step" + (s.source === "none" ? " todo" : "")}>
             <span className="super-n">{s.source === "none" ? i + 1 : "✓"}</span>
             <div>{s.label}<small>{s.source === "none" ? "ยังไม่ได้ตั้ง" : (s.source === "environment" ? SOURCE.environment : (s.secret ? s.hint : s.value))}</small></div>
@@ -244,10 +248,37 @@ function LineSection({ data, error, load }) {
       {!data.encryptionReady && (
         <p className="ad-notice">ยังไม่ได้ตั้ง <code>SETTINGS_ENCRYPTION_KEY</code> (อย่างน้อย 32 ตัวอักษร) บน Railway จึงบันทึกค่าที่เป็นความลับไม่ได้</p>
       )}
-      {data.settings.map((setting) => (
+      {settings.map((setting) => (
         <SettingCard key={setting.key} setting={setting} canSaveSecret={data.encryptionReady} onChanged={load} />
       ))}
       <TestToken />
+    </>
+  );
+}
+
+// ที่ร้านโอนเงินเข้าตอนเติมกระเป๋า (migration …003700). สลิปจะถูกเทียบกับบัญชีนี้ก่อนเติมอัตโนมัติ
+function BillingSection({ data, error, load }) {
+  if (error) return <p className="ad-error">{error}</p>;
+  if (!data) return <p className="ad-muted">กำลังโหลด…</p>;
+  const billing = data.settings.filter((s) => s.key.startsWith("billing."));
+  const slip = data.settings.find((s) => s.key === "slip.easyslip_api_key");
+  const slipOn = Boolean(slip && slip.source !== "none");
+  return (
+    <>
+      <section className="super-card">
+        <h3>บัญชีที่ร้านโอนเงินเข้า</h3>
+        <p className="super-sub">
+          ใช้ตรวจสลิปเติมเงินของร้าน — ระบบเทียบชื่อ/เลขบัญชีผู้รับบนสลิปกับข้อมูลนี้ ถ้าไม่ตรง หรือยังไม่ได้ตั้ง
+          สลิปจะถูกเก็บไว้ให้ผู้ดูแลตรวจแทนการเติมอัตโนมัติ
+        </p>
+        <div className="super-kv">
+          <span>การตรวจสลิปอัตโนมัติ</span>
+          <span className={"super-status " + (slipOn ? "ok" : "warn")}>{slipOn ? "เปิด (มีคีย์ EasySlip)" : "ปิด — ยังไม่มีคีย์ EasySlip"}</span>
+        </div>
+      </section>
+      {billing.map((setting) => (
+        <SettingCard key={setting.key} setting={setting} canSaveSecret={data.encryptionReady} onChanged={load} />
+      ))}
     </>
   );
 }

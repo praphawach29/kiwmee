@@ -109,6 +109,53 @@ test("the front desk takes a phone booking at any minute and sees it on the day'
   });
 });
 
+test("the shop adds equipment to a booking it takes itself", { skip }, async () => {
+  await as(USERS.staffA, async () => {
+    const shop = await admin.memberShop(db, "bloom-hair");
+    await admin.saveResource(db, shop, null, { kind: "ไม้แบด", name: "ไม้แบด", capacity: 3 });
+    await admin.saveAddonGroup(db, shop, null, {
+      name: "อุปกรณ์",
+      offeringIds: [CUT],
+      addons: [{ name: "เช่าไม้", priceUnit: "per_unit", amount: 50, maxQuantity: 4, usesKind: "ไม้แบด" }]
+    });
+    const groups = (await admin.getCatalog(db, shop)).addonGroups;
+    const racket = groups.flatMap((g) => g.addons).find((a) => a.name === "เช่าไม้");
+
+    const { id } = await bookings.createBooking(db, shop, {
+      offeringId: CUT,
+      resourceId: NAN,
+      date: DAY,
+      time: "18:00",
+      customer: { name: "คุณยืมไม้" },
+      addons: { [racket.id]: 2 }
+    });
+
+    const rows = (await db.query("select name, quantity, total from public.booking_addons where booking_id = $1", [id])).rows;
+    assert.deepEqual(rows, [{ name: "เช่าไม้", quantity: 2, total: 100 }]);
+    const held = (await db.query(
+      "select r.kind, br.units from public.booking_resources br join public.resources r on r.id = br.resource_id where br.booking_id = $1 and r.kind = 'ไม้แบด'",
+      [id]
+    )).rows;
+    assert.deepEqual(held, [{ kind: "ไม้แบด", units: 2 }], "two rackets are held for the hour");
+
+    const listed = (await bookings.listBookings(db, shop, { from: DAY })).find((b) => b.id === id);
+    assert.deepEqual(listed.addons, [{ name: "เช่าไม้", quantity: 2, total: 100 }]);
+
+    // the same equipment cannot be handed out twice in the same hour
+    await refused(
+      () => bookings.createBooking(db, shop, {
+        offeringId: CUT, date: DAY, time: "18:00", customer: { name: "คิวชน" }, addons: { [racket.id]: 2 }
+      }),
+      (e) => e.status === 409
+    );
+    // a visit recorded afterwards has no add-on row to hold the equipment
+    await refused(
+      () => bookings.createBooking(db, shop, { offeringId: CUT, date: PAST, time: "10:00", customer: { name: "ย้อนหลัง" }, addons: { [racket.id]: 1 } }),
+      (e) => e.status === 422 && /ย้อนหลัง/.test(e.message)
+    );
+  });
+});
+
 test("move, mark arrival and finish, and cancel", { skip }, async () => {
   await as(USERS.staffA, async () => {
     const shop = await admin.memberShop(db, "bloom-hair");

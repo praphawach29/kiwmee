@@ -82,6 +82,23 @@ function optionalInt(value, label, max = 1440) {
 
 const startAt = (shop, d, t) => new Date(localToMs(date(d), time(t), shop.timezone)).toISOString();
 
+/**
+ * Add-ons for a booking the shop takes itself: { "<addon id>": quantity }, as the public page sends.
+ * Prices, the group's min/max and whether the equipment is free are all checked again by the RPC.
+ */
+function cleanAddons(value) {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "object" || Array.isArray(value)) throw badRequest("ตัวเลือกเสริมไม่ถูกต้อง");
+  const out = {};
+  for (const [id, quantity] of Object.entries(value)) {
+    if (!UUID.test(id)) throw badRequest("ตัวเลือกเสริมไม่ถูกต้อง");
+    const n = Number(quantity);
+    if (!Number.isInteger(n) || n < 0 || n > 1000) throw badRequest("จำนวนตัวเลือกเสริมไม่ถูกต้อง");
+    if (n > 0) out[id] = n;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 async function ownBooking(client, shop, id) {
   if (typeof id !== "string" || !UUID.test(id)) throw notFound("ไม่พบการจองนี้");
   const { rows } = await client.query("select id from public.bookings where id = $1 and business_id = $2", [id, shop.id]);
@@ -210,10 +227,13 @@ async function createBooking(client, shop, input = {}, now = new Date()) {
   const offeringId = optionalId(input.offeringId, "บริการ");
   if (!offeringId) throw invalid("เลือกบริการ");
   const notes = typeof input.notes === "string" && input.notes.trim() ? input.notes.trim().slice(0, 500) : null;
+  const addons = cleanAddons(input.addons);
   const start = startAt(shop, input.date, input.time);
   if (new Date(start) < now) {
     const status = input.status ?? "completed";
     if (!PAST_STATUSES.includes(status)) throw badRequest("สถานะไม่ถูกต้อง");
+    // record_past_booking stores a finished visit; there is no add-on row to hold equipment for it
+    if (addons) throw invalid("บันทึกย้อนหลังยังไม่รองรับตัวเลือกเสริม — เพิ่มตอนปิดบิลแทน");
     const past = await rpc(client, "select public.record_past_booking($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9) as booking", [
       shop.id,
       offeringId,
@@ -229,7 +249,7 @@ async function createBooking(client, shop, input = {}, now = new Date()) {
   }
   const row = await rpc(
     client,
-    "select public.create_booking($1, $2, $3, $4::jsonb, $5, $6, $7, false, 'admin', $8) as booking",
+    "select public.create_booking($1, $2, $3, $4::jsonb, $5, $6, $7, false, 'admin', $8, $9::jsonb) as booking",
     [
       shop.id,
       offeringId,
@@ -238,7 +258,8 @@ async function createBooking(client, shop, input = {}, now = new Date()) {
       optionalId(input.resourceId, "ช่าง/สนาม"),
       optionalInt(input.durationMinutes, "ระยะเวลา", 90 * 1440),
       optionalInt(input.partySize, "จำนวนคน", 1000) ?? 1,
-      notes
+      notes,
+      addons ? JSON.stringify(addons) : null
     ]
   );
   // the customer's own link, for the shop to send them right away

@@ -1845,21 +1845,28 @@ function BookingForm({ slug, catalog, booking, defaultDate, onClose, onSaved }) 
       name: "",
       phone: "",
       notes: "",
+      addons: {},
       status: "completed"
     };
   });
   const [free, setFree] = useState(null);
   const save = useSave();
   const set = (patch) => setF((x) => ({ ...x, ...patch }));
+  const setAddon = (id, value) => {
+    const n = Math.max(0, Math.min(999, Math.trunc(Number(value) || 0)));
+    setF((x) => ({ ...x, addons: { ...x.addons, [id]: n } }));
+  };
   const offering = catalog.offerings.find((o) => o.id === f.offeringId);
   const resources = catalog.resources.filter((r) => r.active && offering?.resourceIds.includes(r.id));
   const durations = durationsOf(offering);
   const rental = offering?.durationMode === "days";
+  // add-on groups the chosen offering belongs to; the RPC checks the quantities again
+  const addonGroups = (catalog.addonGroups ?? []).filter((g) => g.active && g.offeringIds.includes(f.offeringId) && g.addons.some((a) => a.active));
   // a new booking whose start has passed records a visit afterwards
   const past = !booking && Boolean(f.date && f.time) && `${f.date}T${f.time}` < nowLocal();
 
   function chooseOffering(id) {
-    set({ offeringId: id, resourceId: "", time: "", durationMinutes: durationsOf(catalog.offerings.find((o) => o.id === id))[0] ?? "" });
+    set({ offeringId: id, resourceId: "", time: "", addons: {}, durationMinutes: durationsOf(catalog.offerings.find((o) => o.id === id))[0] ?? "" });
   }
 
   useEffect(() => {
@@ -1889,6 +1896,11 @@ function BookingForm({ slug, catalog, booking, defaultDate, onClose, onSaved }) 
       durationMinutes: f.durationMinutes ? Number(f.durationMinutes) : null
     };
     let result = null;
+    const picked = Object.fromEntries(
+      Object.entries(f.addons ?? {})
+        .filter(([, q]) => Number(q) > 0)
+        .map(([id, q]) => [id, Number(q)])
+    );
     const ok = await save.run(async () => {
       result = await (booking
         ? api("PUT", shopPath(slug, `/bookings/${booking.id}`), common)
@@ -1898,6 +1910,7 @@ function BookingForm({ slug, catalog, booking, defaultDate, onClose, onSaved }) 
             partySize: Number(f.partySize) || 1,
             customer: { name: f.name, phone: f.phone },
             notes: f.notes,
+            ...(Object.keys(picked).length ? { addons: picked } : {}),
             ...(past ? { status: f.status } : {})
           }));
     }, () => withLine(booking ? "เลื่อนนัดแล้ว" : "บันทึกแล้ว", result));
@@ -1974,6 +1987,44 @@ function BookingForm({ slug, catalog, booking, defaultDate, onClose, onSaved }) 
             {PAST_STATUS.map(([value, label]) => (
               <button key={value} type="button" className="ad-chip" data-on={f.status === value} onClick={() => set({ status: value })}>{label}</button>
             ))}
+          </div>
+        </div>
+      )}
+      {!booking && !past && addonGroups.length > 0 && (
+        <div className="ad-field">
+          ตัวเลือกเสริม
+          <div className="ad-addons">
+            {addonGroups.map((g) => {
+              const chosen = g.addons.filter((a) => Number(f.addons[a.id]) > 0).length;
+              const notEnough = g.minSelect > 0 && chosen < g.minSelect;
+              return (
+                <div key={g.id} className="ad-addon-group">
+                  <div className="ad-muted">
+                    {g.name}
+                    {g.minSelect > 0 ? ` · ต้องเลือกอย่างน้อย ${g.minSelect}` : ""}
+                    {g.maxSelect ? ` · ไม่เกิน ${g.maxSelect}` : ""}
+                    {notEnough ? " · ยังเลือกไม่ครบ" : ""}
+                  </div>
+                  {g.addons.filter((a) => a.active).map((a) => (
+                    <label key={a.id} className="ad-row ad-between ad-addon">
+                      <span>
+                        {a.name} · {a.priceUnit === "per_unit" ? `${money(a.amount)} / ชิ้น` : money(a.amount)}
+                        {a.addsMinutes ? ` · +${minutes(a.addsMinutes)}` : ""}
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={a.maxQuantity ?? 99}
+                        step={1}
+                        value={f.addons[a.id] ?? 0}
+                        onChange={(e) => setAddon(a.id, e.target.value)}
+                        aria-label={`จำนวน ${a.name}`}
+                      />
+                    </label>
+                  ))}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

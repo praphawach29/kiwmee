@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { judgeTopup, reviewTopup, quotaOf, PLAN_MESSAGES, SKUS, MIN_TOPUP, MAX_TOPUP } = require("../src/v2/wallet");
+const { judgeTopup, reviewTopup, quotaOf, messageAllowed, PLAN_MESSAGES, SKUS, MIN_TOPUP, MAX_TOPUP } = require("../src/v2/wallet");
 const { getSetting } = require("../src/v2/platform-settings");
 
 // A slip that EasySlip read, against a top-up the shop asked for.
@@ -75,4 +75,66 @@ test('the month\'s message quota: allowance by plan, purchases on top, warnings 
   assert.equal(quotaOf('starter', { messagesUsed: 100, messagesIncluded: 2000 }).total, 2000);
   // nobody has a zero-length bar
   assert.deepEqual(quotaOf(undefined, {}), { used: 0, total: 0, remaining: 0, percent: 0, level: 'ok' });
+});
+
+test("a brand that used up its messages keeps taking bookings but stops sending cards", async () => {
+  const { pushLine } = require("../src/v2/line-notify");
+  const brandId = "b1000000-0000-4000-8000-000000000001";
+  const calls = [];
+  const db = {
+    query: async (sql, params) => {
+      calls.push(sql);
+      if (sql.includes("platform_settings")) return { rows: [] };
+      if (sql.includes("public.businesses")) {
+        return { rows: [{ brand_id: brandId, plan: "free", used: 100, included: 100, purchased: 0 }] };
+      }
+      return { rows: [] };
+    }
+  };
+  const env = { LINE_CHANNEL_ACCESS_TOKEN: "x".repeat(30) };
+  let fetched = 0;
+  const result = await pushLine(db, "U" + "0".repeat(32), [{ type: "text", text: "hi" }], {
+    env,
+    businessId: "a1000000-0000-4000-8000-000000000001",
+    fetchImpl: async () => {
+      fetched += 1;
+      return { ok: true, status: 200 };
+    }
+  });
+  assert.equal(fetched, 0, "no LINE call may be made");
+  assert.equal(result.sent, false);
+  assert.equal(result.reason, "QUOTA_EXCEEDED");
+  assert.equal(result.quota.level, "full");
+  assert.equal(calls.some((sql) => sql.includes("usage_add")), false, "a skipped card is not counted");
+});
+
+test("with messages left, the card goes out and is counted", async () => {
+  const { pushLine } = require("../src/v2/line-notify");
+  const brandId = "b1000000-0000-4000-8000-000000000001";
+  const counted = [];
+  const db = {
+    query: async (sql, params) => {
+      if (sql.includes("platform_settings")) return { rows: [] };
+      if (sql.includes("public.businesses")) {
+        return { rows: [{ brand_id: brandId, plan: "pro", used: 10, included: 4000, purchased: 0 }] };
+      }
+      if (sql.includes("usage_add")) counted.push(params);
+      return { rows: [] };
+    }
+  };
+  const result = await pushLine(db, "U" + "0".repeat(32), [{ type: "text", text: "hi" }], {
+    env: { LINE_CHANNEL_ACCESS_TOKEN: "x".repeat(30) },
+    businessId: "a1000000-0000-4000-8000-000000000001",
+    fetchImpl: async () => ({ ok: true, status: 200 })
+  });
+  assert.equal(result.sent, true);
+  assert.equal(counted.length, 1, "one message counted for the brand");
+  assert.deepEqual(counted[0], [brandId, 1]);
+});
+
+test("the quota level is the only thing that stops sending — warn still sends", () => {
+  assert.equal(messageAllowed({ level: "ok" }), true);
+  assert.equal(messageAllowed({ level: "warn" }), true);
+  assert.equal(messageAllowed({ level: "full" }), false);
+  assert.equal(messageAllowed(null), true, "an unread counter must not stop a card");
 });

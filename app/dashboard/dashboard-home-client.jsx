@@ -339,7 +339,7 @@ function BrandCard({ brand, brands, onChanged }) {
         >
           ข้อความ LINE เดือนนี้ {brand.messagesUsed.toLocaleString("th-TH")}/{brand.messagesTotal.toLocaleString("th-TH")} ({brand.quotaPercent}%)
           {brand.quotaLevel === "warn" ? " · ใกล้เต็มแล้ว" : ""}
-          {brand.quotaLevel === "full" ? " · เต็มแล้ว — ซื้อแพ็กเพิ่มได้ที่กระเป๋าเงิน" : ""}
+          {brand.quotaLevel === "full" ? " · เต็มแล้ว — การ์ด LINE หยุดส่ง (การจองยังทำงาน) ซื้อแพ็กเพิ่มที่กระเป๋าเงิน" : ""}
           {" · "}
           <a href={`/dashboard/wallet?brand=${brand.id}`}>กระเป๋าเงิน</a>
         </p>

@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { judgeTopup, reviewTopup, SKUS, MIN_TOPUP, MAX_TOPUP } = require("../src/v2/wallet");
+const { judgeTopup, reviewTopup, quotaOf, PLAN_MESSAGES, SKUS, MIN_TOPUP, MAX_TOPUP } = require("../src/v2/wallet");
 const { getSetting } = require("../src/v2/platform-settings");
 
 // A slip that EasySlip read, against a top-up the shop asked for.
@@ -64,3 +64,15 @@ test("a review only accepts approve or reject, before touching the database", as
   await assert.rejects(() => reviewTopup("admin-user", "topup-id", undefined), /คำสั่งไม่ถูกต้อง/);
 });
 
+
+test('the month\'s message quota: allowance by plan, purchases on top, warnings at 80% and 100%', () => {
+  assert.equal(PLAN_MESSAGES.pro, 4000);
+  assert.deepEqual(quotaOf('pro', { messagesUsed: 2000 }), { used: 2000, total: 4000, remaining: 2000, percent: 50, level: 'ok' });
+  assert.equal(quotaOf('pro', { messagesUsed: 3200 }).level, 'warn');
+  assert.equal(quotaOf('pro', { messagesUsed: 4000 }).level, 'full');
+  assert.deepEqual(quotaOf('starter', { messagesUsed: 300, messagesPurchased: 500 }), { used: 300, total: 1400, remaining: 1100, percent: 21, level: 'ok' });
+  // a counter that already knows the allowance wins over the plan default
+  assert.equal(quotaOf('starter', { messagesUsed: 100, messagesIncluded: 2000 }).total, 2000);
+  // nobody has a zero-length bar
+  assert.deepEqual(quotaOf(undefined, {}), { used: 0, total: 0, remaining: 0, percent: 0, level: 'ok' });
+});

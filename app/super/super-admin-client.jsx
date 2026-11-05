@@ -11,11 +11,26 @@ const SOURCE = { database: "ตั้งไว้ที่นี่", environmen
 const configured = (setting) => ["database", "environment"].includes(setting?.source);
 const TONE = { database: "ok", environment: "info", none: "warn" };
 
+// why a top-up was not credited automatically (src/v2/wallet.js: judgeTopup)
+const TOPUP_REASON = {
+  AMOUNT_LOW: "ยอดโอนน้อยกว่าที่ขอ",
+  AMOUNT_HIGH: "ยอดโอนเกิน 20,000 บาท",
+  RECEIVER_MISMATCH: "บัญชีผู้รับไม่ใช่ของ Kiwmee",
+  RECEIVER_UNKNOWN: "ตรวจบัญชีผู้รับไม่ได้",
+  DUPLICATE: "สลิปซ้ำ",
+  TOO_OLD: "สลิปเก่ากว่า 7 วัน",
+  IN_FUTURE: "เวลาบนสลิปอยู่ในอนาคต",
+  UNREADABLE: "อ่านสลิปไม่ได้"
+};
+
 const NAV = [
   { group: "ภาพรวม", items: [{ id: "dash", icon: "▦", label: "แดชบอร์ด" }] },
   { group: "ลูกค้า", items: [
     { id: "brands", icon: "◈", label: "แบรนด์และแพ็กเกจ" },
     { id: "shops", icon: "⌂", label: "ร้านและสาขา" },
+  ]},
+  { group: "การเงิน", items: [
+    { id: "topups", icon: "฿", label: "สลิปรอเติมเงิน" },
   ]},
   { group: "ระบบ", items: [
     { id: "settings", icon: "⚙", label: "การตั้งค่า", children: [
@@ -190,6 +205,7 @@ export default function SuperAdmin() {
           {page === "dash" && <Dashboard data={data} catalog={catalog} go={go} />}
           {page === "line" && <LineSection data={data} error={error} load={load} />}
           {page === "billing" && <BillingSection data={data} error={error} load={load} />}
+          {page === "topups" && <TopupsSection />}
           {page === "security" && <SecuritySection data={data} signOut={signOut} signingOut={signingOut} />}
           {page === "admins" && <AdminsSection user={user} />}
           {["brands", "shops"].includes(page) && <CatalogSection mode={page} catalog={catalog} reload={loadCatalog} brandFilter={brandFilter} setBrandFilter={setBrandFilter} viewBranches={(id) => { setBrandFilter(id); go("shops"); }} />}
@@ -200,7 +216,7 @@ export default function SuperAdmin() {
 }
 
 function pageTitle(p) {
-  const map = { dash: "แดชบอร์ด", brands: "แบรนด์และแพ็กเกจ", shops: "ร้านและสาขา", line: "การเชื่อมต่อ LINE", billing: "บัญชีรับเงิน", security: "ความปลอดภัยและกุญแจ", admins: "ผู้ดูแลแพลตฟอร์ม" };
+  const map = { dash: "แดชบอร์ด", brands: "แบรนด์และแพ็กเกจ", shops: "ร้านและสาขา", topups: "สลิปรอเติมเงิน", line: "การเชื่อมต่อ LINE", billing: "บัญชีรับเงิน", security: "ความปลอดภัยและกุญแจ", admins: "ผู้ดูแลแพลตฟอร์ม" };
   return map[p] || p;
 }
 
@@ -279,6 +295,89 @@ function BillingSection({ data, error, load }) {
       {billing.map((setting) => (
         <SettingCard key={setting.key} setting={setting} canSaveSecret={data.encryptionReady} onChanged={load} />
       ))}
+    </>
+  );
+}
+
+// สลิปเติมเงินที่ EasySlip ไม่ผ่าน (หรือยังไม่ได้ตั้งคีย์) — ผู้ดูแลกดอนุมัติ/ปฏิเสธ (migration …003700)
+function TopupsSection() {
+  const [rows, setRows] = useState(null);
+  const [pending, setPending] = useState(0);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState("");
+
+  const load = useCallback(async () => {
+    try {
+      const data = await api("GET", "/api/super/wallet/topups");
+      setRows(data.topups);
+      setPending(data.pending);
+      setError("");
+    } catch (e) {
+      setError(e.message);
+      setRows([]);
+    }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  async function act(id, action) {
+    setBusy(id + action);
+    try {
+      await api("POST", "/api/super/wallet/topups", { id, action });
+      await load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  if (error) return <p className="ad-error">{error}</p>;
+  if (!rows) return <p className="ad-muted">กำลังโหลด…</p>;
+
+  return (
+    <>
+      <section className="super-card">
+        <h3>สลิปรอเติมเงิน <span className={"super-status " + (pending ? "warn" : "ok")}>{pending ? `${pending} ใบรอตรวจ` : "ไม่มีใบค้าง"}</span></h3>
+        <p className="super-sub">
+          สลิปที่ EasySlip ตรวจแล้วไม่ผ่าน (ยอดไม่ตรง/ผู้รับไม่ตรง/สลิปซ้ำ/เก่าเกิน) หรือยังไม่ได้ตั้งคีย์ EasySlip
+          — ตรวจกับธนาคารแล้วกดอนุมัติเพื่อเติมเข้ากระเป๋าของร้าน หรือปฏิเสธเพื่อปิดรายการ
+        </p>
+      </section>
+
+      {rows.length === 0 ? (
+        <p className="ad-muted">ยังไม่มีรายการ</p>
+      ) : (
+        <section className="super-card">
+          <table className="ad-table">
+            <thead>
+              <tr><th>เวลา</th><th>แบรนด์</th><th>ยอดที่ขอ</th><th>เหตุผล</th><th>สถานะ</th><th></th></tr>
+            </thead>
+            <tbody>
+              {rows.map((t) => (
+                <tr key={t.id}>
+                  <td>{new Date(t.created_at).toLocaleString("th-TH")}</td>
+                  <td>{t.brand_name}</td>
+                  <td>{Number(t.amount).toLocaleString("th-TH")} บาท</td>
+                  <td>{(t.check_reasons ?? []).map((r) => TOPUP_REASON[r] ?? r).join(" · ") || (t.check_status === "passed" ? "ตรวจผ่าน" : "—")}</td>
+                  <td>{t.status === "pending" ? "รอตรวจ" : t.status === "credited" ? `เติมแล้ว ${Number(t.credit_amount ?? t.amount).toLocaleString("th-TH")} บาท` : "ปฏิเสธ"}</td>
+                  <td>
+                    {t.status === "pending" && (
+                      <>
+                        <button className="super-btn" disabled={Boolean(busy)} onClick={() => act(t.id, "approve")}>
+                          {busy === t.id + "approve" ? "กำลังเติม…" : "อนุมัติ"}
+                        </button>{" "}
+                        <button className="super-btn2" disabled={Boolean(busy)} onClick={() => act(t.id, "reject")}>
+                          {busy === t.id + "reject" ? "…" : "ปฏิเสธ"}
+                        </button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
     </>
   );
 }

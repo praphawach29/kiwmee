@@ -80,6 +80,8 @@ Next.js 15 + Supabase · deploy บน Railway service `salon-booking-os-v1` →
 | #72 | **เพิ่มสาขาคัดลอกครบ**: `add_branch` คัดลอก ผังสนาม · รูปช่าง/สนาม/บริการ · amenities/about/address/map_url · เช่ารายวัน + เอกสาร · มัดจำ/`payment_info` · `document_retention_days`/`slip_auto_confirm` · กลุ่มตัวเลือกเสริม + ตัวเลือก + การผูกกับบริการ · migration `…003600` (รันแล้ว 5 พ.ย. 2569) |
 | #73 | **กระเป๋าเงิน + เติมเงินอัตโนมัติ**: `wallet_accounts`/`wallet_entries` (ledger + `balance_after`)/`wallet_topups`/`wallet_orders` + `usage_counters` · EasySlip ตรวจสลิปเติมเงิน (ยอด ≥ ที่ขอ · ผู้รับตรงบัญชี · ไม่ซ้ำ · ภายใน 7 วัน) → **เติมเข้าอัตโนมัติ**, ไม่ผ่าน = `pending` + เหตุผล · ซื้อแพ็กเกจ/แพ็กข้อความ/แพ็กตรวจสลิปจากยอด · หน้า `/dashboard/wallet` · หน้า `/super → การตั้งค่า → บัญชีรับเงิน` (`billing.*`) · นับข้อความจากการ์ดที่ส่งสำเร็จ (ยืนยันจอง/เตือนนัด/เลื่อน-ยกเลิก) · migration `…003700` (รันแล้ว) |
 | #74 | **เอกสารชื่อโปรเจกต์**: Supabase เปลี่ยนชื่อจาก booking-v2 → **Kiwmee** (ref/URL/คีย์เดิม) · อัปเดต `CLAUDE.md`, `.env.example`, `docs/*` |
+| #75 | **docs sync**: แถว #71–#74 ในเอกสารนี้ · อัปเดต §4 (backup มีเครื่องมือแล้ว, `next dev` น่าจะหาย, สลิป pending/เพดานโควตายังไม่ทำ) · ชื่อโปรเจกต์ที่เหลือ |
+| #76 | **อนุมัติสลิปใน `/super`**: เมนู "การเงิน → สลิปรอเติมเงิน" · `GET/POST /api/super/wallet/topups` · `listTopups`/`reviewTopup` (เฉพาะ platform admin, อนุมัติซ้ำไม่ได้, ปฏิเสธรายการที่เติมแล้วไม่ได้) · ไม่มี migration |
 | #30 | **CI** (`.github/workflows/ci.yml`: unit, DB, build ทุก PR) · ปรับ roadmap ให้ตรงสถานะจริง |
 
 **Migration ล่าสุดที่รันบนโปรเจกต์ Kiwmee (เดิมชื่อ booking-v2, ref `ezubgqeqdipwfnmorqkj`) แล้ว: `20261025003700_wallet.sql`** (เจ้าของยืนยัน 5 พ.ย. 2569, PR #73)
@@ -156,7 +158,7 @@ Next.js 15 + Supabase · deploy บน Railway service `salon-booking-os-v1` →
 4. ยังไม่มีนโยบายความเป็นส่วนตัว/ข้อตกลงการใช้งาน (PDPA) (Phase 1)
 5. **`next dev` พังที่ `/dashboard/<ร้าน>`** ("Cannot use 'import.meta' outside a module") — ตรวจโค้ดแล้วไม่พบ `import.meta` เหลืออยู่ (น่าจะแก้ไปแล้วใน PR ก่อนหน้า) แต่ยังไม่มีใครยืนยันด้วย `next dev` จริง · `next build`/production ปกติดี
 6. โค้ด v1 ยังอยู่ใน repo (`/admin`, `/manage`, `src/` เดิม) — เก็บกวาดหลังย้าย LINE/ชำระเงินมา v2 (Phase 5)
-7. **สลิปเติมเงินที่ไม่ผ่านการตรวจ (pending) ยังอนุมัติด้วย SQL** — ยังไม่มีหน้าใน `/super` (API ของกระเป๋าพร้อมแล้ว)
+7. **สลิปเติมเงินที่ยัง pending ต้องให้ผู้ดูแลกดอนุมัติ** — มีหน้าแล้วที่ `/super → การเงิน → สลิปรอเติมเงิน` (ไม่ต้องใช้ SQL)
 8. **ยังไม่บังคับเพดานโควตาตามแพ็กเกจ** — `usage_counters` เริ่มนับข้อความ/สลิปแล้ว แต่ยังไม่บล็อกหรือเตือนที่ 80%/100% (เจ้าของยังไม่ต้องการให้บังคับ)
 
 แก้แล้ว: error ภาษาไทย + ชื่อลูกค้าเบอร์ซ้ำ (#18) · CI (#30) · หน้าเชิญพนักงาน (#30) · แจ้งร้านในแอดมิน + ประวัติการเลื่อน (#32) · ลิงก์จัดการการจองจากร้าน (#35) · `/api/health` ชี้ฐานข้อมูล v1 (#69)

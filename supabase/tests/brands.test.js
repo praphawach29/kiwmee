@@ -151,7 +151,7 @@ test("a branch copies what a shop gained after the first version: floor plan, pi
       [SALON]
     );
     await db.query(
-      `update public.resources set layout_row = 0, layout_col = 1, layout_w = 2, layout_h = 1,
+      `update public.resources set layout_row = 1, layout_col = 1, layout_w = 2, layout_h = 1,
               media = '[{"url":"https://cdn.test/staff.webp","alt":""}]'::jsonb where business_id = $1 and name = 'ช่างแนน'`,
       [SALON]
     );
@@ -205,7 +205,7 @@ test("a branch copies what a shop gained after the first version: floor plan, pi
       "select layout_row, layout_col, layout_w, layout_h, media from public.resources where business_id = $1 and name = 'ช่างแนน'",
       [copy]
     )).rows[0];
-    assert.deepEqual(spot, { layout_row: 0, layout_col: 1, layout_w: 2, layout_h: 1, media: [{ url: "https://cdn.test/staff.webp", alt: "" }] }, "the floor plan travels with the branch");
+    assert.deepEqual(spot, { layout_row: 1, layout_col: 1, layout_w: 2, layout_h: 1, media: [{ url: "https://cdn.test/staff.webp", alt: "" }] }, "the floor plan travels with the branch");
 
     const offering = (await db.query(
       "select media, required_documents from public.offerings where business_id = $1 and name like 'ตัดผมหญิง%'",

@@ -186,7 +186,7 @@ test("a branch copies what a shop gained after the first version: floor plan, pi
     const copy = await shopId("bloom-9");
 
     const shop = (await db.query("select amenities, about, address, media from public.businesses where id = $1", [copy])).rows[0];
-    assert.deepEqual(shop.amenities, ["ที่จอดรถ"]);
+    assert.deepEqual(shop.amenities, ["parking"]);
     assert.deepEqual([shop.about, shop.address, shop.media], ["ร้านตัวอย่าง", "ถนนสุขุมวิท 1", [{ url: "https://cdn.test/shop.webp", alt: "" }]]);
 
     const settings = (await db.query(

@@ -1,9 +1,24 @@
-import { Anuphan, Mitr } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-// Kiwmee type: Mitr for headings, Anuphan for text (docs/BRAND_COLORS.md)
-const mitr = Mitr({ weight: ["500", "600"], subsets: ["thai", "latin"], variable: "--font-mitr", display: "swap" });
-const anuphan = Anuphan({ weight: ["400", "500", "600"], subsets: ["thai", "latin"], variable: "--font-anuphan", display: "swap" });
+// Kiwmee type: Mitr for headings, Anuphan for text (docs/BRAND_COLORS.md).
+// Files live in app/fonts (SIL OFL 1.1 — see app/fonts/OFL.txt) so a build never depends on
+// fonts.googleapis.com; that network call failed repeatedly on CI and on Railway.
+const mitr = localFont({
+  src: [
+    { path: "./fonts/Mitr-Medium.ttf", weight: "500" },
+    { path: "./fonts/Mitr-SemiBold.ttf", weight: "600" }
+  ],
+  variable: "--font-mitr",
+  display: "swap"
+});
+
+const anuphan = localFont({
+  src: "./fonts/Anuphan-Variable.ttf",
+  weight: "100 700",
+  variable: "--font-anuphan",
+  display: "swap"
+});
 
 export const metadata = {
   title: { default: "Kiwmee · จองคิวง่าย ได้ทุกที่", template: "%s · Kiwmee" },

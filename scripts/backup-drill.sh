@@ -44,10 +44,17 @@ if [ "$(psql "$target_url" -At -c "select 1 from pg_namespace where nspname = 'a
   exit 1
 fi
 
+# A newer client than the server (e.g. pg_dump 17/18 against Postgres 16) writes
+# `SET transaction_timeout = 0;`, a GUC the server does not know — the restore would stop on line 1
+# with "unrecognized configuration parameter". Drop that one line; everything else stays as dumped.
+strip_newer_settings() { sed -i '/^SET transaction_timeout = 0;$/d' "$1"; }
+
 echo "== 1/4 dump  data of $(db_of "$source_url") on $(host_of "$source_url")"
 pg_dump "$source_url" --data-only --schema=public --no-owner --no-privileges --file="$work/public.sql"
+strip_newer_settings "$work/public.sql"
 if [ "$(psql "$source_url" -At -c "select 1 from pg_tables where schemaname = 'auth' and tablename = 'users'")" = "1" ]; then
   pg_dump "$source_url" --data-only --table=auth.users --no-owner --no-privileges --file="$work/users.sql"
+  strip_newer_settings "$work/users.sql"
 fi
 
 echo "== 2/4 rebuild schema of $(db_of "$target_url") from supabase/migrations"

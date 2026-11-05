@@ -1,6 +1,7 @@
 import adminAuth from "../../src/v2/admin-auth.js";
 import DashboardHome from "./dashboard-home-client.jsx";
 import "./dashboard.css";
+import "../ui/ui.css";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "จัดการร้าน" };

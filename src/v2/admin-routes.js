@@ -47,7 +47,7 @@ function superRoute(action, { read = false } = {}) {
   return (request) =>
     adminRoute(request, async (user) => {
       const input = read ? undefined : await boundedJson(request);
-      const result = await asUser(getBookingPool(), user, (client) => action(client, input));
+      const result = await asUser(getBookingPool(), user, (client) => action(client, input, user));
       return json(result ?? { ok: true });
     });
 }

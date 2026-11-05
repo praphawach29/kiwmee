@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { judgeTopup, SKUS, MIN_TOPUP, MAX_TOPUP } = require("../src/v2/wallet");
+const { judgeTopup, reviewTopup, SKUS, MIN_TOPUP, MAX_TOPUP } = require("../src/v2/wallet");
 const { getSetting } = require("../src/v2/platform-settings");
 
 // A slip that EasySlip read, against a top-up the shop asked for.
@@ -58,3 +58,9 @@ test("the billing account keys are registered settings (the slip check reads the
     assert.equal(await getSetting(db, key, { env: {} }), null, key);
   }
 });
+
+test("a review only accepts approve or reject, before touching the database", async () => {
+  await assert.rejects(() => reviewTopup("admin-user", "topup-id", "delete"), /คำสั่งไม่ถูกต้อง/);
+  await assert.rejects(() => reviewTopup("admin-user", "topup-id", undefined), /คำสั่งไม่ถูกต้อง/);
+});
+

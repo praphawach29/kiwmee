@@ -10,7 +10,7 @@
 
 const { AppError, badRequest, forbidden, notFound } = require("../errors");
 const { getBookingPool } = require("./db");
-const { getSetting } = require("./platform-settings");
+const { getSetting, requirePlatformAdmin } = require("./platform-settings");
 const { readSlip, receiverMatch } = require("./slip-check");
 
 const DAY = 24 * 3600 * 1000;
@@ -334,4 +334,60 @@ async function meterMessage(db, businessId, count = 1) {
   }
 }
 
-module.exports = { SKUS, walletOf, submitTopup, buy, judgeTopup, recordMessages, recordSlipCheck, meterMessage, MIN_TOPUP, MAX_TOPUP };
+/**
+ * The slips waiting for a human (plus the last few that were decided), for /super.
+ * Reads across brands, so it runs on the server's own connection after proving the caller is a
+ * platform admin — the wallet tables' RLS only shows a brand's own rows.
+ */
+async function listTopups({ limit = 40 } = {}) {
+  return ownerTx(async (client) => {
+    await requirePlatformAdmin(client);
+    const { rows } = await client.query(
+      `select t.id, t.amount::float8 as amount, t.status, t.check_status, t.check_reasons,
+              t.credit_amount::float8 as credit_amount, t.trans_ref, t.receiver_text,
+              t.created_at, t.credited_at, t.reviewed_by, b.id as brand_id, b.name as brand_name,
+              (select count(*)::int from public.wallet_topups p where p.status = 'pending') as pending_count
+         from public.wallet_topups t join public.brands b on b.id = t.brand_id
+        order by (t.status = 'pending') desc, t.created_at desc
+        limit $1`,
+      [Math.min(Math.max(Number(limit) || 40, 1), 200)]
+    );
+    return { topups: rows, pending: rows[0]?.pending_count ?? 0 };
+  });
+}
+
+/** Approve (credit the wallet) or reject one slip. Only a platform admin can do this. */
+async function reviewTopup(adminUserId, topupId, action) {
+  if (action !== "approve" && action !== "reject") throw badRequest("คำสั่งไม่ถูกต้อง");
+  return ownerTx(async (client) => {
+    await requirePlatformAdmin(client);
+    const { rows: [topup] } = await client.query("select * from public.wallet_topups where id = $1 for update", [topupId]);
+    if (!topup) throw notFound("ไม่พบรายการเติมเงินนี้");
+
+    if (action === "reject") {
+      if (topup.status === "credited") throw badRequest("รายการนี้เติมเงินไปแล้ว ย้อนกลับไม่ได้");
+      const { rows: [row] } = await client.query(
+        "update public.wallet_topups set status = 'rejected', reviewed_by = $2 where id = $1 returning status",
+        [topupId, adminUserId]
+      );
+      return { id: topupId, status: row.status };
+    }
+
+    if (topup.status === "credited") {
+      const { rows: [account] } = await client.query("select balance::float8 as balance from public.wallet_accounts where brand_id = $1", [topup.brand_id]);
+      return { id: topupId, status: "credited", balance: account?.balance ?? 0, already: true };
+    }
+    if (topup.status !== "pending") throw badRequest("รายการนี้ปิดแล้ว");
+
+    const { rows: [credited] } = await client.query("select public.wallet_apply_topup($1, $2, $3, $4) as result", [
+      topupId,
+      topup.amount,
+      topup.trans_ref,
+      topup.receiver_text
+    ]);
+    await client.query("update public.wallet_topups set reviewed_by = $2 where id = $1", [topupId, adminUserId]);
+    return { id: topupId, status: "credited", credited: Number(topup.amount), balance: Number(credited.result.balance) };
+  });
+}
+
+module.exports = { SKUS, walletOf, submitTopup, buy, judgeTopup, recordMessages, recordSlipCheck, meterMessage, listTopups, reviewTopup, MIN_TOPUP, MAX_TOPUP };

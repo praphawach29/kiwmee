@@ -139,6 +139,95 @@ test("a branch needs a plan with room for it, and is set up like the branch it c
   });
 });
 
+test("a branch copies what a shop gained after the first version: floor plan, pictures, add-ons, deposit", { skip }, async () => {
+  await inTx(async () => {
+    const brand = await brandOf(SALON);
+    await setPlan(SALON, "pro");
+    await as(USERS.owner);
+    // the parent branch picked these up over time (each came from a later migration)
+    await db.query(
+      `update public.businesses set amenities = array['ที่จอดรถ'], about = 'ร้านตัวอย่าง', address = 'ถนนสุขุมวิท 1',
+              media = '[{"url":"https://cdn.test/shop.webp"}]'::jsonb where id = $1`,
+      [SALON]
+    );
+    await db.query(
+      `update public.resources set layout_row = 0, layout_col = 1, layout_w = 2, layout_h = 1,
+              media = '[{"url":"https://cdn.test/staff.webp"}]'::jsonb where business_id = $1 and name = 'ช่างแนน'`,
+      [SALON]
+    );
+    await db.query(
+      `update public.offerings set media = '[{"url":"https://cdn.test/cut.webp"}]'::jsonb, required_documents = array['บัตรประชาชน']
+        where id = 'c1000000-0000-4000-8000-000000000001'`
+    );
+    await db.query(
+      `update public.business_booking_settings
+          set deposit_mode = 'fixed', deposit_value = 200, payment_info = '{"promptpay":"0812345678"}'::jsonb,
+              document_retention_days = 14, slip_auto_confirm = true
+        where business_id = $1`,
+      [SALON]
+    );
+    const group = (await db.query(
+      `insert into public.addon_groups (business_id, name, min_select, max_select) values ($1, 'อุปกรณ์', 0, 2) returning id`,
+      [SALON]
+    )).rows[0].id;
+    await db.query(
+      `insert into public.addons (business_id, group_id, name, price_unit, amount, max_quantity, uses_kind)
+       values ($1, $2, 'เช่าไม้', 'per_unit', 50, 4, 'ไม้แบด')`,
+      [SALON, group]
+    );
+    await db.query(
+      `insert into public.offering_addon_groups (business_id, offering_id, group_id)
+       values ($1, 'c1000000-0000-4000-8000-000000000001', $2)`,
+      [SALON, group]
+    );
+
+    await as(USERS.owner);
+    await brands.addBranch(db, brand, { name: "Bloom สาขา 9", slug: "bloom-9", copyFrom: "bloom-hair", copyResources: true });
+    const copy = await shopId("bloom-9");
+
+    const shop = (await db.query("select amenities, about, address, media from public.businesses where id = $1", [copy])).rows[0];
+    assert.deepEqual(shop.amenities, ["ที่จอดรถ"]);
+    assert.deepEqual([shop.about, shop.address, shop.media], ["ร้านตัวอย่าง", "ถนนสุขุมวิท 1", [{ url: "https://cdn.test/shop.webp" }]]);
+
+    const settings = (await db.query(
+      "select deposit_mode, deposit_value::float8 as deposit_value, payment_info, document_retention_days, slip_auto_confirm from public.business_booking_settings where business_id = $1",
+      [copy]
+    )).rows[0];
+    assert.deepEqual(settings, {
+      deposit_mode: "fixed",
+      deposit_value: 200,
+      payment_info: { promptpay: "0812345678" },
+      document_retention_days: 14,
+      slip_auto_confirm: true
+    });
+
+    const spot = (await db.query(
+      "select layout_row, layout_col, layout_w, layout_h, media from public.resources where business_id = $1 and name = 'ช่างแนน'",
+      [copy]
+    )).rows[0];
+    assert.deepEqual(spot, { layout_row: 0, layout_col: 1, layout_w: 2, layout_h: 1, media: [{ url: "https://cdn.test/staff.webp" }] }, "the floor plan travels with the branch");
+
+    const offering = (await db.query(
+      "select media, required_documents from public.offerings where business_id = $1 and name like 'ตัดผมหญิง%'",
+      [copy]
+    )).rows[0];
+    assert.deepEqual(offering.required_documents, ["บัตรประชาชน"]);
+    assert.deepEqual(offering.media, [{ url: "https://cdn.test/cut.webp" }], "service pictures travel too");
+
+    const addons = (await db.query(
+      `select g.name as group_name, g.max_select, a.name, a.amount::float8 as amount, a.uses_kind
+         from public.addon_groups g join public.addons a on a.group_id = g.id where g.business_id = $1`,
+      [copy]
+    )).rows;
+    assert.deepEqual(addons, [{ group_name: "อุปกรณ์", max_select: 2, name: "เช่าไม้", amount: 50, uses_kind: "ไม้แบด" }]);
+    const linked = (await db.query(
+      "select o.name from public.offering_addon_groups l join public.offerings o on o.id = l.offering_id where l.business_id = $1",
+      [copy]
+    )).rows.map((r) => r.name);
+    assert.deepEqual(linked, ["ตัดผมหญิง + สระไดร์"], "the equipment is offered with the same service in the new branch");
+  });
+});
+
 test("an expired plan is the free plan again", { skip }, async () => {
   await inTx(async () => {
     await setPlan(SALON, "pro", new Date(Date.now() - 86400000).toISOString());

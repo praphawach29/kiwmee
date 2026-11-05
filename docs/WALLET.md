@@ -26,7 +26,7 @@
 
 ## วิธีตั้งค่าก่อนใช้จริง
 
-1. รัน `supabase/migrations/20261025003700_wallet.sql` ใน SQL Editor ของ booking-v2
+1. รัน `supabase/migrations/20261025003700_wallet.sql` ใน SQL Editor ของโปรเจกต์ Kiwmee (เดิม booking-v2)
 2. `/super` → ตั้ง **บัญชีรับเงิน**: `billing.promptpay`, `billing.account_name`, `billing.bank` (3 ช่องนี้ใช้ตรวจว่าสลิปโอนเข้าบัญชีเรา)
 3. `/super` → ตั้ง `slip.easyslip_api_key` (คีย์จาก developer.easyslip.com)
 4. ทดสอบ: เปิด `/api/dashboard/brands/<brandId>/wallet` → เห็นยอด 0 และบัญชีรับเงิน

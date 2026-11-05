@@ -32,6 +32,16 @@ async function inTx(fn) {
   }
 }
 
+// An expected refusal aborts the transaction, so each one runs inside its own savepoint.
+async function refused(fn, check, message) {
+  await db.query("savepoint expect_error");
+  try {
+    await assert.rejects(fn, check, message);
+  } finally {
+    await db.query("rollback to savepoint expect_error");
+  }
+}
+
 test("a top-up is credited exactly once, however many times the server asks", { skip }, async () => {
   await inTx(async () => {
     const brand = await brandOf(SALON);
@@ -62,7 +72,7 @@ test("a purchase takes the money and leaves the balance; a short wallet is refus
     const paid = (await db.query("select public.wallet_charge($1, $2, 'purchase', $3, $4) as result", [brand, 99, order.id, "ข้อความ LINE เพิ่ม 500"])).rows[0].result;
     assert.equal(paid.balance, 401);
 
-    await assert.rejects(
+    await refused(
       () => db.query("select public.wallet_charge($1, $2, 'purchase', $3, $4)", [brand, 5000, order.id, "แพ็กเกจโปร"]),
       (e) => e.message === "INSUFFICIENT_BALANCE" && e.code === "BK422"
     );
@@ -101,12 +111,12 @@ test("a signed-in owner reads their wallet but cannot write it; another shop see
     const seen = (await db.query("select brand_id, balance::float8 as balance from public.wallet_accounts")).rows;
     assert.deepEqual(seen.map((r) => [r.brand_id, r.balance]), [[salonBrand, 250]], "only the owner's own brand");
 
-    await assert.rejects(
+    await refused(
       () => db.query("insert into public.wallet_entries (brand_id, kind, amount, balance_after) values ($1, 'topup', 10000, 10250)", [salonBrand]),
       (e) => e.code === "42501",
       "a signed-in user must not be able to mint balance"
     );
-    await assert.rejects(
+    await refused(
       () => db.query("select public.wallet_apply_topup(gen_random_uuid(), 1000, 'TX', 'x')"),
       (e) => e.code === "42501",
       "the credit function is not callable from the signed-in role"

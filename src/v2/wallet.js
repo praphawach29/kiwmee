@@ -32,6 +32,28 @@ const SKUS = {
 
 const imageError = (message) => new AppError("INVALID", message, 422);
 
+// How many LINE messages each package includes per month (docs/WALLET.md). The counter table keeps
+// what was actually granted; this is the fallback for brands whose plan was set before …003700.
+const PLAN_MESSAGES = { free: 100, starter: 900, pro: 4000, loyalty: 1200 };
+
+/**
+ * What a brand may send this month and how close it is: { used, total, remaining, percent, level }.
+ * level = ok | warn (≥ 80%) | full (≥ 100%). Nothing is blocked here — the shop only sees it.
+ */
+function quotaOf(plan, usage = {}) {
+  const included = Math.max(Number(usage.messagesIncluded) || 0, PLAN_MESSAGES[plan] ?? 0);
+  const total = included + (Number(usage.messagesPurchased) || 0);
+  const used = Number(usage.messagesUsed) || 0;
+  const percent = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
+  return {
+    used,
+    total,
+    remaining: Math.max(0, total - used),
+    percent,
+    level: percent >= 100 ? "full" : percent >= 80 ? "warn" : "ok"
+  };
+}
+
 /** One transaction on the server's own connection (no RLS): every caller proves brand ownership first. */
 async function ownerTx(fn) {
   const client = await getBookingPool().connect();
@@ -147,6 +169,7 @@ async function walletOf(brandId, userId) {
       balance: account?.balance ?? 0,
       plan,
       usage,
+      quota: quotaOf(plan.effective, usage),
       entries,
       topups,
       orders,
@@ -267,6 +290,8 @@ async function buy(brandId, userId, sku) {
           where brand_id = $1`,
         [brandId, item.plan]
       );
+      // the month's message allowance follows the plan (the counter keeps what was granted)
+      await client.query("select public.usage_add($1, 0, 0, $2, 0)", [brandId, PLAN_MESSAGES[item.plan] ?? 0]);
     }
     if (item.apply === "messages") {
       await client.query("select public.usage_add($1, 0, 0, 0, $2)", [brandId, item.count]);

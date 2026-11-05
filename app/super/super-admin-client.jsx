@@ -356,14 +356,14 @@ function RevenueSection() {
         {data.bySku.length === 0 ? (
           <p className="ad-muted">ยังไม่มีการซื้อจากกระเป๋าในเดือนนี้</p>
         ) : (
-          <table className="ad-table">
+          <table className="ui-table ui-table-stack">
             <thead><tr><th>สินค้า</th><th>จำนวน</th><th>ยอดเงิน</th></tr></thead>
             <tbody>
               {data.bySku.map((s) => (
                 <tr key={s.sku}>
-                  <td>{SKU_LABEL[s.sku] ?? s.sku}</td>
-                  <td>{s.count}</td>
-                  <td>{baht(s.amount)}</td>
+                  <td data-label="สินค้า">{SKU_LABEL[s.sku] ?? s.sku}</td>
+                  <td data-label="จำนวน">{s.count}</td>
+                  <td data-label="ยอดเงิน">{baht(s.amount)}</td>
                 </tr>
               ))}
             </tbody>
@@ -373,17 +373,17 @@ function RevenueSection() {
 
       <section className="super-card">
         <h3>รายแบรนด์</h3>
-        <table className="ad-table">
+        <table className="ui-table ui-table-stack">
           <thead><tr><th>แบรนด์</th><th>แพ็กเกจ</th><th>หมดอายุ</th><th>เติมเดือนนี้</th><th>ใช้เดือนนี้</th><th>คงเหลือ</th></tr></thead>
           <tbody>
             {data.perBrand.map((b) => (
               <tr key={b.id}>
-                <td>{b.name}</td>
-                <td>{b.planName}{b.active ? "" : " (หมดอายุ)"}</td>
-                <td>{b.validUntil ? new Date(b.validUntil).toLocaleDateString("th-TH") : "—"}</td>
-                <td>{b.topup ? baht(b.topup) : "—"}</td>
-                <td>{b.spend ? baht(b.spend) : "—"}</td>
-                <td>{baht(b.balance)}</td>
+                <td data-label="แบรนด์">{b.name}</td>
+                <td data-label="แพ็กเกจ">{b.planName}{b.active ? "" : " (หมดอายุ)"}</td>
+                <td data-label="หมดอายุ">{b.validUntil ? new Date(b.validUntil).toLocaleDateString("th-TH") : "—"}</td>
+                <td data-label="เติมเดือนนี้">{b.topup ? baht(b.topup) : "—"}</td>
+                <td data-label="ใช้เดือนนี้">{b.spend ? baht(b.spend) : "—"}</td>
+                <td data-label="คงเหลือ">{baht(b.balance)}</td>
               </tr>
             ))}
           </tbody>
@@ -442,18 +442,18 @@ function TopupsSection() {
         <p className="ad-muted">ยังไม่มีรายการ</p>
       ) : (
         <section className="super-card">
-          <table className="ad-table">
+          <table className="ui-table ui-table-stack">
             <thead>
               <tr><th>เวลา</th><th>แบรนด์</th><th>ยอดที่ขอ</th><th>เหตุผล</th><th>สถานะ</th><th></th></tr>
             </thead>
             <tbody>
               {rows.map((t) => (
                 <tr key={t.id}>
-                  <td>{new Date(t.created_at).toLocaleString("th-TH")}</td>
-                  <td>{t.brand_name}</td>
-                  <td>{Number(t.amount).toLocaleString("th-TH")} บาท</td>
-                  <td>{(t.check_reasons ?? []).map((r) => TOPUP_REASON[r] ?? r).join(" · ") || (t.check_status === "passed" ? "ตรวจผ่าน" : "—")}</td>
-                  <td>{t.status === "pending" ? "รอตรวจ" : t.status === "credited" ? `เติมแล้ว ${Number(t.credit_amount ?? t.amount).toLocaleString("th-TH")} บาท` : "ปฏิเสธ"}</td>
+                  <td data-label="เวลา">{new Date(t.created_at).toLocaleString("th-TH")}</td>
+                  <td data-label="แบรนด์">{t.brand_name}</td>
+                  <td data-label="ยอดที่ขอ">{Number(t.amount).toLocaleString("th-TH")} บาท</td>
+                  <td data-label="เหตุผล">{(t.check_reasons ?? []).map((r) => TOPUP_REASON[r] ?? r).join(" · ") || (t.check_status === "passed" ? "ตรวจผ่าน" : "—")}</td>
+                  <td data-label="สถานะ">{t.status === "pending" ? "รอตรวจ" : t.status === "credited" ? `เติมแล้ว ${Number(t.credit_amount ?? t.amount).toLocaleString("th-TH")} บาท` : "ปฏิเสธ"}</td>
                   <td>
                     {t.status === "pending" && (
                       <>

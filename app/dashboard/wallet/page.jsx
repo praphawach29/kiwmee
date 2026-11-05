@@ -1,5 +1,6 @@
 import WalletClient from "./wallet-client.jsx";
 import "../dashboard.css";
+import "../../ui/ui.css";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "กระเป๋าเงิน" };

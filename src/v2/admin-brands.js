@@ -60,10 +60,15 @@ async function listBrands(client) {
   // invites to the caller's confirmed email (admin-team.js) become memberships before we list.
   // A database that has not run migration …001700 yet must still open its dashboard — the invite
   // step is a convenience, not a reason to show an English Postgres error to the shop owner.
+  // An error inside a Postgres transaction aborts it (25P02 for everything after), so the optional
+  // step runs inside a savepoint: a database without migration …001700 still gets its dashboard.
+  await client.query("savepoint invites");
   try {
     await client.query("select public.accept_my_invites()");
+    await client.query("release savepoint invites");
   } catch (error) {
     if (error.code !== "42883" && error.code !== "42P01") throw error; // not "missing function/table"
+    await client.query("rollback to savepoint invites");
     console.warn("[brands] invites not taken up — migration …001700 is missing:", error.message);
   }
   const { rows } = await client.query(

@@ -112,12 +112,15 @@ test("the front desk takes a phone booking at any minute and sees it on the day'
 test("the shop adds equipment to a booking it takes itself", { skip }, async () => {
   await as(USERS.staffA, async () => {
     const shop = await admin.memberShop(db, "bloom-hair");
+    // the catalog itself is owner-only, so set the equipment up with RLS out of the way first
+    await db.query("reset role");
     await admin.saveResource(db, shop, null, { kind: "ไม้แบด", name: "ไม้แบด", capacity: 3 });
     await admin.saveAddonGroup(db, shop, null, {
       name: "อุปกรณ์",
       offeringIds: [CUT],
       addons: [{ name: "เช่าไม้", priceUnit: "per_unit", amount: 50, maxQuantity: 4, usesKind: "ไม้แบด" }]
     });
+    await admin.actAs(db, USERS.staffA);
     const groups = (await admin.getCatalog(db, shop)).addonGroups;
     const racket = groups.flatMap((g) => g.addons).find((a) => a.name === "เช่าไม้");
 

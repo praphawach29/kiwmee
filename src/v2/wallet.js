@@ -323,6 +323,39 @@ async function recordSlipCheck(brandId) {
   }
 }
 
+/** A brand at 100% of its month's messages may not send more cards; bookings and bills still work. */
+function messageAllowed(quota) {
+  return !quota || quota.level !== "full";
+}
+
+/**
+ * What a shop's brand may still send this month: { brandId, quota, allowed }. A shop that has run out
+ * keeps taking bookings — only the LINE cards stop (the customer still has the page and the link).
+ */
+async function allowanceForBusiness(db, businessId) {
+  try {
+    const { rows: [row] } = await db.query(
+      `select b.brand_id, public.brand_plan(b.brand_id) as plan,
+              coalesce(u.messages_used, 0) as used,
+              coalesce(u.messages_included, 0) as included,
+              coalesce(u.messages_purchased, 0) as purchased
+         from public.businesses b
+         left join public.usage_counters u
+                on u.brand_id = b.brand_id
+               and u.period = date_trunc('month', (now() at time zone 'Asia/Bangkok'))::date
+        where b.id = $1`,
+      [businessId]
+    );
+    if (!row?.brand_id) return null;
+    const quota = quotaOf(row.plan, { messagesUsed: row.used, messagesIncluded: row.included, messagesPurchased: row.purchased });
+    return { brandId: row.brand_id, quota, allowed: messageAllowed(quota) };
+  } catch (error) {
+    // never stop a card because the counter could not be read
+    console.error("[wallet] quota not read:", error.message);
+    return null;
+  }
+}
+
 /** One LINE push went out for a shop: count it on the brand's month. Never throws. */
 async function meterMessage(db, businessId, count = 1) {
   try {
@@ -390,4 +423,4 @@ async function reviewTopup(adminUserId, topupId, action) {
   });
 }
 
-module.exports = { SKUS, PLAN_MESSAGES, quotaOf, walletOf, submitTopup, buy, judgeTopup, recordMessages, recordSlipCheck, meterMessage, listTopups, reviewTopup, MIN_TOPUP, MAX_TOPUP };
+module.exports = { SKUS, PLAN_MESSAGES, quotaOf, messageAllowed, allowanceForBusiness, walletOf, submitTopup, buy, judgeTopup, recordMessages, recordSlipCheck, meterMessage, listTopups, reviewTopup, MIN_TOPUP, MAX_TOPUP };

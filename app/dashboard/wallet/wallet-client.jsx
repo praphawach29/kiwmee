@@ -170,7 +170,7 @@ export default function WalletClient() {
               <p className="ad-muted">
                 ข้อความ LINE ใช้ {money(wallet.quota.used)} / {money(wallet.quota.total)} ข้อความ
                 {wallet.quota.level === "warn" ? " · ใกล้เต็มแล้ว" : ""}
-                {wallet.quota.level === "full" ? " · เต็มแล้ว" : ""}
+                {wallet.quota.level === "full" ? " · เต็มแล้ว — การ์ด LINE หยุดส่ง (การจอง/บิลยังทำงานปกติ)" : ""}
               </p>
               <div
                 role="progressbar"

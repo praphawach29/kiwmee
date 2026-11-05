@@ -10,11 +10,12 @@ const LINE_SETTINGS = ["line.liff_id", "line.login_channel_id", "line.messaging_
 const CHECK_TIMEOUT_MS = 3000;
 
 // A hung pool must not hang the health check: overloaded or paused databases answer 503, not nothing.
+// The timer is deliberately not unref'd — a health check must be able to time out on its own, even
+// when it is the only thing keeping the process alive (it is cleared in finally either way).
 function withTimeout(promise, ms) {
   let timer;
   const timeout = new Promise((_, reject) => {
     timer = setTimeout(() => reject(new Error("TIMEOUT")), ms);
-    timer.unref?.();
   });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }

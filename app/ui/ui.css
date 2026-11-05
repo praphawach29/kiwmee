@@ -1,0 +1,303 @@
+/* Kiwmee UI foundation — พื้นฐานหน้าจอของทั้ง 3 role (ลูกค้า / ร้าน / ผู้ดูแล)
+   หลัก: 1 งานหลักต่อหน้า · ปุ่มหลัก 1 ปุ่ม · แตะง่าย ≥44px · input 16px กัน iOS ซูม
+   · ตารางยุบเป็นการ์ดบนมือถือ (ใช้ .ui-table-stack + data-label) */
+
+.ui-page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 20px 16px 80px;
+  display: grid;
+  gap: 16px;
+  color: var(--ink);
+}
+
+.ui-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.ui-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.35rem, 2.4vw, 1.7rem);
+  line-height: 1.25;
+}
+
+.ui-sub {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.ui-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.ui-card > h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-family: var(--font-display);
+}
+
+.ui-stats {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.ui-stat {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  display: grid;
+  gap: 4px;
+}
+
+.ui-stat small {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.ui-stat strong {
+  font-size: 1.5rem;
+  line-height: 1.2;
+}
+
+.ui-stat em {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-style: normal;
+}
+
+.ui-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.ui-table th {
+  text-align: left;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.8rem;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.ui-table td {
+  padding: 10px;
+  border-bottom: 1px solid var(--line-soft);
+  vertical-align: top;
+}
+
+.ui-table tr:last-child td {
+  border-bottom: 0;
+}
+
+/* มือถือ: ตารางกลายเป็นการ์ด — ใส่ data-label ให้ทุก td */
+@media (max-width: 720px) {
+  .ui-table-stack thead {
+    display: none;
+  }
+
+  .ui-table-stack tr {
+    display: block;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    background: var(--surface);
+  }
+
+  .ui-table-stack td {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    border: 0;
+    padding: 5px 0;
+    text-align: right;
+  }
+
+  .ui-table-stack td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 0.8rem;
+    text-align: left;
+    flex: none;
+  }
+}
+
+.ui-form {
+  display: grid;
+  gap: 12px;
+}
+
+.ui-field {
+  display: grid;
+  gap: 6px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.ui-field input,
+.ui-field select,
+.ui-field textarea {
+  min-height: 44px;
+  padding: 10px 12px;
+  font-size: 1rem;
+  font-family: inherit;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.ui-field input:focus-visible,
+.ui-field select:focus-visible,
+.ui-field textarea:focus-visible {
+  outline: 2px solid var(--grape);
+  outline-offset: 1px;
+}
+
+.ui-btn {
+  min-height: 44px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ui-btn-primary {
+  background: var(--grape);
+  color: #fff;
+}
+
+.ui-btn-primary:hover:not(:disabled) {
+  background: var(--grape-deep);
+}
+
+.ui-btn-secondary {
+  background: var(--surface);
+  color: var(--grape-deep);
+  border-color: var(--line);
+}
+
+.ui-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ui-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.ui-grid-2 {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.ui-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: var(--selected);
+  color: var(--grape-deep);
+}
+
+.ui-pill-ok {
+  background: var(--mint-tint);
+  color: var(--mint-deep);
+}
+
+.ui-pill-warn {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.ui-pill-danger {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.ui-banner {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 0.92rem;
+}
+
+.ui-banner-ok {
+  background: var(--mint-tint);
+  border-color: #b9efd6;
+  color: var(--mint-deep);
+}
+
+.ui-banner-warn {
+  background: var(--warn-bg);
+  border-color: #ffd9a8;
+  color: var(--warn);
+}
+
+.ui-banner-danger {
+  background: var(--danger-bg);
+  border-color: #ffd0cc;
+  color: var(--danger);
+}
+
+.ui-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--line-soft);
+  overflow: hidden;
+}
+
+.ui-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--grape);
+}
+
+.ui-empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 20px 8px;
+  font-size: 0.92rem;
+}
+
+@media (max-width: 720px) {
+  .ui-page {
+    padding: 14px 12px 88px;
+  }
+
+  .ui-btn {
+    width: 100%;
+  }
+
+  .ui-row > .ui-btn {
+    flex: 1 1 auto;
+  }
+}

@@ -103,4 +103,7 @@ node "$here/scripts/verify-restore.js" "$source_url" "$target_url"
 
 echo
 echo "drill passed. The dump itself is $(du -h "$work/public.sql" | cut -f1) of SQL."
-[ "$keep" = "1" ] && echo "kept the dump in $work (DRILL_KEEP=1)"
+if [ "$keep" = "1" ]; then
+  echo "kept the dump in $work (DRILL_KEEP=1)"
+fi
+exit 0

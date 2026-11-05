@@ -71,3 +71,47 @@ jobs:
       - run: npx next build
         env:
           NEXT_TELEMETRY_DISABLED: "1"
+
+  # scripts/backup-drill.sh must keep working: build a database from migrations + seed, copy its data
+  # into a second database, then compare every table, row count, RLS flag and function.
+  # Nothing here touches Supabase or Railway — the drill against booking-v2 runs on demand.
+  drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build the source database
+        run: |
+          createdb -h localhost -U postgres booking_source
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -q -d booking_source -f supabase/tests/supabase-shim.sql
+          for f in supabase/migrations/*.sql; do
+            psql -h localhost -U postgres -v ON_ERROR_STOP=1 -q -d booking_source -f "$f"
+          done
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -q -d booking_source -f supabase/seed.sql
+      - name: Prepare the restore target
+        run: |
+          createdb -h localhost -U postgres booking_restore
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -q -d booking_restore -f supabase/tests/supabase-shim.sql
+      - name: Backup and restore drill
+        env:
+          BOOKING_DB_URL: postgres://postgres@localhost:5432/booking_source
+          DRILL_DB_URL: postgres://postgres@localhost:5432/booking_restore
+        run: bash scripts/backup-drill.sh
+

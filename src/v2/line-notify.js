@@ -8,7 +8,7 @@
 
 const crypto = require("node:crypto");
 const { getSetting, encrypt, decrypt } = require("./platform-settings");
-const { meterMessage } = require("./wallet");
+const { meterMessage, allowanceForBusiness } = require("./wallet");
 
 const GRAPE = "#6A4CFF";
 const GRAPE_DEEP = "#4F33E0";
@@ -215,6 +215,12 @@ async function pushLine(db, to, messages, { fetchImpl = fetch, env = process.env
   if (typeof to !== "string" || !/^U[0-9a-f]{32}$/.test(to)) return { sent: false, reason: "NO_LINE_USER" };
   const token = await getSetting(db, "line.messaging_access_token", { env });
   if (!token) return { sent: false, reason: "NO_TOKEN" };
+  // a brand that used up the month's messages stops sending cards — the booking itself still works
+  const allowance = businessId ? await allowanceForBusiness(db, businessId) : null;
+  if (allowance && !allowance.allowed) {
+    console.warn(`[line-notify] quota full (${allowance.quota.used}/${allowance.quota.total}) — card skipped`);
+    return { sent: false, reason: "QUOTA_EXCEEDED", quota: allowance.quota };
+  }
   try {
     const response = await fetchImpl("https://api.line.me/v2/bot/message/push", {
       method: "POST",

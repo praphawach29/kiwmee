@@ -390,4 +390,4 @@ async function reviewTopup(adminUserId, topupId, action) {
   });
 }
 
-module.exports = { SKUS, walletOf, submitTopup, buy, judgeTopup, recordMessages, recordSlipCheck, meterMessage, listTopups, reviewTopup, MIN_TOPUP, MAX_TOPUP };
+module.exports = { SKUS, PLAN_MESSAGES, quotaOf, walletOf, submitTopup, buy, judgeTopup, recordMessages, recordSlipCheck, meterMessage, listTopups, reviewTopup, MIN_TOPUP, MAX_TOPUP };

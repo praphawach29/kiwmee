@@ -156,7 +156,7 @@ test("a branch copies what a shop gained after the first version: floor plan, pi
       [SALON]
     );
     await db.query(
-      `update public.offerings set media = '[{"url":"https://cdn.test/cut.webp","alt":""}]'::jsonb, required_documents = array['บัตรประชาชน']
+      `update public.offerings set media = '[{"url":"https://cdn.test/cut.webp","alt":""}]'::jsonb, required_documents = array['id_card']
         where id = 'c1000000-0000-4000-8000-000000000001'`
     );
     await db.query(
@@ -211,7 +211,7 @@ test("a branch copies what a shop gained after the first version: floor plan, pi
       "select media, required_documents from public.offerings where business_id = $1 and name like 'ตัดผมหญิง%'",
       [copy]
     )).rows[0];
-    assert.deepEqual(offering.required_documents, ["บัตรประชาชน"]);
+    assert.deepEqual(offering.required_documents, ["id_card"]);
     assert.deepEqual(offering.media, [{ url: "https://cdn.test/cut.webp", alt: "" }], "service pictures travel too");
 
     const addons = (await db.query(

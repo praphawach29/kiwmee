@@ -227,6 +227,7 @@ module.exports = {
   saveSetting,
   clearSetting,
   isPlatformAdmin,
+  requirePlatformAdmin,
   testMessagingToken,
   encrypt,
   decrypt,

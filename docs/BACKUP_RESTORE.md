@@ -1,4 +1,4 @@
-# Backup และการซ้อมกู้คืน (booking-v2)
+# Backup และการซ้อมกู้คืน (โปรเจกต์ Kiwmee — เดิม booking-v2)
 
 สถานะ: **ยังไม่เคยทดสอบ restore** — เป็นข้อค้างข้อสุดท้ายของ Phase 0 ใน `docs/SALES_READINESS_ROADMAP.md`
 เอกสารนี้คือขั้นตอนที่ทำให้ตอบได้ว่า "ถ้าฐานข้อมูลหายวันนี้ เรากลับมาได้ในกี่นาที และข้อมูลหายแค่ไหน"
@@ -7,7 +7,7 @@
 
 | อยู่ไหน | มีอะไร | backup อย่างไร |
 |---|---|---|
-| ฐานข้อมูล booking-v2 | การจอง บิล คะแนน สมาชิก ระดับ รางวัล เอกสารเช่า (เข้ารหัส) การตั้งค่า LINE (เข้ารหัส) | `pg_dump` / backup ของ Supabase |
+| ฐานข้อมูล Kiwmee | การจอง บิล คะแนน สมาชิก ระดับ รางวัล เอกสารเช่า (เข้ารหัส) การตั้งค่า LINE (เข้ารหัส) | `pg_dump` / backup ของ Supabase |
 | Supabase Storage (`shop-media`) | รูปร้าน บริการ ช่าง สนาม สลิปมัดจำ เอกสารเช่า | **ไม่อยู่ใน dump ของฐานข้อมูล** — ต้องคัดลอก bucket แยก |
 | ตัวแปรบน Railway | `BOOKING_DB_URL`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SETTINGS_ENCRYPTION_KEY`, `EASYSLIP_API_KEY` | เก็บใน password manager (ไม่ใช่ใน repo) |
 

@@ -76,6 +76,10 @@ Next.js 15 + Supabase · deploy บน Railway service `salon-booking-os-v1` →
 | #69 | **ตรวจสุขภาพระบบ (`/api/health`)**: handler ไป ping ฐานข้อมูล **v1** (`DATABASE_URL`) ที่ Railway ไม่มีแล้ว → ตอบ 503 ตลอดทั้งที่ระบบทำงาน · เปลี่ยนไปเช็ก booking-v2 (`BOOKING_DB_URL`) พร้อม timeout 3 วินาที (ค้าง = 503 ไม่ค้างรอ) · `line` อ่านจาก `platform_settings` (แค่จำนวน ไม่แตะค่าที่เข้ารหัส) · แสดง commit ที่ deploy (`RAILWAY_GIT_COMMIT_SHA`) · heartbeat ตัวจับเวลาเตือนนัด (`reminderLoopState()` ใน `src/v2/line-reminders.js`: รันล่าสุด/error ล่าสุด) · ไม่มี secret ในผลลัพธ์ · `src/v2/health.js` + เทสต์ `tests/health.test.js` · ไม่มี migration |
 | #70 | **Backup + ซ้อมกู้คืน (Phase 0 ข้อสุดท้าย)**: `scripts/backup-drill.sh` — dump `--data-only` ของ `public` + `auth.users` → drop/สร้าง schema `public` ใหม่จาก migrations ทั้งชุด → restore (สลับ identity เป็น `by default` ระหว่างโหลด) → `scripts/verify-restore.js` เทียบ **ทุกตาราง: จำนวนแถว, RLS, policy, ฟังก์ชัน** (กันเคส restore "สำเร็จ" แต่ตารางหาย; ข้าม `api_rate_limits` ได้ด้วย `VERIFY_IGNORE`) · ปฏิเสธการ drill ทับฐานต้นทาง และปฏิเสธ target ที่ไม่มี role ของ Supabase · `docs/BACKUP_RESTORE.md` (แผน 3 ชั้น, กู้ฉุกเฉิน, `SETTINGS_ENCRYPTION_KEY` หาย = ข้อมูลเข้ารหัสกู้ไม่ได้, Storage/สลิปไม่อยู่ใน dump, PDPA) · CI job `drill` รันทุก PR · ไม่มี migration |
 | #30 | **หน้าเชิญพนักงาน**: แท็บ "พนักงานและสิทธิ์" (เจ้าของร้าน) · เชิญด้วยอีเมล (มีบัญชีแล้ว = เพิ่มทันที, ยังไม่มี = รอเขาเข้า `/dashboard` ด้วยอีเมลที่ยืนยันแล้ว) · เปลี่ยนสิทธิ์/เอาออก · ร้านต้องมีเจ้าของอย่างน้อย 1 คน · migration `…001700` |
+| #71 | **ตัวเลือกเสริมในฟอร์มรับจองของร้าน**: กล่อง "ตัวเลือกเสริม" ตามกลุ่มที่ผูกกับบริการ (จำนวนขั้นต่ำ–สูงสุด, ราคา/หน่วย, เวลาที่เพิ่ม) → `POST …/bookings` ส่ง `addons` เข้า `create_booking` (การตรวจของที่ต้องว่าง/ราคา/กฎกลุ่มอยู่ที่ RPC) · การจองย้อนหลังไม่รับ (บอกเหตุผล) · DB test ใน `supabase/tests/admin-bookings.test.js` · ไม่มี migration |
+| #72 | **เพิ่มสาขาคัดลอกครบ**: `add_branch` คัดลอก ผังสนาม · รูปช่าง/สนาม/บริการ · amenities/about/address/map_url · เช่ารายวัน + เอกสาร · มัดจำ/`payment_info` · `document_retention_days`/`slip_auto_confirm` · กลุ่มตัวเลือกเสริม + ตัวเลือก + การผูกกับบริการ · migration `…003600` (รันแล้ว 5 พ.ย. 2569) |
+| #73 | **กระเป๋าเงิน + เติมเงินอัตโนมัติ**: `wallet_accounts`/`wallet_entries` (ledger + `balance_after`)/`wallet_topups`/`wallet_orders` + `usage_counters` · EasySlip ตรวจสลิปเติมเงิน (ยอด ≥ ที่ขอ · ผู้รับตรงบัญชี · ไม่ซ้ำ · ภายใน 7 วัน) → **เติมเข้าอัตโนมัติ**, ไม่ผ่าน = `pending` + เหตุผล · ซื้อแพ็กเกจ/แพ็กข้อความ/แพ็กตรวจสลิปจากยอด · หน้า `/dashboard/wallet` · หน้า `/super → การตั้งค่า → บัญชีรับเงิน` (`billing.*`) · นับข้อความจากการ์ดที่ส่งสำเร็จ (ยืนยันจอง/เตือนนัด/เลื่อน-ยกเลิก) · migration `…003700` (รันแล้ว) |
+| #74 | **เอกสารชื่อโปรเจกต์**: Supabase เปลี่ยนชื่อจาก booking-v2 → **Kiwmee** (ref/URL/คีย์เดิม) · อัปเดต `CLAUDE.md`, `.env.example`, `docs/*` |
 | #30 | **CI** (`.github/workflows/ci.yml`: unit, DB, build ทุก PR) · ปรับ roadmap ให้ตรงสถานะจริง |
 
 **Migration ล่าสุดที่รันบนโปรเจกต์ Kiwmee (เดิมชื่อ booking-v2, ref `ezubgqeqdipwfnmorqkj`) แล้ว: `20261025003700_wallet.sql`** (เจ้าของยืนยัน 5 พ.ย. 2569, PR #73)
@@ -148,11 +152,12 @@ Next.js 15 + Supabase · deploy บน Railway service `salon-booking-os-v1` →
 
 ## 4. ปัญหาที่รู้แล้ว ยังไม่ได้แก้
 
-3. ยังไม่ได้ตรวจ backup ของ booking-v2 (Phase 0)
+3. **ยังไม่ได้ตรวจว่าโปรเจกต์ Kiwmee มี backup อัตโนมัติในแผน Supabase หรือไม่** — เครื่องมือ drill พร้อมแล้ว (`npm run backup:drill`, `docs/BACKUP_RESTORE.md`, CI job `drill`)
 4. ยังไม่มีนโยบายความเป็นส่วนตัว/ข้อตกลงการใช้งาน (PDPA) (Phase 1)
-5. **`next dev` พังที่ `/dashboard/<ร้าน>`** ("Cannot use 'import.meta' outside a module" ใน `src/v2/booking-templates.js` ซึ่งเป็น CommonJS
-   แต่ถูก import ใน client component) — `next build`/production ไม่เป็น · ตรวจหน้าจอด้วย `next build && next start` ไปก่อน
+5. **`next dev` พังที่ `/dashboard/<ร้าน>`** ("Cannot use 'import.meta' outside a module") — ตรวจโค้ดแล้วไม่พบ `import.meta` เหลืออยู่ (น่าจะแก้ไปแล้วใน PR ก่อนหน้า) แต่ยังไม่มีใครยืนยันด้วย `next dev` จริง · `next build`/production ปกติดี
 6. โค้ด v1 ยังอยู่ใน repo (`/admin`, `/manage`, `src/` เดิม) — เก็บกวาดหลังย้าย LINE/ชำระเงินมา v2 (Phase 5)
+7. **สลิปเติมเงินที่ไม่ผ่านการตรวจ (pending) ยังอนุมัติด้วย SQL** — ยังไม่มีหน้าใน `/super` (API ของกระเป๋าพร้อมแล้ว)
+8. **ยังไม่บังคับเพดานโควตาตามแพ็กเกจ** — `usage_counters` เริ่มนับข้อความ/สลิปแล้ว แต่ยังไม่บล็อกหรือเตือนที่ 80%/100% (เจ้าของยังไม่ต้องการให้บังคับ)
 
 แก้แล้ว: error ภาษาไทย + ชื่อลูกค้าเบอร์ซ้ำ (#18) · CI (#30) · หน้าเชิญพนักงาน (#30) · แจ้งร้านในแอดมิน + ประวัติการเลื่อน (#32) · ลิงก์จัดการการจองจากร้าน (#35) · `/api/health` ชี้ฐานข้อมูล v1 (#69)
 

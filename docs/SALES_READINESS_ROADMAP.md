@@ -17,7 +17,7 @@ Kiwmee v2 ใช้งานได้จริงบน Railway (`kiwmee.up.rail
 
 ## 2. หลักการก่อนขายจริง
 
-1. ห้ามแตะ Supabase v1 (`rdbzdshvlfxenpsiyjzl`); ทุกอย่างอยู่ booking-v2
+1. ห้ามแตะ Supabase v1 (`rdbzdshvlfxenpsiyjzl`); ทุกอย่างอยู่โปรเจกต์ **Kiwmee** (`ezubgqeqdipwfnmorqkj` — เดิมชื่อ booking-v2)
 2. ทุก schema change ต้องเป็น migration ใหม่ และให้เจ้าของรัน SQL ก่อน merge
 3. merge เข้า `main` = deploy อัตโนมัติ · CI ต้องเขียวก่อน merge
 4. ทุกฟีเจอร์ต้องมี test และ verify บน production จริง
@@ -66,7 +66,7 @@ Kiwmee v2 ใช้งานได้จริงบน Railway (`kiwmee.up.rail
 
 - v1 code ยังอยู่ใน repo
 - ไม่มี monitoring/alerting สำหรับ production
-- **ยังไม่ได้ตรวจว่า booking-v2 มี backup รายวัน** (แพ็กเกจ Supabase ต่างกัน) และยังไม่เคยลองกู้คืน
+- **ยังไม่ได้ตรวจว่าโปรเจกต์ Kiwmee (เดิม booking-v2) มี backup รายวัน** (แพ็กเกจ Supabase ต่างกัน) และยังไม่เคยลองกู้คืน
 - ไม่มี SLA/support process
 
 ## 4. Roadmap ตามลำดับ

@@ -1,7 +1,7 @@
 # Upload images from a local device
 
 ## Setup gate
-Run `supabase/migrations/20261025001500_shop_media_storage.sql` in **booking-v2 (`ezubgqeqdipwfnmorqkj`) only** before merging this branch. Do not use the legacy v1 project. This creates/configures public bucket `shop-media` and owner-scoped Storage policies. Existing galleries need migration 001400 (already deployed).
+Run `supabase/migrations/20261025001500_shop_media_storage.sql` in **Kiwmee (`ezubgqeqdipwfnmorqkj`, formerly booking-v2) only** before merging this branch. Do not use the legacy v1 project. This creates/configures public bucket `shop-media` and owner-scoped Storage policies. Existing galleries need migration 001400 (already deployed).
 
 No service-role key is needed. Railway uses the existing SUPABASE_URL plus SUPABASE_PUBLISHABLE_KEY (or legacy anon key) and the signed-in owner's JWT, including refreshed tokens. Upload runtime deliberately rejects other project URLs and secret/service-role keys.
 
@@ -16,4 +16,4 @@ API validates size, MIME, magic and decoded image dimensions, rejects animated i
 - Parent combined run: 370 passing tests, 90 skipped, zero failures; production build passed.
 - Backend local DB report: 75 tests passed with Storage schema shim, including policy isolation and migration rerun. This is not a full Supabase Storage HTTP service.
 - Parent Playwright: local production build at desktop 1440px/mobile 390px with explicitly mocked catalog/upload APIs; chooser, upload-draft, blocked submit during pending upload, explicit save, staff hiding and no horizontal overflow/JS errors passed.
-- Actual authenticated Storage upload/readback in booking-v2 remains a post-migration/deployment verification gate. No production uploads or remote database changes were made by this work.
+- Actual authenticated Storage upload/readback in the Kiwmee project remains a post-migration/deployment verification gate. No production uploads or remote database changes were made by this work.

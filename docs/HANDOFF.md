@@ -76,8 +76,8 @@ Next.js 15 + Supabase · deploy บน Railway service `salon-booking-os-v1` →
 | #30 | **หน้าเชิญพนักงาน**: แท็บ "พนักงานและสิทธิ์" (เจ้าของร้าน) · เชิญด้วยอีเมล (มีบัญชีแล้ว = เพิ่มทันที, ยังไม่มี = รอเขาเข้า `/dashboard` ด้วยอีเมลที่ยืนยันแล้ว) · เปลี่ยนสิทธิ์/เอาออก · ร้านต้องมีเจ้าของอย่างน้อย 1 คน · migration `…001700` |
 | #30 | **CI** (`.github/workflows/ci.yml`: unit, DB, build ทุก PR) · ปรับ roadmap ให้ตรงสถานะจริง |
 
-**Migration ล่าสุดที่รันบน booking-v2 แล้ว: `20261025001700_shop_team.sql`** (เจ้าของยืนยัน 2 พ.ย. 2569, PR #30)
-ไฟล์ถึง `20261025003500_brand_logo.sql` (PR #66) เจ้าของรันแล้วทั้งหมด · ไฟล์ถัดไปตั้งชื่อ `20261025003600_…` · Supabase Auth ต้องเปิด "Confirm email" ไว้ (คำเชิญรับเฉพาะอีเมลที่ยืนยันแล้ว)
+**Migration ล่าสุดที่รันบนโปรเจกต์ Kiwmee (เดิมชื่อ booking-v2, ref `ezubgqeqdipwfnmorqkj`) แล้ว: `20261025003700_wallet.sql`** (เจ้าของยืนยัน 5 พ.ย. 2569, PR #73)
+ไฟล์ถึง `20261025003500_brand_logo.sql` (PR #66) และ `…003700_wallet.sql` รันแล้วทั้งหมด · **`…003600_branch_copy.sql` (PR #72) ยังไม่ได้รัน** · ไฟล์ถัดไปตั้งชื่อ `20261025003800_…` · Supabase Auth ต้องเปิด "Confirm email" ไว้ (คำเชิญรับเฉพาะอีเมลที่ยืนยันแล้ว)
 แพ็กเกจของแบรนด์ตั้งด้วย SQL (ยังไม่มีระบบเก็บเงิน): `supabase/README.md` → "ตั้งแพ็กเกจของแบรนด์"
 
 ตัวอย่างหน้าจอบัตรสมาชิก (ยังไม่ใช่โค้ดจริง): https://claude.ai/artifact/Whda2NEfEyUgwDL62cWfKz
@@ -100,7 +100,7 @@ Next.js 15 + Supabase · deploy บน Railway service `salon-booking-os-v1` →
 - การ์ด LINE ส่งผ่าน Messaging API ของ OA **QCut (@125cetnp)** (OA ใหม่ของ Kiwmee, token ใน `/super`) · ลูกค้าต้องเป็นเพื่อน OA ถึงจะได้รับ → ตั้ง LINE Login channel "Linked OA" = QCut + LIFF "Add friend option" = On
 - Webhook ของ QCut ยังไม่ต้องตั้ง (ระบบใหม่ยังไม่รับข้อความ) · ห้ามชี้ไป `/api/line/webhook` (เป็นของ v1)
 
-**ความเร็ว:** Railway กับ Supabase booking-v2 ควรอยู่ภูมิภาคเดียวกัน (เช่น Singapore) — ทุกการกดในหน้าจองต้องคุยกับฐานข้อมูล ถ้าอยู่คนละทวีปจะช้าทุกครั้ง
+**ความเร็ว:** Railway กับ Supabase (โปรเจกต์ Kiwmee) ควรอยู่ภูมิภาคเดียวกัน (เช่น Singapore) — ทุกการกดในหน้าจองต้องคุยกับฐานข้อมูล ถ้าอยู่คนละทวีปจะช้าทุกครั้ง
 
 **ตัวตนลูกค้าและ LINE**
 - ลูกค้ายืนยันตัวตนด้วย **LINE อย่างเดียว** (ไม่ทำ OTP) · คนเดียวกันข้ามร้าน = `line_user_id` เดียวกัน

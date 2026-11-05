@@ -7,7 +7,7 @@
 - **ตอบเป็นภาษาไทยเสมอ**
 - ทำงานบน branch แล้วเปิด PR · **merge เฉพาะเมื่อเจ้าของสั่งเท่านั้น** (squash merge, ชื่อ commit ลงท้าย `(#เลข PR)`)
 - **ห้ามแตะ Supabase v1** (`rdbzdshvlfxenpsiyjzl`) — บอท LINE เดิมยังใช้อยู่ ชื่อตารางชนกับ v2
-- ฐานข้อมูลจริงคือ Supabase **booking-v2** (`ezubgqeqdipwfnmorqkj`) · เครื่องมือ Supabase ในแชทเข้าโปรเจกต์นี้ไม่ได้
+- ฐานข้อมูลจริงคือ Supabase **Kiwmee** (`ezubgqeqdipwfnmorqkj`) · **เดิมชื่อโปรเจกต์ `booking-v2`** (เปลี่ยนชื่อ 5 พ.ย. 2569 — ชื่อเป็นแค่ป้ายในแดชบอร์ด, ref/URL/คีย์/connection string ไม่เปลี่ยน) · เครื่องมือ Supabase ในแชทเข้าโปรเจกต์นี้ไม่ได้
   → migration ใหม่เขียนเป็นไฟล์ใน `supabase/migrations/` แล้ว**ส่ง SQL ทั้งไฟล์ให้เจ้าของรันเองใน SQL Editor** ก่อน merge
   (โค้ดที่อ่านคอลัมน์ใหม่จะพังถ้า merge ก่อนรัน SQL)
 - ห้ามแก้ฐานข้อมูลด้วยมือโดยไม่มีไฟล์ migration · ทุกตารางใหม่ต้องมี RLS และเทสต์ (anon อ่านไม่ได้, ร้าน A แตะร้าน B ไม่ได้)

@@ -4,10 +4,10 @@
 
 ## ลำดับติดตั้ง
 
-1. ตรวจว่าเลือก Supabase **booking-v2** (`ezubgqeqdipwfnmorqkj`) เท่านั้น ห้ามใช้ v1
+1. ตรวจว่าเลือก Supabase **Kiwmee** (`ezubgqeqdipwfnmorqkj` — เดิมชื่อ booking-v2) เท่านั้น ห้ามใช้ v1
 2. ใช้ migration ใหม่สำหรับ `public.businesses.media` และ `public.offerings.media` (ไฟล์ลำดับ `20261025001400_*`) **ก่อน deploy โค้ดที่อ่านคอลัมน์นี้** รูปแบบ JSONB เป็น array ของ `{ "url": "...", "alt": "..." }` สูงสุด 8 รูป
 3. Deploy โค้ดและ assets `public/demo-media/badminton.svg`, `tennis.svg`, `football.svg` แล้วตรวจว่า URL `/demo-media/<ชื่อ>.svg` ของ deployment เปิดได้จริง เป็นภาพประกอบต้นฉบับ ไม่ใช่รูปสถานที่จริง
-4. หยุดแก้ไข catalog ชั่วคราว ให้เจ้าของตรวจ SQL แล้วรัน **ทั้งไฟล์** ใน SQL Editor ของ booking-v2 ด้วยสิทธิ์ DB owner ที่อ่าน `auth.users` และตรวจ collision ข้าม tenant ได้ ห้ามตัด guard / transaction หรือเปลี่ยนเป็น migration อัตโนมัติ สำหรับ CLI ใช้ `psql -v ON_ERROR_STOP=1 -f scripts/sql/jackshop-demo-services.sql` กับ connection ที่ตรวจสอบแล้วเท่านั้น
+4. หยุดแก้ไข catalog ชั่วคราว ให้เจ้าของตรวจ SQL แล้วรัน **ทั้งไฟล์** ใน SQL Editor ของโปรเจกต์ Kiwmee (เดิม booking-v2) ด้วยสิทธิ์ DB owner ที่อ่าน `auth.users` และตรวจ collision ข้าม tenant ได้ ห้ามตัด guard / transaction หรือเปลี่ยนเป็น migration อัตโนมัติ สำหรับ CLI ใช้ `psql -v ON_ERROR_STOP=1 -f scripts/sql/jackshop-demo-services.sql` กับ connection ที่ตรวจสอบแล้วเท่านั้น
 5. ตรวจผล readback ว่ามี **3 แถวตาม UUID ที่ระบุท้ายไฟล์** และตรวจ warning เรื่อง flow ก่อนทดสอบหน้าจอง `/b/jackshop` ตรวจหน้าร้านและบริการว่ารูปมีคำว่า “ภาพประกอบ…ไม่ใช่ภาพสถานที่จริง”
 
 ## บริการที่เพิ่ม

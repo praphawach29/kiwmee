@@ -499,6 +499,11 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
               {shop.deposit && <DepositNote deposit={shop.deposit} estimate={estimate} />}
               <p className="bk-fine">
                 <SelfServiceNote shop={shop} /> ร้านใช้ชื่อและเบอร์นี้เพื่อติดต่อเรื่องนัดหมายนี้เท่านั้น
+                {" · "}
+                การกดยืนยันถือว่ายอมรับ{" "}
+                <a href="/terms" target="_blank" rel="noreferrer">ข้อตกลงการใช้บริการ</a>
+                {" และ "}
+                <a href="/privacy" target="_blank" rel="noreferrer">นโยบายความเป็นส่วนตัว</a>
               </p>
             </form>
           </>

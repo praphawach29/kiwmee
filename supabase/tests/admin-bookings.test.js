@@ -133,7 +133,7 @@ test("the shop adds equipment to a booking it takes itself", { skip }, async () 
       addons: { [racket.id]: 2 }
     });
 
-    const rows = (await db.query("select name, quantity, total from public.booking_addons where booking_id = $1", [id])).rows;
+    const rows = (await db.query("select name, quantity, total::float8 as total from public.booking_addons where booking_id = $1", [id])).rows;
     assert.deepEqual(rows, [{ name: "เช่าไม้", quantity: 2, total: 100 }]);
     const held = (await db.query(
       "select r.kind, br.units from public.booking_resources br join public.resources r on r.id = br.resource_id where br.booking_id = $1 and r.kind = 'ไม้แบด'",

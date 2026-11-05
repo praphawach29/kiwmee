@@ -146,7 +146,7 @@ test("a branch copies what a shop gained after the first version: floor plan, pi
     await as(USERS.owner);
     // the parent branch picked these up over time (each came from a later migration)
     await db.query(
-      `update public.businesses set amenities = array['ที่จอดรถ'], about = 'ร้านตัวอย่าง', address = 'ถนนสุขุมวิท 1',
+      `update public.businesses set amenities = array['parking'], about = 'ร้านตัวอย่าง', address = 'ถนนสุขุมวิท 1',
               media = '[{"url":"https://cdn.test/shop.webp"}]'::jsonb where id = $1`,
       [SALON]
     );

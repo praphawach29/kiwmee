@@ -85,6 +85,32 @@
   justify-self: start;
 }
 
+/* add-ons on the shop's own booking form: a name, a price and a small quantity box per row */
+.ad-addons {
+  display: grid;
+  gap: 10px;
+}
+
+.ad-addon-group {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.ad-addon {
+  gap: 10px;
+  align-items: center;
+  color: var(--ink);
+  font-size: 0.92rem;
+}
+
+.ad-addon > input {
+  width: 72px;
+  text-align: center;
+}
+
 .ad-short > input {
   max-width: 140px;
 }

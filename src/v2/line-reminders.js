@@ -101,8 +101,15 @@ async function sendDueReminders(db, { now = new Date(), push = (to, messages) =>
   return { checked: due.length, sent, skipped };
 }
 
-// The server's own clock: every 5 minutes while it runs (one run at a time)
+// The server's own clock: every 5 minutes while it runs (one run at a time).
+// The last tick is kept so /api/health can tell "nothing to send" from "the clock stopped".
 let timer = null;
+let lastRunAt = null;
+let lastError = null;
+function reminderLoopState() {
+  return { started: timer !== null, lastRunAt, lastError };
+}
+
 function startReminderLoop(getDb, { everyMs = 5 * 60 * 1000 } = {}) {
   if (timer) return timer;
   let running = false;
@@ -117,9 +124,12 @@ function startReminderLoop(getDb, { everyMs = 5 * 60 * 1000 } = {}) {
       // points that run out within 14 days (src/v2/loyalty-expiry.js), daytime only
       const points = await sendExpiryNotices(getDb());
       if (points.sent) console.log(`[loyalty-expiry] sent ${points.sent}`);
+      lastError = null;
     } catch (error) {
+      lastError = String(error.message).slice(0, 120);
       console.error("[line-reminders] run failed:", error.message);
     } finally {
+      lastRunAt = new Date().toISOString();
       running = false;
     }
   };
@@ -129,4 +139,4 @@ function startReminderLoop(getDb, { everyMs = 5 * 60 * 1000 } = {}) {
   return timer;
 }
 
-module.exports = { sendDueReminders, startReminderLoop };
+module.exports = { sendDueReminders, startReminderLoop, reminderLoopState };

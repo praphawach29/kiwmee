@@ -147,16 +147,16 @@ test("a branch copies what a shop gained after the first version: floor plan, pi
     // the parent branch picked these up over time (each came from a later migration)
     await db.query(
       `update public.businesses set amenities = array['parking'], about = 'ร้านตัวอย่าง', address = 'ถนนสุขุมวิท 1',
-              media = '[{"url":"https://cdn.test/shop.webp"}]'::jsonb where id = $1`,
+              media = '[{"url":"https://cdn.test/shop.webp","alt":""}]'::jsonb where id = $1`,
       [SALON]
     );
     await db.query(
       `update public.resources set layout_row = 0, layout_col = 1, layout_w = 2, layout_h = 1,
-              media = '[{"url":"https://cdn.test/staff.webp"}]'::jsonb where business_id = $1 and name = 'ช่างแนน'`,
+              media = '[{"url":"https://cdn.test/staff.webp","alt":""}]'::jsonb where business_id = $1 and name = 'ช่างแนน'`,
       [SALON]
     );
     await db.query(
-      `update public.offerings set media = '[{"url":"https://cdn.test/cut.webp"}]'::jsonb, required_documents = array['บัตรประชาชน']
+      `update public.offerings set media = '[{"url":"https://cdn.test/cut.webp","alt":""}]'::jsonb, required_documents = array['บัตรประชาชน']
         where id = 'c1000000-0000-4000-8000-000000000001'`
     );
     await db.query(
@@ -187,7 +187,7 @@ test("a branch copies what a shop gained after the first version: floor plan, pi
 
     const shop = (await db.query("select amenities, about, address, media from public.businesses where id = $1", [copy])).rows[0];
     assert.deepEqual(shop.amenities, ["ที่จอดรถ"]);
-    assert.deepEqual([shop.about, shop.address, shop.media], ["ร้านตัวอย่าง", "ถนนสุขุมวิท 1", [{ url: "https://cdn.test/shop.webp" }]]);
+    assert.deepEqual([shop.about, shop.address, shop.media], ["ร้านตัวอย่าง", "ถนนสุขุมวิท 1", [{ url: "https://cdn.test/shop.webp", alt: "" }]]);
 
     const settings = (await db.query(
       "select deposit_mode, deposit_value::float8 as deposit_value, payment_info, document_retention_days, slip_auto_confirm from public.business_booking_settings where business_id = $1",
@@ -205,14 +205,14 @@ test("a branch copies what a shop gained after the first version: floor plan, pi
       "select layout_row, layout_col, layout_w, layout_h, media from public.resources where business_id = $1 and name = 'ช่างแนน'",
       [copy]
     )).rows[0];
-    assert.deepEqual(spot, { layout_row: 0, layout_col: 1, layout_w: 2, layout_h: 1, media: [{ url: "https://cdn.test/staff.webp" }] }, "the floor plan travels with the branch");
+    assert.deepEqual(spot, { layout_row: 0, layout_col: 1, layout_w: 2, layout_h: 1, media: [{ url: "https://cdn.test/staff.webp", alt: "" }] }, "the floor plan travels with the branch");
 
     const offering = (await db.query(
       "select media, required_documents from public.offerings where business_id = $1 and name like 'ตัดผมหญิง%'",
       [copy]
     )).rows[0];
     assert.deepEqual(offering.required_documents, ["บัตรประชาชน"]);
-    assert.deepEqual(offering.media, [{ url: "https://cdn.test/cut.webp" }], "service pictures travel too");
+    assert.deepEqual(offering.media, [{ url: "https://cdn.test/cut.webp", alt: "" }], "service pictures travel too");
 
     const addons = (await db.query(
       `select g.name as group_name, g.max_select, a.name, a.amount::float8 as amount, a.uses_kind

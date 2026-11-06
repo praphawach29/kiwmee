@@ -290,3 +290,14 @@ test("staff see the brand but cannot change it; nobody changes brands around the
     await refused(() => db.query(`select public.add_branch('${brand}', 'x', 'bloom-x')`), (e) => e.code === "42501");
   });
 });
+
+test("the shop dashboard still lists its brands when the invite migration is missing", { skip }, async () => {
+  await inTx(async () => {
+    // before …001700 ran there is no accept_my_invites(); the dashboard must still open
+    await db.query("drop function public.accept_my_invites()");
+    await as(USERS.owner);
+    const list = await brands.listBrands(db);
+    assert.ok(list.length >= 1, "brands are listed even without the invite function");
+    assert.equal(list[0].plan, "free");
+  });
+});

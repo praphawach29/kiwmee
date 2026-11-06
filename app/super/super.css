@@ -180,3 +180,72 @@
   .super-page-title { font-size: 20px; }
 }
 
+
+/* มือถือ: ตารางแคตตาล็อกกลายเป็นการ์ด (ใช้ data-label เป็นชื่อฟิลด์) + ปุ่ม/ช่องกรอกแตะง่าย */
+.super-field input,
+.super-field select {
+  min-height: 44px;
+  padding: 8px 10px;
+  font-size: 1rem;
+  font-family: inherit;
+  border-radius: 10px;
+}
+
+.super-btn,
+.super-btn2 {
+  min-height: 44px;
+}
+
+@media (max-width: 720px) {
+  .super-catalog-table thead {
+    display: none;
+  }
+
+  .super-catalog-table,
+  .super-catalog-table tbody,
+  .super-catalog-table tr,
+  .super-catalog-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .super-catalog-table tr {
+    border: 1px solid #e6e3f0;
+    border-radius: 12px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    background: #fff;
+  }
+
+  .super-catalog-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    border: 0;
+    padding: 4px 0;
+    text-align: right;
+  }
+
+  .super-catalog-table td::before {
+    content: attr(data-label);
+    color: #9a97ad;
+    font-size: 0.8rem;
+    text-align: left;
+    flex: none;
+  }
+}
+
+/* ช่องกรอกในหน้าการตั้งค่า (SettingCard): แตะง่าย และไม่ทำให้ iOS ซูม */
+.super-card input[type="text"],
+.super-card input[type="password"],
+.super-card input[type="number"],
+.super-card input[type="file"] {
+  min-height: 44px;
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 1rem;
+  font-family: inherit;
+  border: 1px solid #e6e3f0;
+  border-radius: 10px;
+}

@@ -8,6 +8,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CustomerFrame from "./customer-frame.jsx";
 import { useLiff } from "./use-liff.jsx";
+import { CheckinQr } from "./qr.jsx";
+import { bookingCode } from "../../../src/v2/scan-codes.js";
 import { BookingProgress, BookingReview, BookingSubmitBar, CustomerTabs, DepositBox, DirectionsButton, DocumentsBox, OfferingDetails, ShopAbout, ShopHeader, ShopHero, OfferingThumbnail, ResourceChoice, groupTimes, withMedia } from "./booking-presentation.jsx";
 
 const RESOURCE_WORD = { staff: "ช่าง", court: "สนาม", room: "ห้อง", equipment: "อุปกรณ์" };
@@ -480,6 +482,12 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
             )}
             <form id="booking-customer" className="bk-card" onSubmit={submit}>
               <h2>ข้อมูลผู้จอง</h2>
+              {liff.idToken && customer.name && (
+                <div className="bk-line-badge" role="status">
+                  <span className="bk-line-dot" aria-hidden="true" />
+                  <span>เชื่อมต่อ LINE แล้ว · ดึงข้อมูลอัตโนมัติ</span>
+                </div>
+              )}
               <label className="bk-field">
                 <span>ชื่อ</span>
                 <input name="name" required maxLength={100} autoComplete="name" value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} />
@@ -497,9 +505,13 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
                 />
               </label>
               {shop.deposit && <DepositNote deposit={shop.deposit} estimate={estimate} />}
+              <div className="bk-policy-box">
+                <span className="bk-policy-icon" aria-hidden="true">ℹ️</span>
+                <p>
+                  <SelfServiceNote shop={shop} /> ร้านใช้ชื่อและเบอร์นี้เพื่อติดต่อเรื่องนัดหมายนี้เท่านั้น
+                </p>
+              </div>
               <p className="bk-fine">
-                <SelfServiceNote shop={shop} /> ร้านใช้ชื่อและเบอร์นี้เพื่อติดต่อเรื่องนัดหมายนี้เท่านั้น
-                {" · "}
                 การกดยืนยันถือว่ายอมรับ{" "}
                 <a href="/terms" target="_blank" rel="noreferrer">ข้อตกลงการใช้บริการ</a>
                 {" และ "}
@@ -1026,7 +1038,17 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
         <DocumentsBox documents={documents} shopName={shop.name} uploadUrl={`/api/b/${shop.slug}/manage/${booking.manageToken}/document`} onUploaded={(view) => setDocuments(view.documents ?? documents)} />
       )}
 
-      <div className="bk-card bk-done-card">
+      <div className="bk-card bk-done-card bk-pass-card">
+        <div className="bk-pass-header">
+          <div className="bk-pass-brand">
+            <span className="bk-pass-badge">KIWMEE PASS</span>
+            {booking.id && <strong className="bk-pass-code">#{bookingCode(booking.id)}</strong>}
+          </div>
+          <span className="bk-status" data-status={booking.status}>
+            {held ? "กันคิวไว้แล้ว" : booking.status === "pending" ? "รอตรวจสลิป" : "ยืนยันแล้ว"}
+          </span>
+        </div>
+
         {selected.date && (
           <div className="bk-when">
             <span className="bk-date-tile" aria-hidden="true">
@@ -1067,9 +1089,14 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
             </div>
           )}
         </dl>
+        {booking.id && (
+          <div className="bk-done-qr">
+            <CheckinQr slug={shop.slug} id={booking.id} open={true} />
+          </div>
+        )}
         {held && booking.holdExpiresAt && !booking.deposit && <p className="bk-notice">กรุณาชำระเงินภายใน {timeFormat(booking.holdExpiresAt)} น.</p>}
         {booking.startAt && booking.endAt && (
-          <button type="button" className="bk-secondary" onClick={addToCalendar}>
+          <button type="button" className="bk-secondary bk-cal-btn" onClick={addToCalendar}>
             เพิ่มลงปฏิทิน
           </button>
         )}
@@ -1136,7 +1163,7 @@ function OptionBody({ ask, option, offering, resource, resourceWord, date }) {
           <strong>{offering.name}</strong>
           {/* the price sits under the name, so a long name keeps the full width (LINE shows text larger) */}
           <span className="bk-option-meta">
-            <span>{length}</span>
+            <span className="bk-duration-tag">⏱ {length}</span>
             {offering.price && <b className="bk-option-price">{priceText(offering.price)}</b>}
           </span>
         </span>

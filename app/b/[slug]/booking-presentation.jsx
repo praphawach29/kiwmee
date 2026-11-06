@@ -167,7 +167,18 @@ export function ShopHeader({ shop, subtitle }) {
   return (
     <header className="bk-header bk-shop-header">
       <span className="bk-shop-monogram" aria-hidden="true">{shop.name?.[0]}</span>
-      <div><h1>{shop.name}</h1><p className="bk-muted">{subtitle}</p></div>
+      <div className="bk-shop-header-info">
+        <h1>{shop.name}</h1>
+        <p className="bk-muted">
+          {shop.address ? (
+            <span className="bk-header-location">
+              <span className="bk-pin-icon" aria-hidden="true">📍</span> {shop.address}
+            </span>
+          ) : (
+            subtitle
+          )}
+        </p>
+      </div>
     </header>
   );
 }
@@ -176,12 +187,24 @@ const PHASES = [{ key: "selection", label: "เลือกคิว" }, { key: 
 
 export function BookingProgress({ phase }) {
   const current = PHASES.findIndex((item) => item.key === phase);
+  const percent = Math.round(((current + 1) / PHASES.length) * 100);
   return (
     <div className="bk-progress-wrap">
+      <div className="bk-progress-meta">
+        <span className="bk-step-badge">ขั้นตอนที่ {current + 1} จาก {PHASES.length}</span>
+        <span className="bk-progress-pct">{percent}% เสร็จสิ้น</span>
+      </div>
       <ol className="bk-progress" aria-label="ภาพรวมการจอง">
-        {PHASES.map((item, index) => <li key={item.key} aria-current={phase === item.key ? "step" : undefined} data-done={index < current}><span aria-hidden="true">{index < current ? "✓" : index + 1}</span>{item.label}</li>)}
+        {PHASES.map((item, index) => (
+          <li key={item.key} aria-current={phase === item.key ? "step" : undefined} data-done={index < current}>
+            <span aria-hidden="true">{index < current ? "✓" : index + 1}</span>
+            {item.label}
+          </li>
+        ))}
       </ol>
-      <div className="bk-progress-bar" aria-hidden="true"><span style={{ width: `${((current + 1) / PHASES.length) * 100}%` }} /></div>
+      <div className="bk-progress-bar" aria-hidden="true">
+        <span style={{ width: `${percent}%` }} />
+      </div>
     </div>
   );
 }

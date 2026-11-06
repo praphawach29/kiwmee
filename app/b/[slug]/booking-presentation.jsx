@@ -134,8 +134,8 @@ export function CustomerTabs({ slug, active }) {
     <nav className="bk-tabs" aria-label="เมนู">
       {tabs.map((t) => (
         <a key={t.key} href={t.href} aria-current={active === t.key ? "page" : undefined}>
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{t.icon}</svg>
-          {t.label}
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{t.icon}</svg>
+          <span>{t.label}</span>
         </a>
       ))}
     </nav>

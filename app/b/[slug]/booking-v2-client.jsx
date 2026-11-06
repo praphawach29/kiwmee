@@ -341,6 +341,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     return (
       <CustomerFrame>
         <main className={liffId ? "bk-shell bk-with-tabs" : "bk-shell"}>
+          <BookingProgress phase="complete" />
           <BookingDone shop={shop} booking={booking} items={summaryItems} selected={selected} resourceWord={resourceWord}
             onSlip={(view) => setBooking((b) => ({ ...b, status: view.booking.status, deposit: { ...b.deposit, slips: view.booking.deposit?.slips ?? 1 } }))} />
           <PoweredBy />
@@ -1043,6 +1044,23 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
     asked.length ? { required: asked.map((kind) => ({ kind, label: DOCUMENT_LABEL[kind] ?? kind })), uploaded: [], retentionDays: shop.documentRetentionDays ?? 30 } : null
   );
 
+  const [shared, setShared] = useState(false);
+  async function shareBooking() {
+    const url = managePath ? new URL(managePath, window.location.origin).toString() : window.location.href;
+    const text = `นัดหมาย ${shop.name} วันที่ ${formatDate(selected.date, { long: true, shortMonth: true })} เวลา ${when}: ${url}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: `นัดหมาย ${shop.name}`, text, url });
+        return;
+      } catch {}
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setShared(true);
+      setTimeout(() => setShared(false), 2500);
+    } catch {}
+  }
+
   function addToCalendar() {
     const service = rows.find((r) => r.step === "offering")?.value ?? "นัดหมาย";
     const link = managePath ? new URL(managePath, window.location.origin).toString() : window.location.href;
@@ -1074,8 +1092,12 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
         <span className="bk-done-icon" aria-hidden="true">
           <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7" /></svg>
         </span>
-        <h1>{held ? "กันคิวไว้ให้แล้ว" : booking.status === "pending" ? "ส่งสลิปแล้ว รอร้านยืนยัน" : "จองสำเร็จ"}</h1>
-        <p className="bk-muted">{held && booking.deposit ? "โอนมัดจำเพื่อยืนยันคิว" : `${shop.name} รอพบคุณ`}</p>
+        <h1>{held ? "กันคิวไว้ให้แล้ว" : booking.status === "pending" ? "ส่งสลิปแล้ว รอร้านยืนยัน" : "จองคิวสำเร็จเรียบร้อยแล้ว!"}</h1>
+        <p className="bk-muted">{held && booking.deposit ? "โอนมัดจำเพื่อยืนยันคิว" : "ระบบได้ส่งข้อความยืนยันและรายละเอียดไปที่ LINE เรียบร้อยแล้วค่ะ"}</p>
+        <div className="bk-line-pill">
+          <span className="bk-line-pill-icon">💬</span>
+          <span>แจ้งเตือนเข้า Official Account ทันที</span>
+        </div>
       </div>
 
       {booking.deposit && ["held", "pending"].includes(booking.status) && managePath && (
@@ -1095,11 +1117,11 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
       <div className="bk-card bk-done-card bk-pass-card">
         <div className="bk-pass-header">
           <div className="bk-pass-brand">
-            <span className="bk-pass-badge">KIWMEE PASS</span>
+            <span className="bk-pass-badge">KIWMEE SALON PASS</span>
             {booking.id && <strong className="bk-pass-code">#{bookingCode(booking.id)}</strong>}
           </div>
           <span className="bk-status" data-status={booking.status}>
-            {held ? "กันคิวไว้แล้ว" : booking.status === "pending" ? "รอตรวจสลิป" : "ยืนยันแล้ว"}
+            {held ? "กันคิวไว้แล้ว" : booking.status === "pending" ? "รอตรวจสลิป" : "รอรับบริการ"}
           </span>
         </div>
 
@@ -1146,21 +1168,44 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
         {booking.id && (
           <div className="bk-done-qr">
             <CheckinQr slug={shop.slug} id={booking.id} open={true} />
+            <small className="bk-muted" style={{ textAlign: "center", display: "block", marginTop: 4 }}>แสดง QR Code นี้ให้พนักงานเพื่อเช็คอินเมื่อถึงร้าน</small>
           </div>
         )}
         {held && booking.holdExpiresAt && !booking.deposit && <p className="bk-notice">กรุณาชำระเงินภายใน {timeFormat(booking.holdExpiresAt)} น.</p>}
-        {booking.startAt && booking.endAt && (
-          <button type="button" className="bk-secondary bk-cal-btn" onClick={addToCalendar}>
-            เพิ่มลงปฏิทิน
-          </button>
-        )}
         <DirectionsButton href={shop.directions} />
       </div>
 
+      <div className="bk-loyalty-callout">
+        <div className="bk-loyalty-icon">⭐</div>
+        <div className="bk-loyalty-details">
+          <div className="bk-loyalty-title">
+            <strong>รับแต้มสะสม Kiwmee Points</strong>
+            <span className="bk-badge-tier">สมาชิก</span>
+          </div>
+          <p>แต้มจะเข้ากระเป๋าใน LINE อัตโนมัติหลังรับบริการสำเร็จ เพื่อใช้เป็นส่วนลดครั้งถัดไป</p>
+        </div>
+      </div>
+
+      <div className="bk-actions-grid">
+        {booking.startAt && booking.endAt && (
+          <button type="button" className="bk-btn-primary-action bk-btn-calendar" onClick={addToCalendar}>
+            <span>📅 เพิ่มลงปฏิทิน</span>
+          </button>
+        )}
+        <button type="button" className="bk-btn-primary-action bk-btn-share" onClick={shareBooking}>
+          <span>{shared ? "✓ คัดลอกแล้ว" : "📤 แชร์เข้า LINE"}</span>
+        </button>
+      </div>
+
       {managePath && <ManageLink shop={shop} path={managePath} />}
-      <a className="bk-text-button bk-center" href={`/b/${shop.slug}`}>
-        จองคิวอีกครั้ง
+
+      <a className="bk-home-btn" href={`/b/${shop.slug}`}>
+        <span>🏠 กลับสู่หน้าหลัก / ดูบริการอื่นๆ</span>
       </a>
+
+      <div className="bk-trust-lock">
+        <span>🔒 การจองปลอดภัยด้วยการเข้ารหัส LINE LIFF Service</span>
+      </div>
     </section>
   );
 }

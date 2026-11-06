@@ -489,14 +489,66 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .bk-amenities li span { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 16px; background: var(--selected); font-size: 22px; }
 
 /* ---------- app bottom bar: จองคิว / การจองของฉัน ---------- */
-.bk-tabs { position: fixed; z-index: 20; left: 50%; bottom: max(10px, env(safe-area-inset-bottom)); transform: translateX(-50%);
-  display: flex; gap: 4px; padding: 5px; width: min(360px, calc(100vw - 32px)); border-radius: 999px;
-  background: rgba(255, 255, 255, .94); backdrop-filter: blur(12px); box-shadow: 0 10px 30px rgba(27, 22, 64, .18); border: 1px solid var(--line-soft); }
-.bk-tabs a { flex: 1 1 0; min-width: 0; display: flex; justify-content: center; align-items: center; gap: 6px; min-height: 46px; padding: 0 10px;
-  border-radius: 999px; color: var(--muted); font-size: .86rem; font-weight: 500; text-decoration: none; white-space: nowrap; }
-.bk-tabs a[aria-current="page"] { background: var(--ink); color: #fff; }
-.bk-tabs a svg { flex: none; }
-.bk-shell.bk-with-tabs { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+.bk-tabs {
+  position: fixed;
+  z-index: 30;
+  left: 50%;
+  bottom: max(10px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  gap: 4px;
+  padding: 5px 8px;
+  width: min(400px, calc(100vw - 20px));
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 10px 32px rgba(27, 22, 64, 0.16);
+  border: 1px solid var(--line-soft);
+  box-sizing: border-box;
+}
+.bk-tabs a {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 48px;
+  padding: 4px 4px;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.bk-tabs a svg {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+.bk-tabs a span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  text-align: center;
+  line-height: 1.1;
+}
+.bk-tabs a[aria-current="page"] {
+  background: var(--grape-deep);
+  color: #fff;
+  box-shadow: 0 3px 12px rgba(106, 76, 255, 0.35);
+}
+.bk-tabs a:active {
+  transform: scale(0.96);
+}
+.bk-shell.bk-with-tabs {
+  padding-bottom: calc(110px + env(safe-area-inset-bottom));
+}
 
 /* ---------- my bookings ---------- */
 .bk-next { display: grid; gap: 14px; padding: 18px; border-radius: 22px; background: var(--surface); border: 2px solid var(--grape);
@@ -845,5 +897,29 @@ a.bk-points-button { display: inline-flex; align-items: center; text-decoration:
 .bk-step-bottom-content { max-width: 480px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .bk-step-bottom-content strong { font-size: .92rem; color: var(--ink); }
 .bk-step-next-hint { font-size: .78rem; color: var(--grape-deep); font-weight: 600; }
+
+/* Stitch Step 4: Done page enhancements */
+.bk-line-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px; background: var(--selected); color: var(--grape-deep); font-size: .78rem; font-weight: 600; margin-top: 6px; }
+.bk-line-pill-icon { font-size: .85rem; }
+
+.bk-loyalty-callout { display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 18px; background: linear-gradient(135deg, #F6F2FF 0%, #ECFDF5 100%); border: 1px solid var(--line-soft); box-shadow: 0 4px 16px rgba(106, 76, 255, 0.05); }
+.bk-loyalty-icon { width: 44px; height: 44px; border-radius: 14px; background: var(--grape-deep); color: #fff; display: grid; place-items: center; font-size: 22px; flex: none; box-shadow: 0 4px 12px rgba(106, 76, 255, 0.3); }
+.bk-loyalty-details { display: grid; gap: 2px; min-width: 0; }
+.bk-loyalty-title { display: flex; align-items: center; gap: 8px; }
+.bk-loyalty-title strong { font-size: .92rem; color: var(--ink); }
+.bk-badge-tier { font-size: .7rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--mint-tint); color: var(--mint-deep); }
+.bk-loyalty-details p { margin: 0; font-size: .78rem; color: var(--muted); line-height: 1.4; }
+
+.bk-actions-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
+.bk-btn-primary-action { min-height: 48px; border-radius: 16px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font: inherit; font-size: .92rem; font-weight: 600; cursor: pointer; border: 0; transition: transform .12s, box-shadow .12s; text-decoration: none; }
+.bk-btn-primary-action:active { transform: scale(0.97); }
+.bk-btn-calendar { background: var(--grape-deep); color: #fff; box-shadow: 0 4px 14px rgba(106, 76, 255, 0.25); }
+.bk-btn-share { background: #06C755; color: #fff; box-shadow: 0 4px 14px rgba(6, 199, 85, 0.25); }
+
+.bk-home-btn { min-height: 48px; border-radius: 16px; background: #fff; border: 1px solid var(--line); color: var(--grape-deep); display: flex; align-items: center; justify-content: center; gap: 8px; font-size: .92rem; font-weight: 600; text-decoration: none; transition: background .15s; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04); }
+.bk-home-btn:hover { background: var(--bg); }
+
+.bk-trust-lock { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: .76rem; color: var(--muted); padding: 4px 0 16px; }
+
 
 

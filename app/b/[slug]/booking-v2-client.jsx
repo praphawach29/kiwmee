@@ -243,6 +243,11 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     if (!initialView) run({ selected: {} });
   }, [run, initialView]);
 
+  const next = view?.next;
+  const ask = view?.ask;
+  const atStart = next?.step === "start" && !ask;
+  const atCustomer = next && !ask && !atStart;
+
   const [category, setCategory] = useState(null);
   const rental = offerings.get(selected.offeringId)?.minDays != null;
   const summaryItems = SUMMARY_ORDER.filter((s) => selected[KEY[s]] !== undefined).map((s) => ({
@@ -345,10 +350,6 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     );
   }
 
-  const next = view?.next;
-  const ask = view?.ask;
-  const atStart = next?.step === "start" && !ask;
-  const atCustomer = next && !ask && !atStart;
   const categories = ask === "offering" ? [...new Set((view?.options ?? []).map((o) => offerings.get(o.value)?.category).filter(Boolean))] : [];
   const shownOptions = (view?.options ?? []).filter((o) => ask !== "offering" || !category || categories.length < 2 || offerings.get(o.value)?.category === category);
   // big photo cards when every service (or every court / stylist, "any" aside) has a photo
@@ -587,10 +588,19 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
   );
 }
 
-const offeringLength = (offering) =>
-  offering.minDays != null
-    ? offering.minDays === offering.maxDays ? `${offering.minDays} วัน` : `${offering.minDays}–${offering.maxDays} วัน`
-    : offering.durationMinutes ? formatMinutes(offering.durationMinutes) : `${formatMinutes(offering.minMinutes)}–${formatMinutes(offering.maxMinutes)}`;
+const offeringLength = (offering) => {
+  if (!offering) return "ตามความเหมาะสม";
+  if (offering.minDays != null) {
+    return offering.minDays === offering.maxDays ? `${offering.minDays} วัน` : `${offering.minDays}–${offering.maxDays} วัน`;
+  }
+  if (offering.durationMinutes) {
+    return formatMinutes(offering.durationMinutes);
+  }
+  if (offering.minMinutes && offering.maxMinutes) {
+    return `${formatMinutes(offering.minMinutes)}–${formatMinutes(offering.maxMinutes)}`;
+  }
+  return "เลือกระยะเวลาเอง";
+};
 
 // The extras for the chosen offering at the chosen time, grouped as the shop set them up. The engine
 // says which can still be taken (and how many); the customer picks, then goes on.
@@ -1233,5 +1243,5 @@ function OptionBody({ ask, option, offering, resource, resourceWord, date }) {
     );
   }
   if (ask === "party") return <strong>{option.value} คน</strong>;
-  return <strong>{String(option.value)}</strong>;
+  return <strong>{option?.label || String(option?.value ?? "")}</strong>;
 }

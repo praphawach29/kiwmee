@@ -1,5 +1,5 @@
-const { adminRoute } = require("../../../../../../src/v2/admin-auth");
-const { revenueReport, revenueCsv } = require("../../../../../../src/v2/platform-revenue");
+const { adminRoute } = require("../../../../../src/v2/admin-auth");
+const { revenueReport, revenueCsv } = require("../../../../../src/v2/platform-revenue");
 
 // ดาวน์โหลดรายงานรายได้เป็น CSV (เปิดใน Excel ได้ มี BOM ภาษาไทย)
 async function GET(request) {

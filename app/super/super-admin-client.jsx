@@ -351,6 +351,11 @@ function RevenueSection() {
         </div>
       </div>
 
+      <div className="ui-row" style={{ marginBottom: 4 }}>
+        <a className="ui-btn ui-btn-secondary" href="/api/super/revenue/export">ดาวน์โหลด CSV</a>
+        <span className="ui-sub">เปิดใน Excel ได้ · ตัวเลขเดียวกับหน้านี้</span>
+      </div>
+
       <section className="super-card">
         <h3>ขายอะไรได้บ้าง · {data.month}</h3>
         {data.bySku.length === 0 ? (

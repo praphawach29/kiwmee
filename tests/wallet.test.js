@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { judgeTopup, reviewTopup, quotaOf, messageAllowed, PLAN_MESSAGES, SKUS, MIN_TOPUP, MAX_TOPUP } = require("../src/v2/wallet");
+const { judgeTopup, reviewTopup, quotaOf, messageAllowed, renewalDecision, PLAN_MESSAGES, SKUS, MIN_TOPUP, MAX_TOPUP } = require("../src/v2/wallet");
 const { getSetting } = require("../src/v2/platform-settings");
 
 // A slip that EasySlip read, against a top-up the shop asked for.
@@ -137,4 +137,13 @@ test("the quota level is the only thing that stops sending — warn still sends"
   assert.equal(messageAllowed({ level: "warn" }), true);
   assert.equal(messageAllowed({ level: "full" }), false);
   assert.equal(messageAllowed(null), true, "an unread counter must not stop a card");
+});
+
+test("a paid plan renews from the wallet only inside the 3-day window and only if the money is there", () => {
+  const now = new Date("2026-11-06T00:00:00Z");
+  assert.deepEqual(renewalDecision({ plan: "pro", validUntil: "2026-11-08T00:00:00Z", balance: 900 }, now), { action: "renew", amount: 890 });
+  assert.deepEqual(renewalDecision({ plan: "pro", validUntil: "2026-11-08T00:00:00Z", balance: 100 }, now), { action: "short", amount: 890 });
+  assert.deepEqual(renewalDecision({ plan: "pro", validUntil: "2026-11-20T00:00:00Z", balance: 900 }, now), { action: "none", amount: 0 });
+  assert.deepEqual(renewalDecision({ plan: "free", validUntil: "2026-11-07T00:00:00Z", balance: 900 }, now), { action: "none", amount: 0 });
+  assert.deepEqual(renewalDecision({ plan: "starter", validUntil: null, balance: 900 }, now), { action: "none", amount: 0 });
 });

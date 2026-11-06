@@ -5,7 +5,7 @@
 **Kiwmee** = ระบบจองคิวหลายร้านผ่านเว็บ/LINE ที่กำลังต่อยอดเป็น**ระบบสมาชิก + คะแนนสะสม** ในผลิตภัณฑ์เดียว
 Next.js 15 + Supabase · deploy บน Railway service `salon-booking-os-v1` → `https://kiwmee.up.railway.app` ทุกครั้งที่ merge เข้า `main`
 
-**Repo เปลี่ยนชื่อเป็น `praphawach29/kiwmee`** (เดิม `salon-booking-os-v1`, GitHub redirect ลิงก์เก่าให้) · ชื่อ service บน Railway และโดเมนยังเป็นชื่อเดิม ·
+**GitHub Repo:** `https://github.com/praphawach29/kiwmee.git` (เดิม `salon-booking-os-v1`) · ชื่อ service บน Railway และโดเมนยังเป็นชื่อเดิม (`kiwmee.up.railway.app`) ·
 ถ้า Railway ไม่ deploy หลัง merge ให้เชื่อม repo ใหม่ที่ Railway → service → Settings → Source
 
 ---
@@ -94,6 +94,7 @@ Next.js 15 + Supabase · deploy บน Railway service `salon-booking-os-v1` →
 | #86 | **UI แดชบอร์ดร้าน**: คลาส `ad-*` ได้มาตรฐานเดียวกับ `.ui-*` (ปุ่ม/ช่องกรอก ≥44px, ตัวอักษร 16px, ระยะห่างบนมือถือ) โดยไม่แก้ JSX 200KB |
 | #87 | **UI `/super`**: ตารางแคตตาล็อก (แบรนด์/ร้าน) กลายเป็นการ์ดเมื่อจอ <720px ด้วย `data-label` · ช่องกรอกการตั้งค่าสูง 44px/16px · ปุ่มและช่องกรอง ≥44px |
 | #88 | **ฟีเจอร์ธุรกิจ**: ต่ออายุแพ็กเกจอัตโนมัติจากกระเป๋าเงิน (ทุกชั่วโมง, ต่อเมื่อเหลือ ≤3 วัน และเงินพอ, ไม่พอ = ไม่ตัดแล้วเตือน) · ดาวน์โหลดรายงานรายได้เป็น CSV (`/api/super/revenue/export`, มี BOM) · เตือนแพ็กเกจใกล้หมดอายุที่หน้าแรกแดชบอร์ด + หน้ากระเป๋าเงิน · unit test เพิ่ม · ไม่มี migration |
+| #90 | **ปลดระวาง v1**: ลบ `app/admin`, `app/manage`, `app/assistant`, API v1, `src/` เดิม, `database/`, เทสต์/สคริปต์/เอกสาร v1 (179 ไฟล์) · เก็บ `src/errors.js`, `src/http.js`, `src/security/limits.js` ที่ v2 ใช้ · ย้าย `ZERO_AVAILABILITY_REASONS` ไป `src/v2/availability-reasons.js` · stub webhook 410 · tag `pre-v1-removal` · ไม่มี migration |
 | #30 | **CI** (`.github/workflows/ci.yml`: unit, DB, build ทุก PR) · ปรับ roadmap ให้ตรงสถานะจริง |
 
 **Migration ล่าสุดที่รันบนโปรเจกต์ Kiwmee (เดิมชื่อ booking-v2, ref `ezubgqeqdipwfnmorqkj`) แล้ว: `20261025003700_wallet.sql`** (เจ้าของยืนยัน 5 พ.ย. 2569, PR #73)
@@ -169,7 +170,7 @@ Next.js 15 + Supabase · deploy บน Railway service `salon-booking-os-v1` →
 3. **ยังไม่ได้ตรวจว่าโปรเจกต์ Kiwmee มี backup อัตโนมัติในแผน Supabase หรือไม่** — เครื่องมือ drill พร้อมแล้ว (`npm run backup:drill`, `docs/BACKUP_RESTORE.md`, CI job `drill`)
 4. **PDPA**: มีหน้า `/privacy` และ `/terms` แล้ว (#78) — เหลือใส่ชื่อนิติบุคคล/อีเมลติดต่อจริง และ (ถ้าต้องการ) ติ๊กความยินยอมรับข่าวสารแยกต่างหาก
 5. **`next dev` ที่ `/dashboard/<ร้าน>`** — ค้นทั้ง repo แล้ว **ไม่เหลือ `import.meta`** (ต้นเหตุเดิมคือ `src/v2/booking-templates.js`) และ client component import ไฟล์นั้นได้ตามปกติ · แต่ยังยืนยันด้วย `next dev` จริงไม่ได้ในเครื่องที่แก้ (แซนด์บ็อกซ์ห้าม spawn worker) — ให้เจ้าของลอง `npm run dev` เปิด `/dashboard/<slug>` หนึ่งครั้ง ถ้าปกติให้ลบข้อความนี้ออก
-6. โค้ด v1 ยังอยู่ใน repo 109 ไฟล์ — **ยังไม่ลบเพราะ webhook บอท LINE เดิมยังชี้ที่ `/api/line/webhook` ของ repo นี้** · แผนและลำดับที่ปลอดภัยอยู่ใน `docs/V1_RETIREMENT.md` (ต้องเช็ก Webhook URL + Railway logs ก่อน)
+6. **v1 ถูกลบแล้ว** (#90): channel ของบอทเดิมชี้ไป `linebooking-amber.vercel.app` และ "Use webhook" ปิดอยู่ · ที่เหลือคือ stub `/api/line/webhook` ตอบ 410 + log ไว้ตรวจจับผู้เรียกที่ลืมปิด
 7. **สลิปเติมเงินที่ยัง pending ต้องให้ผู้ดูแลกดอนุมัติ** — มีหน้าแล้วที่ `/super → การเงิน → สลิปรอเติมเงิน` (ไม่ต้องใช้ SQL)
 8. **บังคับเพดานโควตาแล้ว** (#79): เต็ม 100% = หยุดส่งการ์ด LINE แต่การจอง/บิลยังทำงาน · ยังไม่มีการแจ้งเตือนอัตโนมัติเมื่อใกล้เต็ม (แสดงในแดชบอร์ดเท่านั้น) — `usage_counters` เริ่มนับข้อความ/สลิปแล้ว แต่ยังไม่บล็อกหรือเตือนที่ 80%/100% (เจ้าของยังไม่ต้องการให้บังคับ)
 9. **ถ้าฐานข้อมูลยังไม่มี `business_invites` / `accept_my_invites()`** (migration `…001700_shop_team.sql`) หน้า `/dashboard` จะเปิดได้ (ทนต่อ error แล้ว) แต่ฟีเจอร์เชิญพนักงานจะไม่ทำงาน — ต้องรัน migration ไฟล์นั้นหนึ่งครั้ง

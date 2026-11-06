@@ -11,6 +11,7 @@
   → migration ใหม่เขียนเป็นไฟล์ใน `supabase/migrations/` แล้ว**ส่ง SQL ทั้งไฟล์ให้เจ้าของรันเองใน SQL Editor** ก่อน merge
   (โค้ดที่อ่านคอลัมน์ใหม่จะพังถ้า merge ก่อนรัน SQL)
 - ห้ามแก้ฐานข้อมูลด้วยมือโดยไม่มีไฟล์ migration · ทุกตารางใหม่ต้องมี RLS และเทสต์ (anon อ่านไม่ได้, ร้าน A แตะร้าน B ไม่ได้)
+- **GitHub Repo:** `https://github.com/praphawach29/kiwmee.git`
 - merge เข้า `main` = deploy อัตโนมัติไป Railway (`kiwmee.up.railway.app`)
 
 ## ก่อนเปิด PR ต้องผ่าน
@@ -26,6 +27,6 @@ GitHub Actions (`.github/workflows/ci.yml`) รันทั้งสามอย
 ## โค้ดที่ควรรู้
 
 - v2 (ของใหม่ทั้งหมด): `src/v2/*`, `app/b/[slug]/*` (หน้าจองลูกค้า), `app/dashboard/*` (แอดมินร้าน), `app/api/b/**`, `app/api/dashboard/**`, `supabase/`
-- v1 (ของเดิม ยังไม่ลบ): `src/` นอก `src/v2`, `app/admin`, `app/manage`, `app/api/admin`, `database/` — อย่าต่อยอดของ v1
+- v1 ถูกลบออกจาก repo แล้ว (PR #90, tag `pre-v1-removal` เก็บประวัติไว้) · ยังใช้ร่วมเฉพาะตัวช่วยที่ v2 ต้องใช้: `src/errors.js`, `src/http.js`, `src/security/limits.js` · **ฐานข้อมูล v1 ยังห้ามแตะ**
 - แบรนด์: `docs/BRAND_COLORS.md` (ม่วง #6A4CFF + มินต์ #3DDC97, ฟอนต์ Mitr/Anuphan, โลโก้ `public/brand/`)
 - เอกสารออกแบบ: `docs/FLEXIBLE_BOOKING_DESIGN.md` (ระบบจอง ขั้น 1–5), `docs/LOYALTY_DESIGN.md` (LINE, แบรนด์/สาขา, บิล, คะแนน, ระดับสมาชิก, แพ็กเกจ)

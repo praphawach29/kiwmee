@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+
+<html lang="th"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_stack" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-tertiary": "#ffffff", "inverse-surface": "#2d2a5b", "inverse-primary": "#c8bfff", "primary": "#512ae6", "primary-container": "#6a4cff", "secondary": "#006c45", "on-background": "#181445", "on-error": "#ffffff", "on-tertiary-container": "#f6eeff", "surface-container-highest": "#e3dfff", "on-secondary-container": "#00734a", "error-container": "#ffdad6", "on-surface-variant": "#474556", "tertiary-fixed-dim": "#d0bcff", "surface-container-low": "#f6f2ff", "outline": "#787588", "on-primary": "#ffffff", "tertiary": "#642fcd", "primary-fixed": "#e5deff", "on-error-container": "#93000a", "surface-bright": "#fcf8ff", "surface-dim": "#dad6ff", "on-primary-fixed-variant": "#4106d8", "secondary-fixed-dim": "#42e09a", "on-secondary-fixed": "#002112", "outline-variant": "#c9c4d9", "surface-variant": "#e3dfff", "background": "#fcf8ff", "error": "#ba1a1a", "on-surface": "#181445", "tertiary-container": "#7d4de7", "on-primary-fixed": "#190064", "surface": "#fcf8ff", "on-primary-container": "#f4efff", "on-secondary-fixed-variant": "#005233", "surface-container-lowest": "#ffffff", "secondary-fixed": "#65fdb5", "on-tertiary-fixed": "#23005c", "inverse-on-surface": "#f3eeff", "surface-container-high": "#e9e5ff", "surface-tint": "#5a38ef", "on-tertiary-fixed-variant": "#5516be", "surface-container": "#efebff", "tertiary-fixed": "#e9ddff", "secondary-container": "#65fdb5", "primary-fixed-dim": "#c8bfff", "on-secondary": "#ffffff" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "margin": "1rem", "space-sm": "0.5rem", "space-xl": "1.75rem", "space-xs": "0.25rem", "gutter": "1rem", "space-md": "1rem", "space-lg": "1.25rem" }, "fontFamily": { "headline-xl-mobile": ["Plus Jakarta Sans"], "headline-lg": ["Plus Jakarta Sans"], "body-md": ["Plus Jakarta Sans"], "label-lg": ["Plus Jakarta Sans"], "headline-md": ["Plus Jakarta Sans"], "label-sm": ["Plus Jakarta Sans"], "body-sm": ["Plus Jakarta Sans"], "body-lg": ["Plus Jakarta Sans"], "label-md": ["Plus Jakarta Sans"], "headline-xl": ["Plus Jakarta Sans"], "headline-sm": ["Plus Jakarta Sans"] }, "fontSize": { "headline-xl-mobile": ["26px", { "lineHeight": "34px", "fontWeight": "700" }], "headline-lg": ["24px", { "lineHeight": "32px", "fontWeight": "700" }], "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }], "label-lg": ["14px", { "lineHeight": "20px", "fontWeight": "600" }], "headline-md": ["20px", { "lineHeight": "28px", "fontWeight": "600" }], "label-sm": ["10px", { "lineHeight": "14px", "fontWeight": "700" }], "body-sm": ["12px", { "lineHeight": "16px", "fontWeight": "400" }], "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }], "label-md": ["12px", { "lineHeight": "16px", "fontWeight": "600" }], "headline-xl": ["32px", { "lineHeight": "40px", "fontWeight": "700" }], "headline-sm": ["18px", { "lineHeight": "24px", "fontWeight": "600" }] } } } };</script><style>@layer base{html,body{width:100%;margin:0;padding:0;background-color:#fcf8ff;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}}</style><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-on-surface antialiased flex flex-col min-h-screen"><header class="fixed top-0 w-full z-50 bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] pt-safe"><div class="h-14 px-margin flex items-center justify-between max-w-[480px] mx-auto w-full"><div class="flex items-center gap-space-xs"><button class="w-11 h-11 -ml-space-xs rounded-full flex items-center justify-center text-on-surface hover:bg-surface-container transition-colors active:scale-95" onclick="history.back()" type="button"><span class="material-symbols-outlined text-[24px]">arrow_back</span></button><h1 class="font-headline-sm text-headline-sm text-on-surface tracking-tight truncate">My Bookings</h1></div><div class="flex items-center gap-space-sm"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex-1 flex flex-col relative w-full max-w-[480px] mx-auto pt-14 pb-safe bg-surface"><div class="flex flex-col w-full">
+<!-- User Profile & Status Bar -->
+<div class="px-margin pt-space-md pb-space-sm flex items-center justify-between">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="relative shrink-0">
+<img class="w-12 h-12 rounded-full object-cover shadow-sm" data-alt="Warm and modern portrait of an elegant Thai woman smiling with glossy healthy hair in a luminous clean studio setting with soft purple ambient tone" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAL20-umMlHHg39Kb4M6Q7BBakrG_6ckEOchlyzQkkqEflbsnTEPlrMkjnGvJMuBb_o9XxF-cgH1XwjwOOYPSB3INOI7YD2CDswXM2vTAv-Nyo1MUZTVIyO3fwfpeXXbRTI5dclCZYcTzXaJPjEo--w93XxhEgLorWHh6l4mhprRAx5bbllxSciNzIy_qqsjkY5CU1IlJWUwtgyp-VzQbjRm3G7cZqdzkG2t_rdk7W-"/>
+<span class="absolute bottom-0 right-0 w-3.5 h-3.5 bg-secondary rounded-full ring-2 ring-surface"></span>
+</div>
+<div class="min-w-0">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="font-label-lg text-label-lg text-on-surface truncate">คุณวรัญญา สิริโชค</span>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-high text-primary font-label-sm text-label-sm flex items-center gap-1 shrink-0">
+<span class="material-symbols-outlined text-[13px]" style="font-variation-settings: 'FILL' 1;">stars</span>
+            Gold Member
+          </span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">สะสม 840 พอยท์ (แลกสปาฟรีได้)</p>
+</div>
+</div>
+<a aria-label="LINE Support Chat" class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-primary transition-transform active:scale-95 shrink-0" href="https://line.me">
+<span class="material-symbols-outlined text-[20px]">chat</span>
+</a>
+</div>
+<!-- Segmented Tabs (Filter Controls) -->
+<div class="px-margin py-space-sm">
+<div class="p-1 rounded-xl bg-surface-container-low flex items-center gap-1">
+<button class="tab-btn flex-1 py-2 px-1 rounded-lg bg-surface text-primary shadow-sm font-label-md text-label-md flex items-center justify-center gap-1.5 transition-all" id="tab-upcoming" onclick="switchTab('upcoming')" type="button">
+<span>กำลังจะมาถึง</span>
+<span class="px-1.5 py-0.2 rounded-full bg-primary text-on-primary font-label-sm text-label-sm">1</span>
+</button>
+<button class="tab-btn flex-1 py-2 px-1 rounded-lg text-on-surface-variant hover:text-on-surface font-label-md text-label-md flex items-center justify-center gap-1.5 transition-all" id="tab-completed" onclick="switchTab('completed')" type="button">
+<span>เสร็จสิ้นแล้ว</span>
+<span class="px-1.5 py-0.2 rounded-full bg-surface-container-highest text-on-surface-variant font-label-sm text-label-sm">3</span>
+</button>
+<button class="tab-btn flex-1 py-2 px-1 rounded-lg text-on-surface-variant hover:text-on-surface font-label-md text-label-md flex items-center justify-center gap-1.5 transition-all" id="tab-cancelled" onclick="switchTab('cancelled')" type="button">
+<span>ยกเลิกแล้ว</span>
+<span class="px-1.5 py-0.2 rounded-full bg-surface-container-highest text-on-surface-variant font-label-sm text-label-sm">1</span>
+</button>
+</div>
+</div>
+<!-- Content Container -->
+<div class="px-margin pb-28 flex flex-col gap-space-md">
+<!-- VIEW 1: UPCOMING BOOKING (HERO CARD) -->
+<div class="flex flex-col gap-space-md" id="view-upcoming">
+<!-- Main Active Booking Card -->
+<div class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm flex flex-col gap-3.5 relative overflow-hidden">
+<!-- Ambient decorative tint banner -->
+<div class="absolute -top-12 -right-12 w-36 h-36 bg-primary/10 rounded-full blur-2xl pointer-events-none"></div>
+<!-- Card Header: Status & Countdown -->
+<div class="flex items-center justify-between gap-2">
+<div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-secondary-container/30 text-secondary font-label-md text-label-md">
+<span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+            ยืนยันคิวแล้ว (Confirmed)
+          </div>
+<span class="px-2.5 py-1 rounded-full bg-primary-fixed text-on-primary-fixed-variant font-label-sm text-label-sm flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">alarm</span>
+            อีก 2 วัน (พุธ 26 มี.ค.)
+          </span>
+</div>
+<!-- Booking Code & Copy Action -->
+<div class="flex items-center justify-between bg-surface-container-low px-3 py-2 rounded-xl">
+<div class="flex items-center gap-1.5">
+<span class="font-body-sm text-body-sm text-on-surface-variant">รหัสการจอง:</span>
+<span class="font-label-md text-label-md text-on-surface tracking-wider font-semibold" id="booking-ref-code">#KM-20250326-88</span>
+</div>
+<button class="flex items-center gap-1 text-primary hover:text-primary-container font-label-sm text-label-sm px-2 py-1 rounded-lg hover:bg-surface transition-colors active:scale-95" onclick="copyBookingCode('#KM-20250326-88')" type="button">
+<span class="material-symbols-outlined text-[15px]" id="copy-icon">content_copy</span>
+<span id="copy-label">คัดลอก</span>
+</button>
+</div>
+<!-- Date & Time Large Block -->
+<div class="flex items-start gap-3 p-3 rounded-xl bg-surface-container">
+<div class="w-11 h-11 rounded-xl bg-primary flex flex-col items-center justify-center text-on-primary shrink-0 shadow-sm">
+<span class="font-label-sm text-label-sm uppercase leading-none">มี.ค.</span>
+<span class="font-headline-sm text-headline-sm leading-none mt-0.5 font-bold">26</span>
+</div>
+<div class="flex-1 min-w-0">
+<h2 class="font-label-lg text-label-lg text-on-surface truncate">วันพุธที่ 26 มีนาคม 2568</h2>
+<p class="font-body-md text-body-md text-primary font-semibold flex items-center gap-1 mt-0.5">
+<span class="material-symbols-outlined text-[16px]">schedule</span>
+              11:30 - 13:15 น. <span class="font-body-sm text-body-sm text-on-surface-variant font-normal">(1 ชม. 45 น.)</span>
+</p>
+</div>
+</div>
+<!-- Branch / Location -->
+<div class="flex items-start gap-2.5 px-1">
+<span class="material-symbols-outlined text-primary text-[20px] shrink-0 mt-0.5">storefront</span>
+<div class="flex-1 min-w-0">
+<p class="font-label-md text-label-md text-on-surface">สาขาสยามสแควร์วัน ชั้น 3</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">ห้องบริการส่วนตัว VIP 2 • บันไดเลื่อนกลาง</p>
+</div>
+<a class="px-2.5 py-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-primary font-label-sm text-label-sm flex items-center gap-1 shrink-0 transition-colors" href="https://maps.google.com" target="_blank">
+<span class="material-symbols-outlined text-[14px]">near_me</span>
+            นำทาง
+          </a>
+</div>
+<!-- Stylist Detail Card -->
+<div class="flex items-center gap-3 p-3 rounded-xl bg-surface-container-low">
+<div class="relative shrink-0">
+<img class="w-12 h-12 rounded-xl object-cover" data-alt="Chic and friendly Asian female master stylist in stylish minimalist black apron holding hairdressing shears in a bright modern luxury hair salon with soft warm lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDsBOOtwIal_1i1-rs2EmH_79nZpYeAcxWaJt2H-irC2h_aIdZVHejjt2ZQv9MM4GUKDiwjMmqAuamN8aUif6ja0YEuGHXUzpGqrpztp7J0c-yNAUR9Go-h1DjD3bxgq8tsr8V7YweGuXBkHVBjjcLV8__Qwpp_JVBESaWZdyQzkT-cpnUXAri3UNFHSK71949mzWS9u6HHWWynYGbnTnaonKc1MH5FiklItLQ_QXdc"/>
+<span class="absolute -bottom-1 -right-1 px-1 rounded-full bg-secondary text-on-secondary font-label-sm text-[9px] font-bold">PRO</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex items-center gap-1.5">
+<span class="font-label-md text-label-md text-on-surface truncate">ช่างแนน (Master Stylist)</span>
+<span class="flex items-center text-primary font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[13px]" style="font-variation-settings: 'FILL' 1;">star</span>
+                4.9
+              </span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">ผู้เชี่ยวชาญเลเยอร์คัท &amp; บำรุงล้ำลึก</p>
+</div>
+<button aria-label="Stylist info" class="text-on-surface-variant hover:text-primary transition-colors p-1" onclick="openStylistProfile()" type="button">
+<span class="material-symbols-outlined text-[18px]">info</span>
+</button>
+</div>
+<!-- Services Breakdown -->
+<div class="flex flex-col gap-2 p-3 rounded-xl bg-surface-container-lowest shadow-sm">
+<div class="flex items-center justify-between pb-2 border-b border-surface-container">
+<span class="font-label-md text-label-md text-on-surface">รายการบริการ (2 รายการ)</span>
+<span class="font-label-sm text-label-sm text-primary">รวม 105 นาที</span>
+</div>
+<div class="flex items-start justify-between gap-2 py-1">
+<div class="flex items-start gap-2 min-w-0">
+<span class="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0"></span>
+<div>
+<p class="font-body-md text-body-md text-on-surface truncate">ตัดแต่งทรงผมสไตล์เกาหลี (Korean Signature Cut)</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">60 นาที • สระไดร์เซ็ตวอลลุ่ม</p>
+</div>
+</div>
+<span class="font-label-md text-label-md text-on-surface shrink-0">฿750</span>
+</div>
+<div class="flex items-start justify-between gap-2 py-1">
+<div class="flex items-start gap-2 min-w-0">
+<span class="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0"></span>
+<div>
+<p class="font-body-md text-body-md text-on-surface truncate">Olaplex Hair Spa Treatment</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">45 นาที • ฟื้นฟูพันธะผมระดับโมเลกุล</p>
+</div>
+</div>
+<span class="font-label-md text-label-md text-on-surface shrink-0">฿1,200</span>
+</div>
+<!-- Payment Breakdown -->
+<div class="pt-2.5 mt-1 border-t border-surface-container flex flex-col gap-1">
+<div class="flex items-center justify-between font-body-sm text-body-sm text-on-surface-variant">
+<span>ยอดรวมบริการทั้งหมด</span>
+<span class="font-label-md text-label-md text-on-surface">฿1,950</span>
+</div>
+<div class="flex items-center justify-between font-body-sm text-body-sm text-secondary">
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+                ชำระมัดจำผ่าน Rabbit LINE Pay แล้ว
+              </span>
+<span>-฿500</span>
+</div>
+<div class="flex items-center justify-between pt-1.5 font-label-lg text-label-lg text-primary">
+<span>คงเหลือชำระหน้าร้าน</span>
+<span class="text-headline-sm font-bold">฿1,450</span>
+</div>
+</div>
+</div>
+<!-- Action Buttons -->
+<div class="flex flex-col gap-2 pt-1">
+<!-- Primary Check-in QR CTA -->
+<button class="w-full h-13 py-3.5 px-4 rounded-xl bg-primary text-on-primary font-label-lg text-label-lg shadow-sm hover:bg-primary-container active:scale-[0.99] transition-all flex items-center justify-center gap-2" onclick="showQrModal()" type="button">
+<span class="material-symbols-outlined text-[20px]">qr_code_2</span>
+<span>ดูรายละเอียด / QR เช็คอิน</span>
+</button>
+<!-- Calendar Integration Button -->
+<button class="w-full py-2.5 px-3 rounded-xl bg-surface-container hover:bg-surface-container-high text-primary font-label-md text-label-md flex items-center justify-center gap-1.5 transition-colors" onclick="addToCalendarAlert()" type="button">
+<span class="material-symbols-outlined text-[17px]">event</span>
+<span>บันทึกลงปฏิทิน (Google / Apple Calendar)</span>
+</button>
+<!-- Reschedule & Cancel Controls -->
+<div class="grid grid-cols-2 gap-2 mt-0.5">
+<button class="py-2.5 px-3 rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface font-label-md text-label-md flex items-center justify-center gap-1.5 transition-colors" onclick="handleReschedule()" type="button">
+<span class="material-symbols-outlined text-[17px] text-on-surface-variant">edit_calendar</span>
+<span>เลื่อนนัดหมาย</span>
+</button>
+<button class="py-2.5 px-3 rounded-xl bg-error-container/60 hover:bg-error-container text-error font-label-md text-label-md flex items-center justify-center gap-1.5 transition-colors" onclick="handleCancelPrompt()" type="button">
+<span class="material-symbols-outlined text-[17px]">event_busy</span>
+<span>ยกเลิกการจอง</span>
+</button>
+</div>
+</div>
+<!-- Salon Policy Tiny Callout -->
+<p class="font-body-sm text-[11px] text-center text-on-surface-variant pt-1">
+          * เลื่อนหรือยกเลิกฟรีก่อนเวลานัดหมาย 24 ชม. • กรุณามาถึงก่อนเวลา 10 นาที
+        </p>
+</div>
+<!-- Quick Helpful Guide Banner -->
+<div class="p-3.5 rounded-2xl bg-surface-container-low flex items-center gap-3">
+<div class="w-9 h-9 rounded-full bg-secondary-container/40 text-secondary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[20px]">spa</span>
+</div>
+<div class="flex-1 min-w-0">
+<p class="font-label-md text-label-md text-on-surface truncate">สิทธิพิเศษสำหรับคุณวันนี้</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">รับเครื่องดื่ม Organic Herbal Tea ฟรีระหว่างรับบริการ</p>
+</div>
+</div>
+</div>
+<!-- VIEW 2: COMPLETED BOOKINGS -->
+<div class="flex flex-col gap-space-md hidden" id="view-completed">
+<!-- Past Booking Item 1 -->
+<div class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm flex flex-col gap-3">
+<div class="flex items-center justify-between">
+<span class="font-body-sm text-body-sm text-on-surface-variant">#KM-20250214-42 • 14 ก.พ. 2568</span>
+<span class="px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px] text-secondary">check</span>
+            เสร็จสิ้นแล้ว
+          </span>
+</div>
+<div class="flex items-start gap-3">
+<img class="w-14 h-14 rounded-xl object-cover shrink-0" data-alt="Close up photograph of natural glossy Korean wavy digital perm hair texture with soft air shine highlights" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC6N-UtFL4tzztSVoC0Hh4quGC-PNEIOHS3LM4C5tUW96PtriykVklgEWS7oGG_vxJxKoB1k3NnuRe9HvxWENa_4g2SxO_Y6CbVDaATjGgqhGCVtK1ajuvv5dDaZgbyliZSXKJPddepYOME83HNqIqTHMXYy8hImBsti_AG1a4cUkKKEseqZnMfnd1LgEMLazY6oxRhG3kHEsNmtTLRTAAH1kKVH_Wqyy4iaaHe2TfW"/>
+<div class="flex-1 min-w-0">
+<h3 class="font-label-lg text-label-lg text-on-surface truncate">ดัดผมดิจิทัลเกาหลี + ทรีตเมนต์พรีเมียม</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">ช่างเคน (Creative Director) • สาขาสยามสแควร์วัน</p>
+<div class="flex items-center justify-between mt-1">
+<span class="font-label-md text-label-md text-on-surface">฿3,200</span>
+<span class="font-label-sm text-label-sm text-secondary flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[13px]" style="font-variation-settings: 'FILL' 1;">star</span>
+                ให้คะแนนแล้ว 5.0
+              </span>
+</div>
+</div>
+</div>
+<div class="pt-2 border-t border-surface-container flex items-center justify-between gap-2">
+<button class="text-on-surface-variant hover:text-primary font-label-sm text-label-sm flex items-center gap-1" onclick="showReceiptModal('#KM-20250214-42')" type="button">
+<span class="material-symbols-outlined text-[15px]">receipt_long</span>
+            ดูใบเสร็จ / ใบกำกับภาษี
+          </button>
+<button class="px-3.5 py-1.5 rounded-xl bg-primary text-on-primary font-label-md text-label-md shadow-sm hover:bg-primary-container active:scale-95 transition-all flex items-center gap-1" onclick="rebookService('ดัดผมดิจิทัลเกาหลี + ทรีตเมนต์')" type="button">
+<span class="material-symbols-outlined text-[15px]">replay</span>
+            จองซ้ำ (Rebook)
+          </button>
+</div>
+</div>
+<!-- Past Booking Item 2 -->
+<div class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm flex flex-col gap-3">
+<div class="flex items-center justify-between">
+<span class="font-body-sm text-body-sm text-on-surface-variant">#KM-20250105-19 • 5 ม.ค. 2568</span>
+<span class="px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px] text-secondary">check</span>
+            เสร็จสิ้นแล้ว
+          </span>
+</div>
+<div class="flex items-start gap-3">
+<img class="w-14 h-14 rounded-xl object-cover shrink-0" data-alt="Chic ash blonde balayage hair coloring outcome on smooth straight hair texture in luxury salon setting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDnbD0OlqyH4t0ThwMzI6juEw5KS8kLMhiq2BysHA2arXiu_DyA-_TKbKLgM_2UfRhB4NG4qIccLPIb7BBttszxKTkDWcUmOK2uLJAKWDgb9PwRb4FDhAp7wCTmAP1HKjTqBY-wmuzRwj_cq56GexWo5xFqggyLAwk3CvP095U2FTCKKMyZsskJ-SUYpKYb--Lpngc5wu555CDz9UwcrHtiKzPpRs8wCsi_KFgD9QfD"/>
+<div class="flex-1 min-w-0">
+<h3 class="font-label-lg text-label-lg text-on-surface truncate">ทำสีแฟชั่นออร์แกนิก + อะมิโนแฮร์มาสก์</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">ช่างแนน (Master Stylist) • สาขาเซ็นทรัลลาดพร้าว</p>
+<div class="flex items-center justify-between mt-1">
+<span class="font-label-md text-label-md text-on-surface">฿2,850</span>
+<span class="font-label-sm text-label-sm text-secondary flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[13px]" style="font-variation-settings: 'FILL' 1;">star</span>
+                ให้คะแนนแล้ว 5.0
+              </span>
+</div>
+</div>
+</div>
+<div class="pt-2 border-t border-surface-container flex items-center justify-between gap-2">
+<button class="text-on-surface-variant hover:text-primary font-label-sm text-label-sm flex items-center gap-1" onclick="showReceiptModal('#KM-20250105-19')" type="button">
+<span class="material-symbols-outlined text-[15px]">receipt_long</span>
+            ดูใบเสร็จ
+          </button>
+<button class="px-3.5 py-1.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-primary font-label-md text-label-md active:scale-95 transition-all flex items-center gap-1" onclick="rebookService('ทำสีแฟชั่นออร์แกนิก')" type="button">
+<span class="material-symbols-outlined text-[15px]">replay</span>
+            จองซ้ำ
+          </button>
+</div>
+</div>
+</div>
+<!-- VIEW 3: CANCELLED BOOKINGS -->
+<div class="flex flex-col gap-space-md hidden" id="view-cancelled">
+<!-- Cancelled Booking Card -->
+<div class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm flex flex-col gap-3">
+<div class="flex items-center justify-between">
+<span class="font-body-sm text-body-sm text-on-surface-variant">#CN-20250118-12 • 18 ม.ค. 2568</span>
+<span class="px-2 py-0.5 rounded-full bg-error-container text-on-error-container font-label-sm text-label-sm">
+            ยกเลิกแล้ว
+          </span>
+</div>
+<div class="p-3 rounded-xl bg-surface-container-low flex flex-col gap-1.5">
+<h3 class="font-label-md text-label-md text-on-surface">ทรีตเมนต์สปาหนังศีรษะ Scalp Detox Detoxify</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">สาขาสยามสแควร์วัน • ช่างบอย</p>
+<div class="mt-1 flex items-center gap-1.5 text-secondary font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[15px]">verified</span>
+<span>คืนเงินมัดจำสำเร็จ ฿500 (Rabbit LINE Pay)</span>
+</div>
+</div>
+<div class="flex items-center justify-between pt-1">
+<span class="font-body-sm text-body-sm text-on-surface-variant">เหตุผล: ติดภารกิจด่วน</span>
+<button class="px-3 py-1.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-primary font-label-md text-label-md transition-colors flex items-center gap-1" onclick="rebookService('ทรีตเมนต์สปาหนังศีรษะ')" type="button">
+<span class="material-symbols-outlined text-[14px]">calendar_today</span>
+            นัดหมายใหม่
+          </button>
+</div>
+</div>
+</div>
+</div>
+<!-- Sticky Bottom Drawer: New Booking CTA & Support -->
+<div class="fixed bottom-0 left-0 right-0 z-40 bg-surface/90 backdrop-blur-xl shadow-[0_-6px_28px_rgba(30,27,75,0.08)]">
+<div class="max-w-[480px] mx-auto px-margin py-3 pb-[calc(env(safe-area-inset-bottom,0px)+0.75rem)] flex items-center justify-between gap-3">
+<div class="flex-1 min-w-0">
+<p class="font-label-md text-label-md text-on-surface truncate">ต้องการนัดหมายบริการอื่น?</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">จองคิวง่ายใน 30 วินาที</p>
+</div>
+<div class="flex items-center gap-2 shrink-0">
+<a aria-label="Call salon receptionist" class="w-11 h-11 rounded-xl bg-surface-container flex items-center justify-center text-primary transition-transform active:scale-95" href="tel:021234567">
+<span class="material-symbols-outlined text-[20px]">call</span>
+</a>
+<button class="h-11 px-4 rounded-xl bg-primary text-on-primary font-label-lg text-label-lg shadow-sm hover:bg-primary-container active:scale-95 transition-all flex items-center gap-1.5" onclick="startNewBookingFlow()" type="button">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span>จองคิวใหม่</span>
+</button>
+</div>
+</div>
+</div>
+<!-- QR Check-in Modal Overlay -->
+<div class="fixed inset-0 z-50 bg-inverse-surface/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 hidden transition-opacity opacity-0" id="qr-modal">
+<div class="bg-surface rounded-t-3xl sm:rounded-2xl w-full max-w-[440px] p-6 flex flex-col items-center gap-4 text-center transform transition-transform translate-y-full sm:translate-y-0">
+<div class="w-12 h-1.5 bg-outline-variant/60 rounded-full mb-1"></div>
+<div class="flex items-center justify-between w-full">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">QR Code เช็คอินหน้าร้าน</h3>
+<button class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant hover:text-on-surface" onclick="closeQrModal()" type="button">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant">
+        แสดง QR Code นี้แก่พนักงานต้อนรับที่เคาน์เตอร์ Kiwmee เพื่อรับบริการได้ทันทีโดยไม่ต้องต่อคิว
+      </p>
+<!-- Simulated SVG QR Code -->
+<div class="p-4 bg-surface-container-lowest rounded-2xl shadow-sm flex flex-col items-center">
+<svg class="w-48 h-48 text-on-surface" fill="currentColor" viewbox="0 0 100 100">
+<!-- QR matrix visual approximation -->
+<rect fill="none" height="25" rx="3" stroke="currentColor" stroke-width="4" width="25" x="5" y="5"></rect>
+<rect fill="currentColor" height="13" width="13" x="11" y="11"></rect>
+<rect fill="none" height="25" rx="3" stroke="currentColor" stroke-width="4" width="25" x="70" y="5"></rect>
+<rect fill="currentColor" height="13" width="13" x="76" y="11"></rect>
+<rect fill="none" height="25" rx="3" stroke="currentColor" stroke-width="4" width="25" x="5" y="70"></rect>
+<rect fill="currentColor" height="13" width="13" x="11" y="76"></rect>
+<rect height="6" width="6" x="36" y="10"></rect>
+<rect height="6" width="6" x="46" y="10"></rect>
+<rect height="6" width="6" x="56" y="10"></rect>
+<rect height="6" width="6" x="36" y="24"></rect>
+<rect height="6" width="12" x="48" y="24"></rect>
+<rect height="6" width="6" x="10" y="38"></rect>
+<rect height="6" width="6" x="22" y="38"></rect>
+<rect height="12" width="12" x="34" y="38"></rect>
+<rect height="6" width="6" x="52" y="36"></rect>
+<rect height="6" width="16" x="64" y="36"></rect>
+<rect height="6" width="14" x="44" y="54"></rect>
+<rect height="14" width="6" x="68" y="52"></rect>
+<rect height="6" width="10" x="80" y="52"></rect>
+<rect height="8" width="8" x="36" y="72"></rect>
+<rect height="6" width="6" x="50" y="70"></rect>
+<rect height="12" width="12" x="60" y="78"></rect>
+<rect height="6" width="12" x="78" y="72"></rect>
+<rect height="10" width="6" x="78" y="84"></rect>
+</svg>
+<span class="mt-2 font-label-md text-label-md text-primary font-mono tracking-widest">KM-20250326-88</span>
+</div>
+<div class="w-full p-3 rounded-xl bg-surface-container-low flex items-center justify-between text-left">
+<div>
+<p class="font-label-sm text-label-sm text-on-surface-variant">คิวของคุณ</p>
+<p class="font-label-lg text-label-lg text-primary font-bold">VIP Room 2 • 11:30 น.</p>
+</div>
+<span class="px-2.5 py-1 rounded-full bg-secondary-container/40 text-secondary font-label-sm text-label-sm font-semibold">พร้อมบริการ</span>
+</div>
+<button class="w-full py-3 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-label-lg text-label-lg transition-colors" onclick="closeQrModal()" type="button">
+        ปิดหน้าต่าง
+      </button>
+</div>
+</div>
+<!-- Toast Notification -->
+<div class="fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl bg-on-surface text-surface font-label-md text-label-md shadow-lg flex items-center gap-2 pointer-events-none transition-all duration-300 opacity-0 translate-y-2" id="toast">
+<span class="material-symbols-outlined text-[18px] text-secondary">check_circle</span>
+<span id="toast-message">คัดลอกรหัสการจองแล้ว</span>
+</div>
+</div>
+<script>
+  function switchTab(tab) {
+    const tabs = ['upcoming', 'completed', 'cancelled'];
+    tabs.forEach(t => {
+      const btn = document.getElementById('tab-' + t);
+      const view = document.getElementById('view-' + t);
+      if (t === tab) {
+        btn.classList.add('bg-surface', 'text-primary', 'shadow-sm');
+        btn.classList.remove('text-on-surface-variant');
+        view.classList.remove('hidden');
+      } else {
+        btn.classList.remove('bg-surface', 'text-primary', 'shadow-sm');
+        btn.classList.add('text-on-surface-variant');
+        view.classList.add('hidden');
+      }
+    });
+  }
+
+  function showToast(msg) {
+    const toast = document.getElementById('toast');
+    const toastMsg = document.getElementById('toast-message');
+    toastMsg.innerText = msg;
+    toast.classList.remove('opacity-0', 'translate-y-2');
+    toast.classList.add('opacity-100', 'translate-y-0');
+    setTimeout(() => {
+      toast.classList.remove('opacity-100', 'translate-y-0');
+      toast.classList.add('opacity-0', 'translate-y-2');
+    }, 2400);
+  }
+
+  function copyBookingCode(code) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(code).then(() => {
+        showToast('คัดลอกรหัส ' + code + ' เรียบร้อย');
+      }).catch(() => {
+        showToast('คัดลอกรหัสเรียบร้อย');
+      });
+    } else {
+      showToast('คัดลอกรหัส ' + code + ' เรียบร้อย');
+    }
+  }
+
+  function showQrModal() {
+    const modal = document.getElementById('qr-modal');
+    modal.classList.remove('hidden');
+    setTimeout(() => {
+      modal.classList.remove('opacity-0');
+      modal.firstElementChild.classList.remove('translate-y-full');
+    }, 10);
+  }
+
+  function closeQrModal() {
+    const modal = document.getElementById('qr-modal');
+    modal.classList.add('opacity-0');
+    modal.firstElementChild.classList.add('translate-y-full');
+    setTimeout(() => {
+      modal.classList.add('hidden');
+    }, 250);
+  }
+
+  function addToCalendarAlert() {
+    showToast('เพิ่มนัดหมายลงในปฏิทินของคุณแล้ว');
+  }
+
+  function handleReschedule() {
+    showToast('กำลังเชื่อมต่อระบบเลือกวันและเวลาใหม่...');
+  }
+
+  function handleCancelPrompt() {
+    if (confirm('คุณต้องการยกเลิกการจองนี้ใช่หรือไม่? ระบบจะทำการคืนเงินมัดจำตามเงื่อนไข')) {
+      showToast('ส่งคำขอยกเลิกเรียบร้อย กำลังดำเนินการคืนเงิน');
+    }
+  }
+
+  function startNewBookingFlow() {
+    showToast('กำลังเปิดหน้าเลือกสาขาและบริการ...');
+  }
+
+  function rebookService(name) {
+    showToast('เลือกบริการ "' + name + '" สำหรับการจองใหม่แล้ว');
+  }
+
+  function showReceiptModal(ref) {
+    showToast('กำลังดาวน์โหลดใบเสร็จรับเงิน ' + ref);
+  }
+
+  function openStylistProfile() {
+    showToast('ดูผลงานและประวัติช่างแนน');
+  }
+</script></main></body></html>

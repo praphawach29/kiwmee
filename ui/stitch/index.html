@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kiwmee - LINE OA Booking Interface (Stitch Designs)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&family=Anuphan:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #6A4CFF;
+      --primary-light: #F2EFFF;
+      --accent: #3DDC97;
+      --bg: #F8F9FA;
+      --surface: #FFFFFF;
+      --text: #1E293B;
+      --text-muted: #64748B;
+      --border: #E2E8F0;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Anuphan', 'Plus Jakarta Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 32px 24px;
+    }
+    .header {
+      max-width: 1280px;
+      margin: 0 auto 32px;
+      background: var(--surface);
+      padding: 24px 32px;
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.04);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .title h1 {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--primary);
+    }
+    .title p {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+    .badge {
+      display: inline-block;
+      background: var(--primary-light);
+      color: var(--primary);
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .grid {
+      max-width: 1280px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      gap: 24px;
+    }
+    .card {
+      background: var(--surface);
+      border-radius: 16px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 24px rgba(106,76,255,0.08);
+    }
+    .preview-box {
+      width: 100%;
+      height: 380px;
+      background: #F1F5F9;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+    .preview-box img {
+      width: 100%;
+      height: auto;
+      object-fit: cover;
+      display: block;
+    }
+    .card-body {
+      padding: 16px 20px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .card-title {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: var(--text);
+    }
+    .card-meta {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: monospace;
+      margin-bottom: 16px;
+    }
+    .card-actions {
+      display: flex;
+      gap: 10px;
+    }
+    .btn {
+      flex: 1;
+      text-align: center;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+    }
+    .btn-primary:hover {
+      background: #5639e6;
+    }
+    .btn-secondary {
+      background: #EDF2F7;
+      color: var(--text);
+    }
+    .btn-secondary:hover {
+      background: #E2E8F0;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="title">
+      <h1>LINE OA Booking Interface</h1>
+      <p>Stitch Project ID: <code>12648553013705837729</code> • Kiwmee UI Designs</p>
+    </div>
+    <span class="badge">13 Screens Ready</span>
+  </div>
+
+  <div class="grid">
+    <!-- Step 1 -->
+    <div class="card">
+      <div class="preview-box">
+        <img src="./screenshots/step-1-select-service.png" alt="Step 1: เลือกบริการ" loading="lazy">
+      </div>
+      <div class="card-body">
+        <div>
+          <h3 class="card-title">1. Step 1: เลือกบริการ</h3>
+          <div class="card-meta">ID: 7d2b44560c3340aa95638071d87da352</div>
+        </div>
+        <div class="card-actions">
+          <a href="./html/step-1-select-service.html" target="_blank" class="btn btn-primary">เปิดดูหน้า HTML</a>
+          <a href="./screenshots/step-1-select-service.png" target="_blank" class="btn btn-secondary">ดูรูปเต็ม</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2 -->
+    <div class="card">
+      <div class="preview-box">
+        <img src="./screenshots/step-2-select-staff-time.png" alt="Step 2: เลือกช่างและเวลา" loading="lazy">
+      </div>
+      <div class="card-body">
+        <div>
+          <h3 class="card-title">2. Step 2: เลือกช่างและเวลา</h3>
+          <div class="card-meta">ID: e41b2cfea37c41deba171af040f4ecec</div>
+        </div>
+        <div class="card-actions">
+          <a href="./html/step-2-select-staff-time.html" target="_blank" class="btn btn-primary">เปิดดูหน้า HTML</a>
+          <a href="./screenshots/step-2-select-staff-time.png" target="_blank" class="btn btn-secondary">ดูรูปเต็ม</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3 -->
+    <div class="card">
+      <div class="preview-box">
+        <img src="./screenshots/step-3-booking-summary.png" alt="Step 3: ข้อมูลและสรุปนัดหมาย" loading="lazy">
+      </div>
+      <div class="card-body">
+        <div>
+          <h3 class="card-title">3. Step 3: ข้อมูลและสรุปนัดหมาย</h3>
+          <div class="card-meta">ID: 0bd7bcb27703492da59c811d7618a944</div>
+        </div>
+        <div class="card-actions">
+          <a href="./html/step-3-booking-summary.html" target="_blank" class="btn btn-primary">เปิดดูหน้า HTML</a>
+          <a href="./screenshots/step-3-booking-summary.png" target="_blank" class="btn btn-secondary">ดูรูปเต็ม</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 4 -->
+    <div class="card">
+      <div class="preview-box">
+        <img src="./screenshots/step-4-booking-success.png" alt="Step 4: จองสำเร็จ & จัดการคิว" loading="lazy">
+      </div>
+      <div class="card-body">
+        <div>
+          <h3 class="card-title">4. Step 4: จองสำเร็จ & จัดการคิว</h3>
+          <div class="card-meta">ID: 5e8de0f105934b078e6933ffcd15c96c</div>
+        </div>
+        <div class="card-actions">
+          <a href="./html/step-4-booking-success.html" target="_blank" class="btn btn-primary">เปิดดูหน้า HTML</a>
+          <a href="./screenshots/step-4-booking-success.png" target="_blank" class="btn btn-secondary">ดูรูปเต็ม</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reschedule -->
+    <div class="card">
+      <div class="preview-box">
+        <img src="./screenshots/reschedule-flow.png" alt="เลื่อนนัดหมาย (Reschedule Flow)" loading="lazy">
+      </div>
+      <div class="card-body">
+        <div>
+          <h3 class="card-title">5. เลื่อนนัดหมาย (Reschedule Flow)</h3>
+          <div class="card-meta">ID: bcbf711e7f4943aaa41a232a778f08b7</div>
+        </div>
+        <div class="card-actions">
+          <a href="./html/reschedule-flow.html" target="_blank" class="btn btn-primary">เปิดดูหน้า HTML</a>
+          <a href="./screenshots/reschedule-flow.png" target="_blank" class="btn btn-secondary">ดูรูปเต็ม</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cancel Booking -->
+    <div class="card">
+      <div class="preview-box">
+        <img src="./screenshots/cancel-booking-flow.png" alt="ยกเลิกการจอง (Cancel Booking Flow)" loading="lazy">
+      </div>
+      <div class="card-body">
+        <div>
+          <h3 class="card-title">6. ยกเลิกการจอง (Cancel Booking Flow)</h3>
+          <div class="card-meta">ID: 1217e372797f41d1a863cccee1f984fb</div>
+        </div>
+        <div class="card-actions">
+          <a href="./html/cancel-booking-flow.html" target="_blank" class="btn btn-primary">เปิดดูหน้า HTML</a>
+          <a href="./screenshots/cancel-booking-flow.png" target="_blank" class="btn btn-secondary">ดูรูปเต็ม</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cancellation Success -->
+    <div class="card">
+      <div class="preview-box">
+        <img src="./screenshots/cancellation-success.png" alt="แจ้งยกเลิกสำเร็จ (Cancellation Success)" loading="lazy">
+      </div>
+      <div class="card-body">
+        <div>
+          <h3 class="card-title">7. แจ้งยกเลิกสำเร็จ (Cancellation Success)</h3>
+          <div class="card-meta">ID: 6a0ee8d7300e4bfd9960464631768f55</div>
+        </div>
+        <div class="card-actions">
+          <a href="./html/cancellation-success.html" target="_blank" class="btn btn-primary">เปิดดูหน้า HTML</a>
+          <a href="./screenshots/cancellation-success.png" target="_blank" class="btn btn-secondary">ดูรูปเต็ม</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- My Bookings -->
+    <div class="card">
+      <div class="preview-box">
+        <img src="./screenshots/my-bookings.png" alt="เช็คคิวของฉัน (My Bookings)" loading="lazy">
+      </div>
+      <div class="card-body">
+        <div>
+          <h3 class="card-title">8. เช็คคิวของฉัน (My Bookings)</h3>
+          <div class="card-meta">ID: ef482c16aa2147caa947bf218069563a</div>
+        </div>
+        <div class="card-actions">
+          <a href="./html/my-bookings.html" target="_blank" class="btn btn-primary">เปิดดูหน้า HTML</a>
+          <a href="./screenshots/my-bookings.png" target="_blank" class="btn btn-secondary">ดูรูปเต็ม</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Services & Price Catalog -->
+    <div class="card">
+      <div class="preview-box">
+        <img src="./screenshots/services-price-catalog.png" alt="บริการและราคา (Services & Price Catalog)" loading="lazy">
+      </div>
+      <div class="card-body">
+        <div>
+          <h3 class="card-title">9. บริการและราคา (Services & Price Catalog)</h3>
+          <div class="card-meta">ID: 1e63b5425c614695b5a261bb4a4caf8d</div>
+        </div>
+        <div class="card-actions">
+          <a href="./html/services-price-catalog.html" target="_blank" class="btn btn-primary">เปิดดูหน้า HTML</a>
+          <a href="./screenshots/services-price-catalog.png" target="_blank" class="btn btn-secondary">ดูรูปเต็ม</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- My Vouchers -->
+    <div class="card">
+      <div class="preview-box">
+        <img src="./screenshots/my-vouchers.png" alt="คูปองของฉัน (My Vouchers)" loading="lazy">
+      </div>
+      <div class="card-body">
+        <div>
+          <h3 class="card-title">10. คูปองของฉัน (My Vouchers)</h3>
+          <div class="card-meta">ID: 371e75f31e694926b050dcc9a9189f9c</div>
+        </div>
+        <div class="card-actions">
+          <a href="./html/my-vouchers.html" target="_blank" class="btn btn-primary">เปิดดูหน้า HTML</a>
+          <a href="./screenshots/my-vouchers.png" target="_blank" class="btn btn-secondary">ดูรูปเต็ม</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Member Rewards -->
+    <div class="card">
+      <div class="preview-box">
+        <img src="./screenshots/member-rewards.png" alt="บัตรสมาชิก & สะสมแต้ม (Kiwmee Member & Rewards)" loading="lazy">
+      </div>
+      <div class="card-body">
+        <div>
+          <h3 class="card-title">11. บัตรสมาชิก & สะสมแต้ม (Member & Rewards)</h3>
+          <div class="card-meta">ID: 61b4e114e90f49a8b4ac568afb2c12f7</div>
+        </div>
+        <div class="card-actions">
+          <a href="./html/member-rewards.html" target="_blank" class="btn btn-primary">เปิดดูหน้า HTML</a>
+          <a href="./screenshots/member-rewards.png" target="_blank" class="btn btn-secondary">ดูรูปเต็ม</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Post-service Review -->
+    <div class="card">
+      <div class="preview-box">
+        <img src="./screenshots/post-service-review.png" alt="รีวิวและให้คะแนนหลังรับบริการ" loading="lazy">
+      </div>
+      <div class="card-body">
+        <div>
+          <h3 class="card-title">12. รีวิวและให้คะแนนหลังรับบริการ</h3>
+          <div class="card-meta">ID: 829991a8c246467bb0588c93c4204f0d</div>
+        </div>
+        <div class="card-actions">
+          <a href="./html/post-service-review.html" target="_blank" class="btn btn-primary">เปิดดูหน้า HTML</a>
+          <a href="./screenshots/post-service-review.png" target="_blank" class="btn btn-secondary">ดูรูปเต็ม</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- LINE Chat Flex & Rich Menu -->
+    <div class="card">
+      <div class="preview-box">
+        <img src="./screenshots/line-chat-flex-richmenu.png" alt="LINE Chat: Flex Message คืนเงิน & Rich Menu" loading="lazy">
+      </div>
+      <div class="card-body">
+        <div>
+          <h3 class="card-title">13. LINE Chat: Flex Message & Rich Menu</h3>
+          <div class="card-meta">ID: 7ba7d20956fc4d65bb79c3359ad7ef17</div>
+        </div>
+        <div class="card-actions">
+          <a href="./html/line-chat-flex-richmenu.html" target="_blank" class="btn btn-primary">เปิดดูหน้า HTML</a>
+          <a href="./screenshots/line-chat-flex-richmenu.png" target="_blank" class="btn btn-secondary">ดูรูปเต็ม</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

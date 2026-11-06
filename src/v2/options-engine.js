@@ -21,7 +21,7 @@
 //   addons = { "<addon id>": quantity } — {} = asked and none taken. Their extra minutes lengthen the
 //   booking and an add-on that uses a kind of resource needs one free for the whole booking.
 
-const { ZERO_AVAILABILITY_REASONS } = require("../availability-engine");
+const { ZERO_AVAILABILITY_REASONS } = require("./availability-reasons");
 const { badRequest } = require("../errors");
 
 const REASONS = {

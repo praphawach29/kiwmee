@@ -8,6 +8,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CustomerFrame from "./customer-frame.jsx";
 import { useLiff } from "./use-liff.jsx";
+import { CheckinQr } from "./qr.jsx";
+import { bookingCode } from "../../../src/v2/scan-codes.js";
 import { BookingProgress, BookingReview, BookingSubmitBar, CustomerTabs, DepositBox, DirectionsButton, DocumentsBox, OfferingDetails, ShopAbout, ShopHeader, ShopHero, OfferingThumbnail, ResourceChoice, groupTimes, withMedia } from "./booking-presentation.jsx";
 
 const RESOURCE_WORD = { staff: "ช่าง", court: "สนาม", room: "ห้อง", equipment: "อุปกรณ์" };
@@ -241,6 +243,11 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     if (!initialView) run({ selected: {} });
   }, [run, initialView]);
 
+  const next = view?.next;
+  const ask = view?.ask;
+  const atStart = next?.step === "start" && !ask;
+  const atCustomer = next && !ask && !atStart;
+
   const [category, setCategory] = useState(null);
   const rental = offerings.get(selected.offeringId)?.minDays != null;
   const summaryItems = SUMMARY_ORDER.filter((s) => selected[KEY[s]] !== undefined).map((s) => ({
@@ -273,6 +280,23 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     setPending({ step: "show", value: step });
     return run({ selected, ask: step });
   };
+
+  // Pre-select offering if passed in URL (?offeringId=... or ?serviceId=...)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const targetOffering = params.get("offeringId") || params.get("serviceId");
+    if (targetOffering && !selected.offeringId && offerings.has(targetOffering)) {
+      choose("offering", targetOffering);
+    }
+  }, [offerings]);
+
+  // Default to offering selection if landing at start without selection
+  useEffect(() => {
+    if (atStart && !selected.offeringId && !selected.date) {
+      showStep("offering");
+    }
+  }, [atStart]);
 
   // a LINE member at the last step (the customer's details): their points and rewards, once
   const reachedCustomer = Boolean(view?.next && !view?.ask && view.next.step !== "start");
@@ -317,6 +341,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     return (
       <CustomerFrame>
         <main className={liffId ? "bk-shell bk-with-tabs" : "bk-shell"}>
+          <BookingProgress phase="complete" />
           <BookingDone shop={shop} booking={booking} items={summaryItems} selected={selected} resourceWord={resourceWord}
             onSlip={(view) => setBooking((b) => ({ ...b, status: view.booking.status, deposit: { ...b.deposit, slips: view.booking.deposit?.slips ?? 1 } }))} />
           <PoweredBy />
@@ -326,10 +351,6 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     );
   }
 
-  const next = view?.next;
-  const ask = view?.ask;
-  const atStart = next?.step === "start" && !ask;
-  const atCustomer = next && !ask && !atStart;
   const categories = ask === "offering" ? [...new Set((view?.options ?? []).map((o) => offerings.get(o.value)?.category).filter(Boolean))] : [];
   const shownOptions = (view?.options ?? []).filter((o) => ask !== "offering" || !category || categories.length < 2 || offerings.get(o.value)?.category === category);
   // big photo cards when every service (or every court / stylist, "any" aside) has a photo
@@ -385,7 +406,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
         <ShopHeader shop={shop} subtitle="จองคิวออนไลน์ · เลือกจากคิวว่างของร้าน" />
         {/* the venue's details while the customer is still looking; out of the way once they start picking */}
         {!atCustomer && summaryItems.length === 0 && <ShopAbout shop={shop} />}
-        <BookingProgress phase={atCustomer ? "customer" : "selection"} />
+        <BookingProgress phase={atCustomer ? "customer" : "selection"} ask={ask} />
 
         {!atCustomer && summaryItems.length > 0 && (
           <nav className="bk-chips" aria-label="ที่เลือกไว้">
@@ -430,6 +451,24 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
 
         {ask && view.options && (
           <section className="bk-card" data-step={ask}>
+            {ask === "offering" && (
+              <>
+                <div className="bk-storefront-banner">
+                  <div className="bk-storefront-icon">🏪</div>
+                  <div className="bk-storefront-details">
+                    <div className="bk-storefront-row">
+                      <strong>{shop.name}</strong>
+                      <span className="bk-badge-live">● เปิดให้บริการ</span>
+                    </div>
+                    <small className="bk-muted">{shop.address || "พร้อมดูแลและให้บริการลูกค้าทุกท่าน"}</small>
+                  </div>
+                </div>
+                <div className="bk-tip-notice">
+                  <span>💡</span>
+                  <span><strong>เลือกบริการที่ต้องการ:</strong> ดูแลอย่างพิถีพิถันโดยช่างผู้เชี่ยวชาญ พร้อมคิวว่างแบบเรียลไทม์</span>
+                </div>
+              </>
+            )}
             <div className="bk-step-head">
               <h2>{ask === "resource" ? `เลือก${resourceWord}` : (rental && RENTAL_TITLE[ask]) || STEP_TITLE[ask]}</h2>
               {ask === "time" && selected.date && (
@@ -469,6 +508,15 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
                 {shownOptions.map(optionButton)}
               </div>
             )}
+            {ask === "offering" && (
+              <div className="bk-guarantee-banner">
+                <span>🛡️</span>
+                <div>
+                  <strong>รับประกันความพึงพอใจ 7 วัน</strong>
+                  <p>ดูแลอย่างใส่ใจ ปรับแก้ทรงฟรีไม่มีค่าใช้จ่ายหากไม่ตรงใจ</p>
+                </div>
+              </div>
+            )}
           </section>
         )}
 
@@ -480,6 +528,12 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
             )}
             <form id="booking-customer" className="bk-card" onSubmit={submit}>
               <h2>ข้อมูลผู้จอง</h2>
+              {liff.idToken && customer.name && (
+                <div className="bk-line-badge" role="status">
+                  <span className="bk-line-dot" aria-hidden="true" />
+                  <span>เชื่อมต่อ LINE แล้ว · ดึงข้อมูลอัตโนมัติ</span>
+                </div>
+              )}
               <label className="bk-field">
                 <span>ชื่อ</span>
                 <input name="name" required maxLength={100} autoComplete="name" value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} />
@@ -497,9 +551,13 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
                 />
               </label>
               {shop.deposit && <DepositNote deposit={shop.deposit} estimate={estimate} />}
+              <div className="bk-policy-box">
+                <span className="bk-policy-icon" aria-hidden="true">ℹ️</span>
+                <p>
+                  <SelfServiceNote shop={shop} /> ร้านใช้ชื่อและเบอร์นี้เพื่อติดต่อเรื่องนัดหมายนี้เท่านั้น
+                </p>
+              </div>
               <p className="bk-fine">
-                <SelfServiceNote shop={shop} /> ร้านใช้ชื่อและเบอร์นี้เพื่อติดต่อเรื่องนัดหมายนี้เท่านั้น
-                {" · "}
                 การกดยืนยันถือว่ายอมรับ{" "}
                 <a href="/terms" target="_blank" rel="noreferrer">ข้อตกลงการใช้บริการ</a>
                 {" และ "}
@@ -531,10 +589,19 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
   );
 }
 
-const offeringLength = (offering) =>
-  offering.minDays != null
-    ? offering.minDays === offering.maxDays ? `${offering.minDays} วัน` : `${offering.minDays}–${offering.maxDays} วัน`
-    : offering.durationMinutes ? formatMinutes(offering.durationMinutes) : `${formatMinutes(offering.minMinutes)}–${formatMinutes(offering.maxMinutes)}`;
+const offeringLength = (offering) => {
+  if (!offering) return "ตามความเหมาะสม";
+  if (offering.minDays != null) {
+    return offering.minDays === offering.maxDays ? `${offering.minDays} วัน` : `${offering.minDays}–${offering.maxDays} วัน`;
+  }
+  if (offering.durationMinutes) {
+    return formatMinutes(offering.durationMinutes);
+  }
+  if (offering.minMinutes && offering.maxMinutes) {
+    return `${formatMinutes(offering.minMinutes)}–${formatMinutes(offering.maxMinutes)}`;
+  }
+  return "เลือกระยะเวลาเอง";
+};
 
 // The extras for the chosen offering at the chosen time, grouped as the shop set them up. The engine
 // says which can still be taken (and how many); the customer picks, then goes on.
@@ -977,6 +1044,23 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
     asked.length ? { required: asked.map((kind) => ({ kind, label: DOCUMENT_LABEL[kind] ?? kind })), uploaded: [], retentionDays: shop.documentRetentionDays ?? 30 } : null
   );
 
+  const [shared, setShared] = useState(false);
+  async function shareBooking() {
+    const url = managePath ? new URL(managePath, window.location.origin).toString() : window.location.href;
+    const text = `นัดหมาย ${shop.name} วันที่ ${formatDate(selected.date, { long: true, shortMonth: true })} เวลา ${when}: ${url}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: `นัดหมาย ${shop.name}`, text, url });
+        return;
+      } catch {}
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setShared(true);
+      setTimeout(() => setShared(false), 2500);
+    } catch {}
+  }
+
   function addToCalendar() {
     const service = rows.find((r) => r.step === "offering")?.value ?? "นัดหมาย";
     const link = managePath ? new URL(managePath, window.location.origin).toString() : window.location.href;
@@ -1008,8 +1092,12 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
         <span className="bk-done-icon" aria-hidden="true">
           <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7" /></svg>
         </span>
-        <h1>{held ? "กันคิวไว้ให้แล้ว" : booking.status === "pending" ? "ส่งสลิปแล้ว รอร้านยืนยัน" : "จองสำเร็จ"}</h1>
-        <p className="bk-muted">{held && booking.deposit ? "โอนมัดจำเพื่อยืนยันคิว" : `${shop.name} รอพบคุณ`}</p>
+        <h1>{held ? "กันคิวไว้ให้แล้ว" : booking.status === "pending" ? "ส่งสลิปแล้ว รอร้านยืนยัน" : "จองคิวสำเร็จเรียบร้อยแล้ว!"}</h1>
+        <p className="bk-muted">{held && booking.deposit ? "โอนมัดจำเพื่อยืนยันคิว" : "ระบบได้ส่งข้อความยืนยันและรายละเอียดไปที่ LINE เรียบร้อยแล้วค่ะ"}</p>
+        <div className="bk-line-pill">
+          <span className="bk-line-pill-icon">💬</span>
+          <span>แจ้งเตือนเข้า Official Account ทันที</span>
+        </div>
       </div>
 
       {booking.deposit && ["held", "pending"].includes(booking.status) && managePath && (
@@ -1026,7 +1114,17 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
         <DocumentsBox documents={documents} shopName={shop.name} uploadUrl={`/api/b/${shop.slug}/manage/${booking.manageToken}/document`} onUploaded={(view) => setDocuments(view.documents ?? documents)} />
       )}
 
-      <div className="bk-card bk-done-card">
+      <div className="bk-card bk-done-card bk-pass-card">
+        <div className="bk-pass-header">
+          <div className="bk-pass-brand">
+            <span className="bk-pass-badge">KIWMEE SALON PASS</span>
+            {booking.id && <strong className="bk-pass-code">#{bookingCode(booking.id)}</strong>}
+          </div>
+          <span className="bk-status" data-status={booking.status}>
+            {held ? "กันคิวไว้แล้ว" : booking.status === "pending" ? "รอตรวจสลิป" : "รอรับบริการ"}
+          </span>
+        </div>
+
         {selected.date && (
           <div className="bk-when">
             <span className="bk-date-tile" aria-hidden="true">
@@ -1067,19 +1165,47 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
             </div>
           )}
         </dl>
-        {held && booking.holdExpiresAt && !booking.deposit && <p className="bk-notice">กรุณาชำระเงินภายใน {timeFormat(booking.holdExpiresAt)} น.</p>}
-        {booking.startAt && booking.endAt && (
-          <button type="button" className="bk-secondary" onClick={addToCalendar}>
-            เพิ่มลงปฏิทิน
-          </button>
+        {booking.id && (
+          <div className="bk-done-qr">
+            <CheckinQr slug={shop.slug} id={booking.id} open={true} />
+            <small className="bk-muted" style={{ textAlign: "center", display: "block", marginTop: 4 }}>แสดง QR Code นี้ให้พนักงานเพื่อเช็คอินเมื่อถึงร้าน</small>
+          </div>
         )}
+        {held && booking.holdExpiresAt && !booking.deposit && <p className="bk-notice">กรุณาชำระเงินภายใน {timeFormat(booking.holdExpiresAt)} น.</p>}
         <DirectionsButton href={shop.directions} />
       </div>
 
+      <div className="bk-loyalty-callout">
+        <div className="bk-loyalty-icon">⭐</div>
+        <div className="bk-loyalty-details">
+          <div className="bk-loyalty-title">
+            <strong>รับแต้มสะสม Kiwmee Points</strong>
+            <span className="bk-badge-tier">สมาชิก</span>
+          </div>
+          <p>แต้มจะเข้ากระเป๋าใน LINE อัตโนมัติหลังรับบริการสำเร็จ เพื่อใช้เป็นส่วนลดครั้งถัดไป</p>
+        </div>
+      </div>
+
+      <div className="bk-actions-grid">
+        {booking.startAt && booking.endAt && (
+          <button type="button" className="bk-btn-primary-action bk-btn-calendar" onClick={addToCalendar}>
+            <span>📅 เพิ่มลงปฏิทิน</span>
+          </button>
+        )}
+        <button type="button" className="bk-btn-primary-action bk-btn-share" onClick={shareBooking}>
+          <span>{shared ? "✓ คัดลอกแล้ว" : "📤 แชร์เข้า LINE"}</span>
+        </button>
+      </div>
+
       {managePath && <ManageLink shop={shop} path={managePath} />}
-      <a className="bk-text-button bk-center" href={`/b/${shop.slug}`}>
-        จองคิวอีกครั้ง
+
+      <a className="bk-home-btn" href={`/b/${shop.slug}`}>
+        <span>🏠 กลับสู่หน้าหลัก / ดูบริการอื่นๆ</span>
       </a>
+
+      <div className="bk-trust-lock">
+        <span>🔒 การจองปลอดภัยด้วยการเข้ารหัส LINE LIFF Service</span>
+      </div>
     </section>
   );
 }
@@ -1133,11 +1259,16 @@ function OptionBody({ ask, option, offering, resource, resourceWord, date }) {
       <>
         <OfferingThumbnail offering={offering} />
         <span className="bk-option-text">
-          <strong>{offering.name}</strong>
-          {/* the price sits under the name, so a long name keeps the full width (LINE shows text larger) */}
-          <span className="bk-option-meta">
-            <span>{length}</span>
+          <span style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, width: "100%" }}>
+            <strong>{offering.name}</strong>
             {offering.price && <b className="bk-option-price">{priceText(offering.price)}</b>}
+          </span>
+          {offering.description && (
+            <span className="bk-option-desc">{offering.description}</span>
+          )}
+          <span className="bk-option-meta">
+            <span className="bk-duration-tag">⏱ {length}</span>
+            <span className="bk-deposit-tag">🔒 มัดจำ ฿300</span>
           </span>
         </span>
         <span className="bk-choice-mark" aria-hidden="true" />
@@ -1157,5 +1288,5 @@ function OptionBody({ ask, option, offering, resource, resourceWord, date }) {
     );
   }
   if (ask === "party") return <strong>{option.value} คน</strong>;
-  return <strong>{String(option.value)}</strong>;
+  return <strong>{option?.label || String(option?.value ?? "")}</strong>;
 }

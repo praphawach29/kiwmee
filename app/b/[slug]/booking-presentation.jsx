@@ -126,6 +126,7 @@ export function ShopAbout({ shop }) {
 // An app's bottom bar: book, or see my bookings (/b/<slug>/me). Shown where LINE login is set up.
 export function CustomerTabs({ slug, active }) {
   const tabs = [
+    { key: "services", href: `/b/${slug}/services`, label: "บริการ & ราคา", icon: <><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></> },
     { key: "book", href: `/b/${slug}`, label: "จองคิว", icon: <><rect x="3.5" y="5" width="17" height="15.5" rx="3" /><path d="M8 3v4M16 3v4M3.5 10h17M12 13v5M9.5 15.5h5" /></> },
     { key: "me", href: `/b/${slug}/me`, label: "การจองของฉัน", icon: <><circle cx="12" cy="8" r="3.6" /><path d="M4.5 20c1.2-3.6 4-5.4 7.5-5.4s6.3 1.8 7.5 5.4" /></> }
   ];
@@ -133,8 +134,8 @@ export function CustomerTabs({ slug, active }) {
     <nav className="bk-tabs" aria-label="เมนู">
       {tabs.map((t) => (
         <a key={t.key} href={t.href} aria-current={active === t.key ? "page" : undefined}>
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{t.icon}</svg>
-          {t.label}
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{t.icon}</svg>
+          <span>{t.label}</span>
         </a>
       ))}
     </nav>
@@ -167,21 +168,62 @@ export function ShopHeader({ shop, subtitle }) {
   return (
     <header className="bk-header bk-shop-header">
       <span className="bk-shop-monogram" aria-hidden="true">{shop.name?.[0]}</span>
-      <div><h1>{shop.name}</h1><p className="bk-muted">{subtitle}</p></div>
+      <div className="bk-shop-header-info">
+        <h1>{shop.name}</h1>
+        <p className="bk-muted">
+          {shop.address ? (
+            <span className="bk-header-location">
+              <span className="bk-pin-icon" aria-hidden="true">📍</span> {shop.address}
+            </span>
+          ) : (
+            subtitle
+          )}
+        </p>
+      </div>
     </header>
   );
 }
 
 const PHASES = [{ key: "selection", label: "เลือกคิว" }, { key: "customer", label: "ข้อมูลผู้จอง" }, { key: "complete", label: "ยืนยัน" }];
 
-export function BookingProgress({ phase }) {
+export function BookingProgress({ phase, ask }) {
+  let stepIndex = 0;
+  const totalSteps = 4;
+  let stepTitle = "เลือกบริการ";
+
+  if (phase === "complete") {
+    stepIndex = 3;
+    stepTitle = "จองสำเร็จ & จัดการคิว";
+  } else if (phase === "customer") {
+    stepIndex = 2;
+    stepTitle = "ข้อมูลผู้จอง & สรุปนัดหมาย";
+  } else if (ask === "offering" || !ask) {
+    stepIndex = 0;
+    stepTitle = "เลือกบริการ";
+  } else {
+    stepIndex = 1;
+    stepTitle = "เลือกช่างและเวลานัดหมาย";
+  }
+
+  const percent = Math.round(((stepIndex + 1) / totalSteps) * 100);
   const current = PHASES.findIndex((item) => item.key === phase);
   return (
     <div className="bk-progress-wrap">
+      <div className="bk-progress-meta">
+        <span className="bk-step-badge">ขั้นตอน {stepIndex + 1} / {totalSteps} · {stepTitle}</span>
+        <span className="bk-progress-pct">{percent}% เสร็จสิ้น</span>
+      </div>
       <ol className="bk-progress" aria-label="ภาพรวมการจอง">
-        {PHASES.map((item, index) => <li key={item.key} aria-current={phase === item.key ? "step" : undefined} data-done={index < current}><span aria-hidden="true">{index < current ? "✓" : index + 1}</span>{item.label}</li>)}
+        {PHASES.map((item, index) => (
+          <li key={item.key} aria-current={phase === item.key ? "step" : undefined} data-done={index < current}>
+            <span aria-hidden="true">{index < current ? "✓" : index + 1}</span>
+            {item.label}
+          </li>
+        ))}
       </ol>
-      <div className="bk-progress-bar" aria-hidden="true"><span style={{ width: `${((current + 1) / PHASES.length) * 100}%` }} /></div>
+      <div className="bk-progress-bar" aria-hidden="true">
+        <span style={{ width: `${percent}%` }} />
+      </div>
     </div>
   );
 }

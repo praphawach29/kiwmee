@@ -57,7 +57,8 @@ const KINDS = {
   remind_soon: { title: "ใกล้ถึงเวลานัดแล้ว", icon: "⏰", color: GRAPE_DEEP, button: "ดูการจองของฉัน" },
   // the shop changed the booking (dashboard): the customer hears it in LINE
   moved: { title: "ร้านเลื่อนนัดให้แล้ว", icon: "📅", color: GRAPE, button: "ดูการจองของฉัน" },
-  cancelled: { title: "นัดถูกยกเลิก", icon: "✕", color: "#B42318", button: "จองคิวใหม่" }
+  cancelled: { title: "นัดถูกยกเลิก", icon: "✕", color: "#B42318", button: "จองคิวใหม่" },
+  refunded: { title: "แจ้งคืนเงินมัดจำสำเร็จ", icon: "✓", color: GRAPE, button: "ตรวจสอบสถานะ / ใบเสร็จ LIFF" }
 };
 
 /**

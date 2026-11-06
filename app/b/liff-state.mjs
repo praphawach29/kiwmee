@@ -13,6 +13,6 @@ export function liffTarget(state) {
   path = path.split(/[?#]/)[0].replace(/\/+$/, "");
   if (!path.startsWith("/")) path = `/${path}`;
   if (path.startsWith("/b/")) path = path.slice(2); // a LIFF link that repeats /b
-  const match = /^\/([a-z0-9][a-z0-9-]{1,40})(\/manage\/[A-Za-z0-9_-]{32}|\/me)?$/.exec(path);
+  const match = /^\/([a-z0-9][a-z0-9-]{1,40})(\/manage\/[A-Za-z0-9_-]{32}|\/me|\/services|\/review(?:\/[A-Za-z0-9_-]+)?|\/line-preview)?$/.exec(path);
   return match ? `/b/${match[1]}${match[2] ?? ""}` : null;
 }

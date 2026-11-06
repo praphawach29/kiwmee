@@ -167,7 +167,7 @@ export default function ServicesCatalogClient({ shop, liffId }) {
                 {shop.name}
               </span>
               <h1 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 700, color: "var(--ink)", lineHeight: 1.3 }}>
-                Services Catalog
+                บริการและราคา
               </h1>
             </div>
           </div>

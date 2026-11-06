@@ -1507,6 +1507,191 @@ function buildPaymentExpiredBubble({ booking, payment } = {}) {
   };
 }
 
+function buildRefundSuccessBubble({ booking, refund, shop, couponCode = "COMEBACK10", liffUrl, pdfUrl } = {}) {
+  const refundAmount = refund?.amount !== undefined ? formatPrice(refund.amount) : "500.00";
+  const bookingRef = booking?.id ? `#${String(booking.id).slice(0, 8).toUpperCase()}` : "#KM-8824";
+  const refNo = refund?.reference || `RF-${Date.now().toString().slice(-8)}`;
+  const destination = refund?.destination || "PromptPay (081-xxx-8899)";
+  const serviceName = booking?.service_name || booking?.serviceName || "ตัดแต่งทรงผมสไตล์เกาหลี + Olaplex";
+  const shopName = shop?.name || "Kiwmee Studio";
+  const manageUrl = liffUrl || (shop?.slug ? `https://liff.line.me/kiwmee/b/${shop.slug}/me` : "https://kiwmee.com");
+
+  return {
+    type: "flex",
+    altText: `แจ้งคืนเงินมัดจำสำเร็จ ฿${refundAmount} คืนเข้าบัญชีของคุณเรียบร้อยแล้วค่ะ`,
+    contents: {
+      type: "bubble",
+      size: "mega",
+      header: {
+        type: "box",
+        layout: "vertical",
+        backgroundColor: "#6A4CFF",
+        paddingAll: "lg",
+        contents: [
+          {
+            type: "box",
+            layout: "horizontal",
+            contents: [
+              {
+                type: "box",
+                layout: "vertical",
+                flex: 1,
+                contents: [
+                  { type: "text", text: "Kiwmee Auto Refund", size: "xxs", color: "#E8E4F8", weight: "bold" },
+                  { type: "text", text: "แจ้งคืนเงินมัดจำสำเร็จ", weight: "bold", color: BRAND.WHITE, size: "md", margin: "xs" }
+                ]
+              },
+              {
+                type: "box",
+                layout: "horizontal",
+                backgroundColor: "#3DDC97",
+                cornerRadius: "xxl",
+                paddingStart: "sm",
+                paddingEnd: "sm",
+                paddingTop: "xs",
+                paddingBottom: "xs",
+                alignItems: "center",
+                contents: [
+                  { type: "text", text: "✓ อนุมัติแล้ว 100%", size: "xxs", color: "#065F46", weight: "bold" }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      body: {
+        type: "box",
+        layout: "vertical",
+        paddingAll: "lg",
+        spacing: "md",
+        contents: [
+          {
+            type: "box",
+            layout: "vertical",
+            backgroundColor: "#F7F5FF",
+            cornerRadius: "md",
+            paddingAll: "lg",
+            alignItems: "center",
+            contents: [
+              { type: "text", text: "ยอดเงินคืนเข้าบัญชี", size: "xs", color: BRAND.TEXT_SECONDARY },
+              { type: "text", text: `฿${refundAmount}`, size: "xxl", weight: "bold", color: "#6A4CFF", margin: "xs" },
+              {
+                type: "box",
+                layout: "horizontal",
+                backgroundColor: "#ECFDF5",
+                cornerRadius: "xxl",
+                paddingStart: "sm",
+                paddingEnd: "sm",
+                paddingTop: "xs",
+                paddingBottom: "xs",
+                margin: "sm",
+                contents: [
+                  { type: "text", text: "● คืนเต็มจำนวน (ไม่มีหักค่าธรรมเนียม)", size: "xxs", color: "#065F46", weight: "bold" }
+                ]
+              }
+            ]
+          },
+          {
+            type: "box",
+            layout: "vertical",
+            spacing: "sm",
+            margin: "md",
+            contents: [
+              {
+                type: "box",
+                layout: "horizontal",
+                contents: [
+                  { type: "text", text: "ช่องทางคืนเงิน", size: "xs", color: BRAND.TEXT_SECONDARY, flex: 4 },
+                  { type: "text", text: destination, size: "xs", color: BRAND.TEXT_PRIMARY, weight: "bold", flex: 6, align: "end" }
+                ]
+              },
+              {
+                type: "box",
+                layout: "horizontal",
+                contents: [
+                  { type: "text", text: "รหัสอ้างอิงคืนเงิน", size: "xs", color: BRAND.TEXT_SECONDARY, flex: 4 },
+                  { type: "text", text: refNo, size: "xs", color: BRAND.TEXT_PRIMARY, weight: "bold", flex: 6, align: "end" }
+                ]
+              },
+              {
+                type: "box",
+                layout: "horizontal",
+                contents: [
+                  { type: "text", text: "รหัสนัดหมายเดิม", size: "xs", color: BRAND.TEXT_SECONDARY, flex: 4 },
+                  { type: "text", text: bookingRef, size: "xs", color: BRAND.TEXT_PRIMARY, weight: "bold", flex: 6, align: "end" }
+                ]
+              },
+              {
+                type: "box",
+                layout: "horizontal",
+                contents: [
+                  { type: "text", text: "บริการที่ยกเลิก", size: "xs", color: BRAND.TEXT_SECONDARY, flex: 4 },
+                  { type: "text", text: serviceName, size: "xs", color: BRAND.TEXT_PRIMARY, flex: 6, align: "end", wrap: true }
+                ]
+              },
+              {
+                type: "box",
+                layout: "horizontal",
+                contents: [
+                  { type: "text", text: "เงื่อนไข", size: "xs", color: BRAND.TEXT_SECONDARY, flex: 4 },
+                  { type: "text", text: "ยกเลิกล่วงหน้า > 2 ชม.", size: "xs", color: "#065F46", weight: "bold", flex: 6, align: "end" }
+                ]
+              }
+            ]
+          },
+          {
+            type: "separator",
+            margin: "md"
+          },
+          {
+            type: "box",
+            layout: "vertical",
+            backgroundColor: "#F7F5FF",
+            borderColor: "#E8E4F8",
+            borderWidth: "1px",
+            cornerRadius: "md",
+            paddingAll: "md",
+            contents: [
+              { type: "text", text: "🎁 โค้ดส่วนลดปลอบใจ 10% ครั้งถัดไป", size: "xxs", color: "#6A4CFF", weight: "bold" },
+              {
+                type: "box",
+                layout: "horizontal",
+                margin: "xs",
+                alignItems: "center",
+                contents: [
+                  { type: "text", text: `โค้ด: ${couponCode}`, size: "sm", weight: "bold", color: BRAND.TEXT_PRIMARY, flex: 1 },
+                  { type: "text", text: "ใช้ได้ 30 วัน", size: "xxs", color: BRAND.TEXT_SECONDARY }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      footer: {
+        type: "box",
+        layout: "vertical",
+        spacing: "sm",
+        paddingAll: "lg",
+        contents: [
+          {
+            type: "button",
+            style: "primary",
+            color: "#6A4CFF",
+            height: "sm",
+            action: { type: "uri", label: "ตรวจสอบสถานะ / ใบเสร็จ LIFF", uri: manageUrl }
+          },
+          {
+            type: "button",
+            style: "secondary",
+            height: "sm",
+            action: { type: "uri", label: "จองคิวใหม่ทันที", uri: shop?.slug ? `https://kiwmee.com/b/${shop.slug}` : "https://kiwmee.com" }
+          }
+        ]
+      }
+    }
+  };
+}
+
 module.exports = {
   BRAND,
   buildServiceCarousel,
@@ -1523,6 +1708,7 @@ module.exports = {
   buildPaymentManualReviewBubble,
   buildPaymentFailedBubble,
   buildPaymentExpiredBubble,
+  buildRefundSuccessBubble,
   getServiceImage,
   getServiceCategory,
   getStaffImage,

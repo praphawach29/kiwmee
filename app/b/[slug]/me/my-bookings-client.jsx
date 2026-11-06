@@ -232,6 +232,25 @@ function BookingRow({ booking, shopSlug }) {
         {booking.link ? <a className="bk-booking-row" href={booking.link}>{body}</a> : <div className="bk-booking-row">{body}</div>}
         {isCompleted && shopSlug && (
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, paddingLeft: 56 }}>
+            <a
+              href={`/b/${shopSlug}/review/${booking.id || "demo"}`}
+              style={{
+                minHeight: 32,
+                padding: "4px 12px",
+                fontSize: ".8rem",
+                textDecoration: "none",
+                borderRadius: "10px",
+                background: "var(--selected)",
+                color: "var(--grape-deep)",
+                border: "1px solid var(--grape)",
+                fontWeight: 600,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px"
+              }}
+            >
+              ⭐ รีวิวบริการ (+50 แต้ม)
+            </a>
             <a className="bk-secondary" href={`/b/${shopSlug}`} style={{ minHeight: 32, padding: "4px 10px", fontSize: ".8rem", textDecoration: "none" }}>
               จองซ้ำ (Rebook)
             </a>

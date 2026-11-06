@@ -276,6 +276,16 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     return run({ selected, ask: step });
   };
 
+  // Pre-select offering if passed in URL (?offeringId=... or ?serviceId=...)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const targetOffering = params.get("offeringId") || params.get("serviceId");
+    if (targetOffering && !selected.offeringId && offerings.has(targetOffering)) {
+      choose("offering", targetOffering);
+    }
+  }, [offerings]);
+
   // a LINE member at the last step (the customer's details): their points and rewards, once
   const reachedCustomer = Boolean(view?.next && !view?.ask && view.next.step !== "start");
   useEffect(() => {

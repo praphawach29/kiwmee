@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+
+<html lang="th"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_stack" name="shell-type"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{width:100%;margin:0;padding:0;min-height:100%;}body{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "inverse-on-surface": "#f3eeff", "outline-variant": "#c9c4d9", "outline": "#787588", "surface-tint": "#5a38ef", "on-primary-fixed-variant": "#4106d8", "secondary": "#006c45", "on-secondary-fixed-variant": "#005233", "secondary-fixed-dim": "#42e09a", "on-primary-container": "#f4efff", "on-surface-variant": "#474556", "on-tertiary-fixed": "#23005c", "secondary-fixed": "#65fdb5", "inverse-primary": "#c8bfff", "on-surface": "#181445", "inverse-surface": "#2d2a5b", "surface-container-low": "#f6f2ff", "tertiary": "#642fcd", "background": "#fcf8ff", "on-secondary-container": "#00734a", "on-primary-fixed": "#190064", "tertiary-container": "#7d4de7", "primary": "#512ae6", "error": "#ba1a1a", "surface": "#fcf8ff", "tertiary-fixed-dim": "#d0bcff", "primary-fixed-dim": "#c8bfff", "on-background": "#181445", "surface-variant": "#e3dfff", "error-container": "#ffdad6", "on-error-container": "#93000a", "on-tertiary-container": "#f6eeff", "surface-container-high": "#e9e5ff", "primary-fixed": "#e5deff", "on-secondary": "#ffffff", "on-tertiary": "#ffffff", "on-primary": "#ffffff", "on-tertiary-fixed-variant": "#5516be", "surface-container": "#efebff", "on-secondary-fixed": "#002112", "tertiary-fixed": "#e9ddff", "surface-dim": "#dad6ff", "primary-container": "#6a4cff", "surface-container-lowest": "#ffffff", "secondary-container": "#65fdb5", "surface-container-highest": "#e3dfff", "surface-bright": "#fcf8ff", "on-error": "#ffffff" }, borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, spacing: { "space-xl": "1.75rem", "margin": "1rem", "space-md": "1rem", "space-xs": "0.25rem", "gutter": "1rem", "space-sm": "0.5rem", "space-lg": "1.25rem" }, fontFamily: { "body-md": ["Plus Jakarta Sans"], "label-lg": ["Plus Jakarta Sans"], "body-sm": ["Plus Jakarta Sans"], "headline-md": ["Plus Jakarta Sans"], "body-lg": ["Plus Jakarta Sans"], "headline-sm": ["Plus Jakarta Sans"], "headline-lg": ["Plus Jakarta Sans"], "label-sm": ["Plus Jakarta Sans"], "headline-xl": ["Plus Jakarta Sans"], "headline-xl-mobile": ["Plus Jakarta Sans"], "label-md": ["Plus Jakarta Sans"] }, fontSize: { "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }], "label-lg": ["14px", { "lineHeight": "20px", "fontWeight": "600" }], "body-sm": ["12px", { "lineHeight": "16px", "fontWeight": "400" }], "headline-md": ["20px", { "lineHeight": "28px", "fontWeight": "600" }], "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }], "headline-sm": ["18px", { "lineHeight": "24px", "fontWeight": "600" }], "headline-lg": ["24px", { "lineHeight": "32px", "fontWeight": "700" }], "label-sm": ["10px", { "lineHeight": "14px", "fontWeight": "700" }], "headline-xl": ["32px", { "lineHeight": "40px", "fontWeight": "700" }], "headline-xl-mobile": ["26px", { "lineHeight": "34px", "fontWeight": "700" }], "label-md": ["12px", { "lineHeight": "16px", "fontWeight": "600" }] } } } };</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface text-on-surface font-body-md text-body-md antialiased min-h-screen flex flex-col"><div class="mx-auto w-full max-w-[480px] min-h-screen flex flex-col bg-surface relative"><header class="fixed top-0 w-full max-w-[480px] z-50 pt-safe bg-surface/90 backdrop-blur-xl shadow-[0_4px_20px_-2px_rgba(106,76,255,0.06)]"><div class="h-14 px-margin flex items-center justify-between"><button aria-label="ย้อนกลับหรือปิดหน้าต่าง LIFF" class="w-11 h-11 -ml-space-xs flex items-center justify-center rounded-full text-on-surface hover:bg-surface-container active:scale-95 transition-all" onclick="window.history.back()" type="button"><span class="material-symbols-outlined text-[24px]">close</span></button><div class="flex-1 px-space-xs text-center"><h1 class="font-headline-sm text-headline-sm text-on-surface truncate">Review And Rating</h1></div><div class="flex items-center justify-end w-11 h-11"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shadow-[0_2px_8px_rgba(81,42,230,0.25)]"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex-1 flex flex-col w-full px-margin pt-14 pb-safe bg-surface"><div class="flex flex-col w-full pb-28 space-y-4">
+<!-- Top Hero / Reward Notice Card -->
+<div class="relative overflow-hidden bg-surface-container rounded-2xl p-4 shadow-sm">
+<div class="absolute -right-6 -top-6 w-24 h-24 bg-primary/10 rounded-full blur-xl pointer-events-none"></div>
+<div class="flex items-start gap-3 relative z-10">
+<div class="w-10 h-10 rounded-xl bg-primary-container text-on-primary-container flex items-center justify-center shrink-0 shadow-md">
+<span class="material-symbols-outlined text-[22px]" style="font-variation-settings: 'FILL' 1;">card_giftcard</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex items-center justify-between gap-1 mb-1">
+<h2 class="font-headline-sm text-headline-sm text-on-surface truncate">ขอบคุณที่มาใช้บริการ ✨</h2>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-label-sm shrink-0">
+<span class="material-symbols-outlined text-[13px]" style="font-variation-settings: 'FILL' 1;">stars</span>
+            +50 แต้ม
+          </span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+          ความเห็นของคุณช่วยพัฒนาบริการให้ดียิ่งขึ้น พร้อมรับทันที <span class="font-label-md text-label-md text-primary font-semibold">+50 Kiwmee Points</span> หลังส่งรีวิว
+        </p>
+</div>
+</div>
+</div>
+<!-- Completed Service Summary Card -->
+<div class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm space-y-3">
+<!-- Header of receipt: Order & Branch -->
+<div class="flex items-center justify-between pb-2">
+<div class="min-w-0">
+<span class="font-label-sm text-label-sm text-primary uppercase tracking-wider">Appointment #KM-8824</span>
+<p class="font-label-md text-label-md text-on-surface truncate">Kiwmee Studio สยามสแควร์ ซอย 3</p>
+</div>
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-secondary-container/40 text-secondary font-label-sm text-label-sm shrink-0">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse"></span>
+        เสร็จสิ้นเมื่อวานนี้
+      </span>
+</div>
+<!-- Stylist Info Banner -->
+<div class="flex items-center gap-3 p-2.5 rounded-xl bg-surface-container-low">
+<div class="relative w-12 h-12 rounded-full overflow-hidden shrink-0 shadow-sm">
+<img class="w-full h-full object-cover" data-alt="Close up portrait of Stylist May, an approachable trendy Thai female hair stylist wearing a chic beige linen salon apron with soft smile inside modern Korean aesthetic hair salon studio with bright natural daylight" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD5uOvo-Q1r2mbQJ9Ts9VPv_6WHdYxjnnLSUZzGSsmJ6_0UM7icm8sOULtL68F2kFJFOZsJ2bWDahiNqv-l3BvutX4KbJ48viBp_gb-B0KZ3yGo-Zhmw-3jyz00QwRvXh2rlfGtSnxFp-IALovWDbOT84wpB7WtNoj9IfbIYWdGYTUdDI6QRMZT5GmyLqBoT_N-lA-a0rafap9RppB0BHTPLD2fXqr4pN7n0d62UTY0"/>
+<span class="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-secondary flex items-center justify-center text-on-secondary">
+<span class="material-symbols-outlined text-[10px]" style="font-variation-settings: 'FILL' 1;">check</span>
+</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex items-center gap-1.5">
+<h3 class="font-label-lg text-label-lg text-on-surface truncate">ช่างเมย์ (Stylist May)</h3>
+<span class="material-symbols-outlined text-primary text-[16px]" style="font-variation-settings: 'FILL' 1;">verified</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">ผู้เชี่ยวชาญเลเยอร์คัทเกาหลี &amp; สปาฟื้นฟู</p>
+</div>
+<div class="flex items-center gap-0.5 px-2 py-1 rounded-lg bg-surface-container text-on-surface shrink-0">
+<span class="material-symbols-outlined text-secondary text-[14px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="font-label-sm text-label-sm">4.9</span>
+</div>
+</div>
+<!-- Services Rendered List -->
+<div class="space-y-1.5 pt-1">
+<div class="flex items-center justify-between text-body-sm font-body-sm text-on-surface-variant">
+<span class="truncate">ตัดแต่งทรงผมสไตล์เกาหลี + สระไดร์</span>
+<span class="font-label-md text-label-md text-on-surface shrink-0 ml-2">฿750</span>
+</div>
+<div class="flex items-center justify-between text-body-sm font-body-sm text-on-surface-variant">
+<span class="truncate">Olaplex Hair Spa Treatment &amp; ฟื้นฟูผมลึก</span>
+<span class="font-label-md text-label-md text-on-surface shrink-0 ml-2">฿1,200</span>
+</div>
+<div class="flex items-center justify-between pt-2">
+<span class="font-label-md text-label-md text-on-surface">ยอดชำระสุทธิ (ชำระแล้ว)</span>
+<span class="font-headline-sm text-headline-sm text-primary">฿1,950</span>
+</div>
+</div>
+</div>
+<!-- Overall Star Rating Section -->
+<div class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm text-center space-y-4">
+<div>
+<span class="font-label-sm text-label-sm text-primary uppercase tracking-wider">Overall Experience</span>
+<h3 class="font-headline-sm text-headline-sm text-on-surface mt-0.5">คะแนนความพึงพอใจโดยรวม</h3>
+</div>
+<!-- Interactive Big 5-Star Row -->
+<div class="flex justify-center items-center gap-2" id="main-star-group">
+<button aria-label="1 ดาว" class="star-btn p-1 text-primary focus:outline-none transition-transform active:scale-90" data-val="1" type="button">
+<span class="material-symbols-outlined text-[36px]" style="font-variation-settings: 'FILL' 1;">star</span>
+</button>
+<button aria-label="2 ดาว" class="star-btn p-1 text-primary focus:outline-none transition-transform active:scale-90" data-val="2" type="button">
+<span class="material-symbols-outlined text-[36px]" style="font-variation-settings: 'FILL' 1;">star</span>
+</button>
+<button aria-label="3 ดาว" class="star-btn p-1 text-primary focus:outline-none transition-transform active:scale-90" data-val="3" type="button">
+<span class="material-symbols-outlined text-[36px]" style="font-variation-settings: 'FILL' 1;">star</span>
+</button>
+<button aria-label="4 ดาว" class="star-btn p-1 text-primary focus:outline-none transition-transform active:scale-90" data-val="4" type="button">
+<span class="material-symbols-outlined text-[36px]" style="font-variation-settings: 'FILL' 1;">star</span>
+</button>
+<button aria-label="5 ดาว" class="star-btn p-1 text-primary focus:outline-none transition-transform active:scale-90" data-val="5" type="button">
+<span class="material-symbols-outlined text-[36px]" style="font-variation-settings: 'FILL' 1;">star</span>
+</button>
+</div>
+<!-- Rating Mood Chip -->
+<div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container text-primary font-label-md text-label-md">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">favorite</span>
+<span id="rating-label">5/5 ประทับใจมากที่สุด! ❤️</span>
+</div>
+<!-- Sub-Ratings Breakdown -->
+<div class="space-y-3 pt-2 text-left">
+<!-- Item 1 -->
+<div class="flex items-center justify-between gap-2 p-2 rounded-xl bg-surface-container-low">
+<div class="min-w-0">
+<p class="font-label-md text-label-md text-on-surface truncate">ฝีมือและการให้คำปรึกษาของช่าง</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Stylist Skill &amp; Consultation</p>
+</div>
+<div class="flex items-center gap-0.5 text-primary shrink-0">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">star</span>
+</div>
+</div>
+<!-- Item 2 -->
+<div class="flex items-center justify-between gap-2 p-2 rounded-xl bg-surface-container-low">
+<div class="min-w-0">
+<p class="font-label-md text-label-md text-on-surface truncate">ความสะอาดและบรรยากาศร้าน</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Cleanliness &amp; Ambiance</p>
+</div>
+<div class="flex items-center gap-0.5 text-primary shrink-0">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">star</span>
+</div>
+</div>
+<!-- Item 3 -->
+<div class="flex items-center justify-between gap-2 p-2 rounded-xl bg-surface-container-low">
+<div class="min-w-0">
+<p class="font-label-md text-label-md text-on-surface truncate">ความคุ้มค่าและการบริการ</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Value &amp; Hospitality</p>
+</div>
+<div class="flex items-center gap-0.5 text-primary shrink-0">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">star</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Quick Compliment Tags -->
+<div class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm space-y-2.5">
+<div class="flex items-center justify-between">
+<h3 class="font-label-lg text-label-lg text-on-surface">สิ่งที่ประทับใจ (เลือกได้หลายข้อ)</h3>
+<span class="font-body-sm text-body-sm text-on-surface-variant">แตะเพื่อเลือก</span>
+</div>
+<div class="flex flex-wrap gap-2" id="compliments-container">
+<button class="compliment-pill inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-label-md font-label-md transition-all bg-primary-container text-on-primary-container shadow-sm" data-selected="true" type="button">
+<span>✨ ทรงผมตรงเรฟมาก</span>
+</button>
+<button class="compliment-pill inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-label-md font-label-md transition-all bg-secondary-container text-on-secondary-container shadow-sm" data-selected="true" type="button">
+<span>💆 สระไดร์นวดศีรษะฟิน</span>
+</button>
+<button class="compliment-pill inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-label-md font-label-md transition-all bg-surface-container text-on-surface hover:bg-surface-container-high" data-selected="false" type="button">
+<span>☕ บรรยากาศผ่อนคลาย</span>
+</button>
+<button class="compliment-pill inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-label-md font-label-md transition-all bg-primary-container text-on-primary-container shadow-sm" data-selected="true" type="button">
+<span>⏰ ตรงต่อเวลา ไม่ต้องรอนาน</span>
+</button>
+<button class="compliment-pill inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-label-md font-label-md transition-all bg-surface-container text-on-surface hover:bg-surface-container-high" data-selected="false" type="button">
+<span>🧴 กลิ่นผลิตภัณฑ์หอมติดทน</span>
+</button>
+<button class="compliment-pill inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-label-md font-label-md transition-all bg-primary-container text-on-primary-container shadow-sm" data-selected="true" type="button">
+<span>💬 ช่างให้คำแนะนำดีมาก</span>
+</button>
+</div>
+</div>
+<!-- Review Comment Box -->
+<div class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm space-y-2">
+<div class="flex items-center justify-between">
+<h3 class="font-label-lg text-label-lg text-on-surface">เขียนความคิดเห็นของคุณ</h3>
+<span class="font-body-sm text-body-sm text-outline" id="char-counter">142/500</span>
+</div>
+<div class="relative bg-surface-container-lowest rounded-xl">
+<textarea class="w-full bg-surface-container-low rounded-xl p-3 font-body-md text-body-md text-on-surface placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest focus:shadow-md transition-all resize-none" id="review-text" maxlength="500" placeholder="เขียนเล่าประสบการณ์ความประทับใจ หรือข้อเสนอแนะเพิ่มเติมสำหรับช่างเมย์และร้าน..." rows="3">ช่างเมย์ตัดเลเยอร์ได้ถูกใจมากๆ เซ็ตง่าย ทรีตเมนต์ Olaplex ทำแล้วผมนุ่มลื่นไม่แห้งเสียเลย ประทับใจการนวดตอนสระผมมากค่ะ ครั้งหน้ามาอีกแน่นอน!</textarea>
+</div>
+</div>
+<!-- Photo Upload Section -->
+<div class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm space-y-3">
+<div class="flex items-center justify-between">
+<div class="min-w-0">
+<h3 class="font-label-lg text-label-lg text-on-surface">เพิ่มรูปภาพทรงผมของคุณ</h3>
+<p class="font-body-sm text-body-sm text-secondary font-medium">รับแต้มเพิ่มพิเศษ +20 Points</p>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant px-2 py-0.5 bg-surface-container rounded-md">1/3 รูป</span>
+</div>
+<!-- Gallery Grid -->
+<div class="grid grid-cols-3 gap-2.5">
+<!-- Uploaded Photo Preview -->
+<div class="relative aspect-square rounded-xl overflow-hidden shadow-sm group">
+<img class="w-full h-full object-cover" data-alt="Gorgeous aesthetic back-view photo of healthy layered wavy glossy brown hair styled to perfection inside a bright cozy Korean style hair salon, natural soft lighting highlighting silky hair texture" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAS-g1G3djSTNeJ-EZEv1LnGfskjewyYvHmm-7m_jlJ4WAxN2kOdakv2kdS3f6l0lwBNp3_QJEnf-uqOFGv8GkM4mM1BZvwqm86lLbbKSQIcTwhIVkx5PE4cbmiSEr07MNx0UCum7HtBFrBCxZm6vGunfXcvuMZDZeYKoN5rER2evaegCF5_jZ275fa5HjQZNYWAJmQqGrZ969mEV503WXPXGmq4DfEBtmmmdDigMQK"/>
+<button aria-label="ลบรูปภาพ" class="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-inverse-surface/80 text-inverse-on-surface flex items-center justify-center hover:bg-inverse-surface transition-all shadow" type="button">
+<span class="material-symbols-outlined text-[14px]">close</span>
+</button>
+</div>
+<!-- Upload Action Box 1 -->
+<label class="aspect-square rounded-xl bg-surface-container-low hover:bg-surface-container flex flex-col items-center justify-center cursor-pointer transition-colors text-center p-2">
+<input accept="image/*" class="hidden" type="file"/>
+<div class="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center mb-1">
+<span class="material-symbols-outlined text-[20px]">add_a_photo</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">เพิ่มรูปภาพ</span>
+</label>
+<!-- Upload Action Box 2 (Empty Slot) -->
+<div class="aspect-square rounded-xl bg-surface-container-low/50 flex flex-col items-center justify-center text-center p-2 opacity-60">
+<span class="material-symbols-outlined text-outline text-[22px]">image</span>
+<span class="font-label-sm text-label-sm text-outline mt-1">ว่าง</span>
+</div>
+</div>
+</div>
+<!-- Privacy & Consent Toggles -->
+<div class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm space-y-3">
+<!-- Showcase Consent -->
+<label class="flex items-start gap-3 cursor-pointer select-none">
+<div class="relative flex items-center shrink-0 mt-0.5">
+<input checked="" class="peer sr-only" type="checkbox"/>
+<div class="w-5 h-5 rounded-md bg-surface-container peer-checked:bg-primary transition-colors flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary text-[16px] scale-0 peer-checked:scale-100 transition-transform font-bold">check</span>
+</div>
+</div>
+<div class="min-w-0">
+<span class="font-label-md text-label-md text-on-surface block">ยินยอมให้นำรีวิวและภาพไปแสดงในหน้าผลงานร้าน</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant block mt-0.5">เพื่อรับสิทธิ์ลุ้นรับ Gift Voucher ฿500 ประจำเดือน Kiwmee Showcase 🎁</span>
+</div>
+</label>
+<div class="h-[1px] bg-surface-container-high/60 my-1"></div>
+<!-- Anonymous Toggle -->
+<label class="flex items-start gap-3 cursor-pointer select-none">
+<div class="relative flex items-center shrink-0 mt-0.5">
+<input class="peer sr-only" type="checkbox"/>
+<div class="w-5 h-5 rounded-md bg-surface-container peer-checked:bg-primary transition-colors flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary text-[16px] scale-0 peer-checked:scale-100 transition-transform font-bold">check</span>
+</div>
+</div>
+<div class="min-w-0">
+<span class="font-label-md text-label-md text-on-surface block">แสดงรีวิวแบบไม่เปิดเผยชื่อ (Anonymous review)</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant block mt-0.5">ซ่อนชื่อและรูปโปรไฟล์ LINE ในหน้ารีวิวสาธารณะ</span>
+</div>
+</label>
+</div>
+<!-- Sticky Bottom Action Bar -->
+<div class="fixed bottom-0 left-0 right-0 z-40 bg-surface-container-lowest/95 backdrop-blur-md shadow-lg pb-safe">
+<div class="max-w-[480px] mx-auto px-4 py-3 space-y-2">
+<div class="flex items-center gap-3">
+<!-- Left Reward summary info -->
+<div class="min-w-0 shrink-0">
+<div class="flex items-center gap-1 text-secondary">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">monetization_on</span>
+<span class="font-label-md text-label-md font-bold text-on-surface">+70 แต้ม</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant block truncate">Gold Member</span>
+</div>
+<!-- Submit Button CTA -->
+<button class="flex-1 h-12 rounded-xl bg-primary hover:bg-surface-tint active:scale-[0.98] transition-all text-on-primary flex items-center justify-center gap-2 px-4 shadow-md shadow-primary/20" type="button">
+<span class="font-label-lg text-label-lg font-semibold">ส่งรีวิวและรับคะแนน</span>
+<span class="material-symbols-outlined text-[18px]">auto_awesome</span>
+</button>
+</div>
+<!-- Skip Button -->
+<div class="text-center pt-0.5">
+<button class="font-label-md text-label-md text-outline hover:text-on-surface transition-colors py-1 px-4" onclick="window.history.back()" type="button">
+          ข้ามขั้นตอนนี้ (Skip)
+        </button>
+</div>
+</div>
+</div>
+</div>
+<script>
+  (function() {
+    // Star Rating Interactivity
+    const starButtons = document.querySelectorAll('.star-btn');
+    const ratingLabel = document.getElementById('rating-label');
+    const moodTexts = {
+      1: '1/5 ควรปรับปรุง 🥺',
+      2: '2/5 พอใช้ได้ 🙂',
+      3: '3/5 ปานกลาง 👍',
+      4: '4/5 ประทับใจมาก ✨',
+      5: '5/5 ประทับใจมากที่สุด! ❤️'
+    };
+
+    starButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const val = parseInt(btn.getAttribute('data-val'), 10);
+        starButtons.forEach(s => {
+          const sVal = parseInt(s.getAttribute('data-val'), 10);
+          const icon = s.querySelector('.material-symbols-outlined');
+          if (sVal <= val) {
+            s.classList.add('text-primary');
+            s.classList.remove('text-outline-variant');
+            icon.style.fontVariationSettings = "'FILL' 1";
+          } else {
+            s.classList.remove('text-primary');
+            s.classList.add('text-outline-variant');
+            icon.style.fontVariationSettings = "'FILL' 0";
+          }
+        });
+        if (ratingLabel && moodTexts[val]) {
+          ratingLabel.textContent = moodTexts[val];
+        }
+      });
+    });
+
+    // Compliment Pill Multi-Select
+    const complimentPills = document.querySelectorAll('.compliment-pill');
+    complimentPills.forEach(pill => {
+      pill.addEventListener('click', () => {
+        const isSelected = pill.getAttribute('data-selected') === 'true';
+        if (isSelected) {
+          pill.setAttribute('data-selected', 'false');
+          pill.className = 'compliment-pill inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-label-md font-label-md transition-all bg-surface-container text-on-surface hover:bg-surface-container-high';
+        } else {
+          pill.setAttribute('data-selected', 'true');
+          pill.className = 'compliment-pill inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-label-md font-label-md transition-all bg-primary-container text-on-primary-container shadow-sm';
+        }
+      });
+    });
+
+    // Character Counter
+    const textarea = document.getElementById('review-text');
+    const charCounter = document.getElementById('char-counter');
+    if (textarea && charCounter) {
+      textarea.addEventListener('input', () => {
+        charCounter.textContent = `${textarea.value.length}/500`;
+      });
+    }
+  })();
+</script></main></div></body></html>

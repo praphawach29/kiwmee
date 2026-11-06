@@ -126,6 +126,7 @@ export function ShopAbout({ shop }) {
 // An app's bottom bar: book, or see my bookings (/b/<slug>/me). Shown where LINE login is set up.
 export function CustomerTabs({ slug, active }) {
   const tabs = [
+    { key: "services", href: `/b/${slug}/services`, label: "บริการ & ราคา", icon: <><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></> },
     { key: "book", href: `/b/${slug}`, label: "จองคิว", icon: <><rect x="3.5" y="5" width="17" height="15.5" rx="3" /><path d="M8 3v4M16 3v4M3.5 10h17M12 13v5M9.5 15.5h5" /></> },
     { key: "me", href: `/b/${slug}/me`, label: "การจองของฉัน", icon: <><circle cx="12" cy="8" r="3.6" /><path d="M4.5 20c1.2-3.6 4-5.4 7.5-5.4s6.3 1.8 7.5 5.4" /></> }
   ];

@@ -95,6 +95,7 @@ Next.js 15 + Supabase · deploy บน Railway service `salon-booking-os-v1` →
 | #87 | **UI `/super`**: ตารางแคตตาล็อก (แบรนด์/ร้าน) กลายเป็นการ์ดเมื่อจอ <720px ด้วย `data-label` · ช่องกรอกการตั้งค่าสูง 44px/16px · ปุ่มและช่องกรอง ≥44px |
 | #88 | **ฟีเจอร์ธุรกิจ**: ต่ออายุแพ็กเกจอัตโนมัติจากกระเป๋าเงิน (ทุกชั่วโมง, ต่อเมื่อเหลือ ≤3 วัน และเงินพอ, ไม่พอ = ไม่ตัดแล้วเตือน) · ดาวน์โหลดรายงานรายได้เป็น CSV (`/api/super/revenue/export`, มี BOM) · เตือนแพ็กเกจใกล้หมดอายุที่หน้าแรกแดชบอร์ด + หน้ากระเป๋าเงิน · unit test เพิ่ม · ไม่มี migration |
 | #90 | **ปลดระวาง v1**: ลบ `app/admin`, `app/manage`, `app/assistant`, API v1, `src/` เดิม, `database/`, เทสต์/สคริปต์/เอกสาร v1 (179 ไฟล์) · เก็บ `src/errors.js`, `src/http.js`, `src/security/limits.js` ที่ v2 ใช้ · ย้าย `ZERO_AVAILABILITY_REASONS` ไป `src/v2/availability-reasons.js` · stub webhook 410 · tag `pre-v1-removal` · ไม่มี migration |
+| #92 | **สเปกหน้าจอง v3 (อัปเดตตามโค้ดจริงบน main)**: สรุปคำตัดสินใจ 4 ข้อ · ตารางสถานะ UI/backend ของ 13 หน้าจอ · ช่องว่างที่เหลือ (backend รีวิว/คูปอง, UX 10 ข้อ, multi-service) · แผน 5 PR (v3-A…v3-E) · `docs/DESIGN_BOOKING_V3.md` + `docs/DESIGN_BOOKING_REVIEW.md` · ไม่มี migration |
 | #30 | **CI** (`.github/workflows/ci.yml`: unit, DB, build ทุก PR) · ปรับ roadmap ให้ตรงสถานะจริง |
 
 **Migration ล่าสุดที่รันบนโปรเจกต์ Kiwmee (เดิมชื่อ booking-v2, ref `ezubgqeqdipwfnmorqkj`) แล้ว: `20261025003700_wallet.sql`** (เจ้าของยืนยัน 5 พ.ย. 2569, PR #73)

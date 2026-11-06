@@ -157,6 +157,7 @@ export default function WalletClient() {
               <em>
                 แพ็กเกจ {wallet.plan.effective}
                 {wallet.plan.valid_until ? ` · ถึง ${new Date(wallet.plan.valid_until).toLocaleDateString("th-TH")}` : ""}
+                {wallet.planWarn ? ` · ${wallet.planWarn}` : ""}
               </em>
             </div>
             <div className="ui-stat">

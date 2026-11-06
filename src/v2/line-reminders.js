@@ -10,6 +10,7 @@ const { publicOrigin, checkinImageUrl, bookingCode } = require("./scan-codes");
 const { bookingCard, manageLink, openLink, pushLine } = require("./line-notify");
 const { sendExpiryNotices } = require("./loyalty-expiry");
 const { directionsLink } = require("./directions");
+const { renewDuePlans } = require("./wallet");
 
 const KINDS = [
   // kind, from (before the start), until (before the start)
@@ -106,6 +107,7 @@ async function sendDueReminders(db, { now = new Date(), push = (to, messages, bu
 let timer = null;
 let lastRunAt = null;
 let lastError = null;
+let lastRenewalAt = 0;
 function reminderLoopState() {
   return { started: timer !== null, lastRunAt, lastError };
 }
@@ -124,6 +126,12 @@ function startReminderLoop(getDb, { everyMs = 5 * 60 * 1000 } = {}) {
       // points that run out within 14 days (src/v2/loyalty-expiry.js), daytime only
       const points = await sendExpiryNotices(getDb());
       if (points.sent) console.log(`[loyalty-expiry] sent ${points.sent}`);
+      // once an hour: renew paid plans that run out within 3 days, paid from the wallet
+      if (Date.now() - lastRenewalAt > 60 * 60 * 1000) {
+        lastRenewalAt = Date.now();
+        const renewals = await renewDuePlans();
+        if (renewals.renewed) console.log(`[wallet] renewed ${renewals.renewed} plan(s)`);
+      }
       lastError = null;
     } catch (error) {
       lastError = String(error.message).slice(0, 120);

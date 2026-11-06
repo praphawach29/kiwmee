@@ -67,7 +67,7 @@ async function listBrands(client) {
     console.warn("[brands] invites not taken up — migration …001700 is missing:", error.message);
   }
   const { rows } = await client.query(
-    `select br.id, br.name, public.brand_plan(br.id) as plan, public.is_brand_owner(br.id) as owner,
+    `select br.id, br.name, public.brand_plan(br.id) as plan, p.valid_until, public.is_brand_owner(br.id) as owner,
             public.brand_branch_limit(public.brand_plan(br.id)) as branch_limit,
             (select count(*)::int from public.businesses x where x.brand_id = br.id) as branch_count,
             coalesce(u.messages_used, 0) as messages_used,
@@ -78,6 +78,7 @@ async function listBrands(client) {
                         join public.business_members m on m.business_id = b.id and m.user_id = auth.uid()
                        where b.brand_id = br.id), '[]'::json) as shops
        from public.brands br
+       left join public.brand_plans p on p.brand_id = br.id
        left join public.usage_counters u
               on u.brand_id = br.id
              and u.period = date_trunc('month', (now() at time zone 'Asia/Bangkok'))::date
@@ -95,6 +96,8 @@ async function listBrands(client) {
       name: r.name,
       plan: r.plan,
       planName: PLAN_NAMES[r.plan] ?? r.plan,
+      planValidUntil: r.valid_until ?? null,
+      planDaysLeft: r.valid_until ? Math.ceil((new Date(r.valid_until) - new Date()) / 86400000) : null,
       owner: r.owner,
       branchLimit: r.branch_limit,
       branchCount: r.branch_count,

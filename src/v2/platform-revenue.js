@@ -3,11 +3,9 @@
 //
 // อ่านข้ามทุกแบรนด์ จึงใช้ connection ของเซิร์ฟเวอร์หลังยืนยันว่าเป็น platform admin เท่านั้น
 
-const { ownerTx } = require("./wallet");
+const { ownerTx, PLAN_PRICES } = require("./wallet");
 const { requirePlatformAdmin } = require("./platform-settings");
 
-// ราคาต่อเดือนของแต่ละแพ็กเกจ (ต้องตรงกับ SKUS ใน wallet.js และหน้าแพ็กเกจ)
-const PLAN_PRICES = { free: 0, starter: 390, pro: 890, loyalty: 590 };
 const PLAN_NAMES = { free: "ฟรี", starter: "เริ่มต้น", pro: "โปร", loyalty: "สมาชิก" };
 
 /**
@@ -105,4 +103,38 @@ async function revenueReport() {
   });
 }
 
-module.exports = { PLAN_PRICES, mrrOf, revenueReport };
+function csvCell(value) {
+  const text = value === null || value === undefined ? "" : String(value);
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+/** The same numbers as revenueReport(), as a CSV Excel opens correctly (BOM + CRLF). */
+function revenueCsv(report) {
+  const rows = [
+    ["รายงานรายได้ Kiwmee", report.month],
+    [],
+    ["รายการ", "บาท"],
+    ["MRR (แพ็กเกจที่ยังไม่หมดอายุ)", report.mrr],
+    ["แบรนด์ที่จ่ายเงิน", report.payingBrands],
+    ["เงินที่ร้านเติมเดือนนี้ (ยังไม่ใช่รายได้)", report.cashIn],
+    ["ใช้จากกระเป๋าเดือนนี้ (รายได้ที่รับรู้)", report.spend],
+    ["ยอดคงเหลือในกระเป๋าทั้งระบบ (หนี้สิน)", report.liability],
+    ["สลิปรอตรวจ", report.pendingTopups],
+    [],
+    ["สินค้า", "จำนวน", "ยอดเงิน"],
+    ...report.bySku.map((s) => [s.sku, s.count, s.amount]),
+    [],
+    ["แบรนด์", "แพ็กเกจ", "วันหมดอายุ", "เติมเดือนนี้", "ใช้เดือนนี้", "คงเหลือ"],
+    ...report.perBrand.map((b) => [
+      b.name,
+      b.planName,
+      b.validUntil ? new Date(b.validUntil).toISOString().slice(0, 10) : "",
+      b.topup,
+      b.spend,
+      b.balance
+    ])
+  ];
+  return "\uFEFF" + rows.map((row) => row.map(csvCell).join(",")).join("\r\n") + "\r\n";
+}
+
+module.exports = { PLAN_PRICES, mrrOf, revenueReport, revenueCsv };

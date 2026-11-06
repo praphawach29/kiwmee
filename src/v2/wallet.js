@@ -35,6 +35,8 @@ const imageError = (message) => new AppError("INVALID", message, 422);
 // How many LINE messages each package includes per month (docs/WALLET.md). The counter table keeps
 // what was actually granted; this is the fallback for brands whose plan was set before …003700.
 const PLAN_MESSAGES = { free: 100, starter: 900, pro: 4000, loyalty: 1200 };
+// ราคาต่อเดือนของแต่ละแพ็กเกจ
+const PLAN_PRICES = { free: 0, starter: 390, pro: 890, loyalty: 590 };
 
 /**
  * What a brand may send this month and how close it is: { used, total, remaining, percent, level }.
@@ -165,9 +167,11 @@ async function walletOf(brandId, userId) {
       ),
       billingInfo(client)
     ]);
+    const planDaysLeft = plan.valid_until ? Math.ceil((new Date(plan.valid_until) - new Date()) / DAY) : null;
     return {
       balance: account?.balance ?? 0,
       plan,
+      planWarn: planDaysLeft == null ? null : planDaysLeft <= 0 ? "หมดอายุแล้ว" : planDaysLeft <= 14 ? `เหลือ ${planDaysLeft} วัน` : null,
       usage,
       quota: quotaOf(plan.effective, usage),
       entries,
@@ -252,6 +256,67 @@ async function submitTopup(brandId, userId, { amount, image, mime } = {}) {
       balance: Number(credited.result.balance),
       reasons: []
     };
+  });
+}
+
+const RENEW_WITHIN_DAYS = 3;
+
+/**
+ * Should this brand's plan renew now? { action: "none" | "renew" | "short", amount }.
+ * A paid plan renews when it runs out within 3 days and the wallet covers it; with too little
+ * money it is left alone (the shop sees "close to expiry" in the dashboard).
+ */
+function renewalDecision({ plan, validUntil, balance }, now = new Date()) {
+  const price = PLAN_PRICES[plan] ?? 0;
+  if (!price) return { action: "none", amount: 0 };
+  if (!validUntil) return { action: "none", amount: 0 };
+  const left = new Date(validUntil).getTime() - now.getTime();
+  if (left <= 0 || left > RENEW_WITHIN_DAYS * DAY) return { action: "none", amount: 0 };
+  if ((Number(balance) || 0) < price) return { action: "short", amount: price };
+  return { action: "renew", amount: price };
+}
+
+/**
+ * Renew every paid plan that is about to run out, from the brand's wallet. Runs on the server's
+ * clock (instrumentation) — safe to call often: extending 30 days moves it out of the window.
+ */
+async function renewDuePlans(now = new Date()) {
+  return ownerTx(async (client) => {
+    const { rows } = await client.query(
+      `select p.brand_id, p.plan, p.valid_until, coalesce(a.balance, 0)::float8 as balance
+         from public.brand_plans p
+         left join public.wallet_accounts a on a.brand_id = p.brand_id
+        where p.plan <> 'free' and p.valid_until is not null
+          and p.valid_until <= now() + interval '${RENEW_WITHIN_DAYS} days'`
+    );
+    let renewed = 0;
+    let short = 0;
+    for (const row of rows) {
+      const decision = renewalDecision(row, now);
+      if (decision.action === "short") {
+        short += 1;
+        console.warn(`[wallet] renewal skipped (wallet ${row.balance} < ${decision.amount}) for brand ${row.brand_id}`);
+        continue;
+      }
+      if (decision.action !== "renew") continue;
+      const { rows: [order] } = await client.query(
+        "insert into public.wallet_orders (brand_id, sku, amount) values ($1, $2, $3) returning id",
+        [row.brand_id, `plan:${row.plan}`, decision.amount]
+      );
+      await client.query("select public.wallet_charge($1, $2, 'purchase', $3, $4)", [
+        row.brand_id,
+        decision.amount,
+        order.id,
+        `ต่ออายุแพ็กเกจ ${row.plan} อัตโนมัติ`
+      ]);
+      await client.query(
+        "update public.brand_plans set plan = $2, valid_until = greatest(valid_until, now()) + interval '30 days' where brand_id = $1",
+        [row.brand_id, row.plan]
+      );
+      await client.query("select public.usage_add($1, 0, 0, $2, 0)", [row.brand_id, PLAN_MESSAGES[row.plan] ?? 0]);
+      renewed += 1;
+    }
+    return { checked: rows.length, renewed, short };
   });
 }
 
@@ -423,4 +488,4 @@ async function reviewTopup(adminUserId, topupId, action) {
   });
 }
 
-module.exports = { ownerTx, SKUS, PLAN_MESSAGES, quotaOf, messageAllowed, allowanceForBusiness, walletOf, submitTopup, buy, judgeTopup, recordMessages, recordSlipCheck, meterMessage, listTopups, reviewTopup, MIN_TOPUP, MAX_TOPUP };
+module.exports = { ownerTx, SKUS, PLAN_MESSAGES, PLAN_PRICES, renewalDecision, renewDuePlans, quotaOf, messageAllowed, allowanceForBusiness, walletOf, submitTopup, buy, judgeTopup, recordMessages, recordSlipCheck, meterMessage, listTopups, reviewTopup, MIN_TOPUP, MAX_TOPUP };

@@ -332,6 +332,15 @@ function BrandCard({ brand, brands, onChanged }) {
         </div>
         <span className="ad-status" data-tone="info">แพ็กเกจ{brand.planName} · {brand.branchCount}/{brand.branchLimit} สาขา</span>
       </div>
+      {brand.planDaysLeft != null && brand.planDaysLeft <= 14 && (
+        <p className="ad-muted" style={{ color: brand.planDaysLeft <= 0 ? "#B42318" : "#B54708" }}>
+          {brand.planDaysLeft <= 0
+            ? `แพ็กเกจ${brand.planName}หมดอายุแล้ว — ต่ออายุที่กระเป๋าเงิน`
+            : `แพ็กเกจ${brand.planName}จะหมดอายุในอีก ${brand.planDaysLeft} วัน`}
+          {" · "}
+          <a href={`/dashboard/wallet?brand=${brand.id}`}>ต่ออายุ</a>
+        </p>
+      )}
       {brand.owner && brand.messagesTotal > 0 && (
         <p
           className="ad-muted"

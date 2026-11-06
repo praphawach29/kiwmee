@@ -1,6 +1,13 @@
 # ปลดระวางโค้ด v1 (Phase 5)
 
-สถานะ: **ยังไม่ลบ** — v1 ยังอยู่ใน repo 109 ไฟล์ และมี endpoint ที่อาจยังถูกใช้อยู่จริง
+สถานะ: **ลบแล้ว** (PR #90) — เก็บประวัติไว้ที่ tag `pre-v1-removal` · webhook เดิมเหลือ route ตอบ 410 ไว้เป็นป้ายบอกทาง
+
+## สถานะ
+
+- ร้าน/แอดมิน v1, `src/` เดิม, `database/`, เทสต์/สคริปต์ v1 และเอกสาร `ai/ api/ automation/ pilot/ prompts/ ui/ examples/` ถูกลบ
+- เก็บไว้เพราะ v2 ยังใช้: `src/errors.js`, `src/http.js`, `src/security/limits.js`, `src/v2/**`
+- `app/api/line/webhook` เหลือ stub ตอบ **410 Gone** + log — ถ้ามี channel ไหนยังชี้มาที่นี่จะเห็นใน Railway logs ทันที
+- ย้อนกลับ: `git revert <commit>` หรือ deploy จาก tag `pre-v1-removal`
 
 ## ทำไมยังลบตอนนี้ไม่ได้
 

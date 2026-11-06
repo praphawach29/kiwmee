@@ -186,13 +186,31 @@ export function ShopHeader({ shop, subtitle }) {
 
 const PHASES = [{ key: "selection", label: "เลือกคิว" }, { key: "customer", label: "ข้อมูลผู้จอง" }, { key: "complete", label: "ยืนยัน" }];
 
-export function BookingProgress({ phase }) {
+export function BookingProgress({ phase, ask }) {
+  let stepIndex = 0;
+  const totalSteps = 4;
+  let stepTitle = "เลือกบริการ";
+
+  if (phase === "complete") {
+    stepIndex = 3;
+    stepTitle = "จองสำเร็จ & จัดการคิว";
+  } else if (phase === "customer") {
+    stepIndex = 2;
+    stepTitle = "ข้อมูลผู้จอง & สรุปนัดหมาย";
+  } else if (ask === "offering" || !ask) {
+    stepIndex = 0;
+    stepTitle = "เลือกบริการ";
+  } else {
+    stepIndex = 1;
+    stepTitle = "เลือกช่างและเวลานัดหมาย";
+  }
+
+  const percent = Math.round(((stepIndex + 1) / totalSteps) * 100);
   const current = PHASES.findIndex((item) => item.key === phase);
-  const percent = Math.round(((current + 1) / PHASES.length) * 100);
   return (
     <div className="bk-progress-wrap">
       <div className="bk-progress-meta">
-        <span className="bk-step-badge">ขั้นตอนที่ {current + 1} จาก {PHASES.length}</span>
+        <span className="bk-step-badge">ขั้นตอน {stepIndex + 1} / {totalSteps} · {stepTitle}</span>
         <span className="bk-progress-pct">{percent}% เสร็จสิ้น</span>
       </div>
       <ol className="bk-progress" aria-label="ภาพรวมการจอง">

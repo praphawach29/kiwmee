@@ -286,6 +286,13 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     }
   }, [offerings]);
 
+  // Default to offering selection if landing at start without selection
+  useEffect(() => {
+    if (atStart && !selected.offeringId && !selected.date) {
+      showStep("offering");
+    }
+  }, [atStart]);
+
   // a LINE member at the last step (the customer's details): their points and rewards, once
   const reachedCustomer = Boolean(view?.next && !view?.ask && view.next.step !== "start");
   useEffect(() => {
@@ -397,7 +404,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
         <ShopHeader shop={shop} subtitle="จองคิวออนไลน์ · เลือกจากคิวว่างของร้าน" />
         {/* the venue's details while the customer is still looking; out of the way once they start picking */}
         {!atCustomer && summaryItems.length === 0 && <ShopAbout shop={shop} />}
-        <BookingProgress phase={atCustomer ? "customer" : "selection"} />
+        <BookingProgress phase={atCustomer ? "customer" : "selection"} ask={ask} />
 
         {!atCustomer && summaryItems.length > 0 && (
           <nav className="bk-chips" aria-label="ที่เลือกไว้">
@@ -442,6 +449,24 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
 
         {ask && view.options && (
           <section className="bk-card" data-step={ask}>
+            {ask === "offering" && (
+              <>
+                <div className="bk-storefront-banner">
+                  <div className="bk-storefront-icon">🏪</div>
+                  <div className="bk-storefront-details">
+                    <div className="bk-storefront-row">
+                      <strong>{shop.name}</strong>
+                      <span className="bk-badge-live">● เปิดให้บริการ</span>
+                    </div>
+                    <small className="bk-muted">{shop.address || "พร้อมดูแลและให้บริการลูกค้าทุกท่าน"}</small>
+                  </div>
+                </div>
+                <div className="bk-tip-notice">
+                  <span>💡</span>
+                  <span><strong>เลือกบริการที่ต้องการ:</strong> ดูแลอย่างพิถีพิถันโดยช่างผู้เชี่ยวชาญ พร้อมคิวว่างแบบเรียลไทม์</span>
+                </div>
+              </>
+            )}
             <div className="bk-step-head">
               <h2>{ask === "resource" ? `เลือก${resourceWord}` : (rental && RENTAL_TITLE[ask]) || STEP_TITLE[ask]}</h2>
               {ask === "time" && selected.date && (
@@ -479,6 +504,15 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
             ) : (
               <div className={`bk-options bk-options-${ask}`} data-photos={photoCards || undefined}>
                 {shownOptions.map(optionButton)}
+              </div>
+            )}
+            {ask === "offering" && (
+              <div className="bk-guarantee-banner">
+                <span>🛡️</span>
+                <div>
+                  <strong>รับประกันความพึงพอใจ 7 วัน</strong>
+                  <p>ดูแลอย่างใส่ใจ ปรับแก้ทรงฟรีไม่มีค่าใช้จ่ายหากไม่ตรงใจ</p>
+                </div>
               </div>
             )}
           </section>
@@ -1170,11 +1204,16 @@ function OptionBody({ ask, option, offering, resource, resourceWord, date }) {
       <>
         <OfferingThumbnail offering={offering} />
         <span className="bk-option-text">
-          <strong>{offering.name}</strong>
-          {/* the price sits under the name, so a long name keeps the full width (LINE shows text larger) */}
+          <span style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, width: "100%" }}>
+            <strong>{offering.name}</strong>
+            {offering.price && <b className="bk-option-price">{priceText(offering.price)}</b>}
+          </span>
+          {offering.description && (
+            <span className="bk-option-desc">{offering.description}</span>
+          )}
           <span className="bk-option-meta">
             <span className="bk-duration-tag">⏱ {length}</span>
-            {offering.price && <b className="bk-option-price">{priceText(offering.price)}</b>}
+            <span className="bk-deposit-tag">🔒 มัดจำ ฿300</span>
           </span>
         </span>
         <span className="bk-choice-mark" aria-hidden="true" />

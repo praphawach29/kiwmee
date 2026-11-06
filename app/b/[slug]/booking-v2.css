@@ -827,3 +827,23 @@ a.bk-points-button { display: inline-flex; align-items: center; text-decoration:
 .bk-reward-text small { font-size: .78rem; color: var(--muted); }
 .bk-reward-cost { font-size: .86rem; font-weight: 700; color: var(--grape-deep); }
 
+/* Stitch Step 1 & 2 Modern UI Enhancements */
+.bk-storefront-banner { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; background: #fff; border: 1px solid var(--line-soft); box-shadow: 0 2px 8px rgba(27, 22, 64, 0.03); margin-bottom: 8px; }
+.bk-storefront-icon { width: 40px; height: 40px; border-radius: 12px; background: var(--selected); color: var(--grape-deep); display: grid; place-items: center; font-size: 20px; flex: none; }
+.bk-storefront-details { display: grid; gap: 2px; min-width: 0; }
+.bk-storefront-row { display: flex; align-items: center; gap: 8px; }
+.bk-storefront-row strong { font-size: .95rem; color: var(--ink); }
+.bk-badge-live { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; background: var(--mint-tint); color: var(--mint-deep); font-size: .72rem; font-weight: 700; }
+.bk-tip-notice { display: flex; align-items: flex-start; gap: 8px; padding: 10px 14px; border-radius: 14px; background: linear-gradient(90deg, #F7F5FF 0%, #ECFDF5 100%); border: 1px solid var(--line-soft); margin-bottom: 12px; font-size: .8rem; color: var(--ink); line-height: 1.4; }
+.bk-guarantee-banner { display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 16px; background: #fff; border: 1px solid var(--line-soft); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03); margin-top: 14px; }
+.bk-guarantee-banner span:first-child { font-size: 24px; flex: none; }
+.bk-guarantee-banner strong { font-size: .88rem; color: var(--ink); display: block; }
+.bk-guarantee-banner p { margin: 2px 0 0; font-size: .78rem; color: var(--muted); }
+.bk-deposit-tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; background: var(--selected); color: var(--grape-deep); font-size: .78rem; font-weight: 600; }
+
+.bk-step-bottom-bar { position: fixed; bottom: 64px; left: 0; right: 0; z-index: 40; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(12px); border-top: 1px solid var(--line); padding: 10px 16px; box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.05); }
+.bk-step-bottom-content { max-width: 480px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.bk-step-bottom-content strong { font-size: .92rem; color: var(--ink); }
+.bk-step-next-hint { font-size: .78rem; color: var(--grape-deep); font-weight: 600; }
+
+

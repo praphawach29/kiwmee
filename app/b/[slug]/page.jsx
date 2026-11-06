@@ -26,10 +26,12 @@ export default async function ShopBookingPage({ params }) {
   const { slug } = await params;
   const shop = await loadShop(slug);
   if (!shop) notFound();
-  // the first step comes with the page, so the customer sees choices without waiting for a second request
+  // Directly start on the offering step so the customer sees the Stitch service catalog right away
   const [liffId, first] = await Promise.all([
     platformSettings.getSetting(v2db.getBookingPool(), "line.liff_id"),
-    publicBooking.step(v2db.getBookingPool(), slug, { selected: {} }).catch(() => null)
+    publicBooking.step(v2db.getBookingPool(), slug, { selected: {}, ask: "offering" }).catch(() =>
+      publicBooking.step(v2db.getBookingPool(), slug, { selected: {} }).catch(() => null)
+    )
   ]);
   return <BookingV2Client shop={shop} liffId={liffId || null} initialView={first} />;
 }

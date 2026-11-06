@@ -11,6 +11,7 @@
   → migration ใหม่เขียนเป็นไฟล์ใน `supabase/migrations/` แล้ว**ส่ง SQL ทั้งไฟล์ให้เจ้าของรันเองใน SQL Editor** ก่อน merge
   (โค้ดที่อ่านคอลัมน์ใหม่จะพังถ้า merge ก่อนรัน SQL)
 - ห้ามแก้ฐานข้อมูลด้วยมือโดยไม่มีไฟล์ migration · ทุกตารางใหม่ต้องมี RLS และเทสต์ (anon อ่านไม่ได้, ร้าน A แตะร้าน B ไม่ได้)
+- **GitHub Repo:** `https://github.com/praphawach29/kiwmee.git`
 - merge เข้า `main` = deploy อัตโนมัติไป Railway (`kiwmee.up.railway.app`)
 
 ## ก่อนเปิด PR ต้องผ่าน

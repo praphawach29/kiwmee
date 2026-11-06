@@ -5,7 +5,7 @@
 **Kiwmee** = ระบบจองคิวหลายร้านผ่านเว็บ/LINE ที่กำลังต่อยอดเป็น**ระบบสมาชิก + คะแนนสะสม** ในผลิตภัณฑ์เดียว
 Next.js 15 + Supabase · deploy บน Railway service `salon-booking-os-v1` → `https://kiwmee.up.railway.app` ทุกครั้งที่ merge เข้า `main`
 
-**Repo เปลี่ยนชื่อเป็น `praphawach29/kiwmee`** (เดิม `salon-booking-os-v1`, GitHub redirect ลิงก์เก่าให้) · ชื่อ service บน Railway และโดเมนยังเป็นชื่อเดิม ·
+**GitHub Repo:** `https://github.com/praphawach29/kiwmee.git` (เดิม `salon-booking-os-v1`) · ชื่อ service บน Railway และโดเมนยังเป็นชื่อเดิม (`kiwmee.up.railway.app`) ·
 ถ้า Railway ไม่ deploy หลัง merge ให้เชื่อม repo ใหม่ที่ Railway → service → Settings → Source
 
 ---

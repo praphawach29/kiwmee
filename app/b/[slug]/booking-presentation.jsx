@@ -184,9 +184,14 @@ export function ShopHeader({ shop, subtitle }) {
   );
 }
 
-const PHASES = [{ key: "selection", label: "เลือกคิว" }, { key: "customer", label: "ข้อมูลผู้จอง" }, { key: "complete", label: "ยืนยัน" }];
+const PHASES = [
+  { key: "selection", label: "เลือกคิว" },
+  { key: "availability", label: "วันและเวลา" },
+  { key: "customer", label: "ข้อมูลผู้จอง" },
+  { key: "complete", label: "ยืนยัน" }
+];
 
-export function BookingProgress({ phase, ask }) {
+export function BookingProgress({ phase, ask, resourceWord = "รายการ" }) {
   let stepIndex = 0;
   const totalSteps = 4;
   let stepTitle = "เลือกบริการ";
@@ -202,11 +207,11 @@ export function BookingProgress({ phase, ask }) {
     stepTitle = "เลือกบริการ";
   } else {
     stepIndex = 1;
-    stepTitle = "เลือกช่างและเวลา";
+    stepTitle = ask === "resource" ? `เลือก${resourceWord}` : ask === "date" ? "เลือกวัน" : ask === "time" ? "เลือกเวลา" : ask === "duration" ? "เลือกระยะเวลา" : ask === "addons" ? "เลือกตัวเลือกเสริม" : "เลือกคิว";
   }
 
   const percent = Math.round(((stepIndex + 1) / totalSteps) * 100);
-  const current = PHASES.findIndex((item) => item.key === phase);
+  const current = phase === "complete" ? 3 : phase === "customer" ? 2 : stepIndex === 0 ? 0 : 1;
   return (
     <div className="bk-progress-wrap">
       <div className="bk-progress-meta">
@@ -215,7 +220,7 @@ export function BookingProgress({ phase, ask }) {
       </div>
       <ol className="bk-progress" aria-label="ภาพรวมการจอง">
         {PHASES.map((item, index) => (
-          <li key={item.key} aria-current={phase === item.key ? "step" : undefined} data-done={index < current}>
+          <li key={item.key} aria-current={index === current ? "step" : undefined} data-done={index < current}>
             <span aria-hidden="true">{index < current ? "✓" : index + 1}</span>
             {item.label}
           </li>
@@ -279,7 +284,6 @@ export function BookingReview({ items, onEdit, busy, price, id = "booking-review
             <span>{price.label}</span>
             <strong>{price.value}</strong>
           </div>
-          <small className="bk-review-tax-note">รวมภาษีมูลค่าเพิ่มแล้ว · ชำระเงินหลังรับบริการ</small>
         </div>
       )}
     </section>
@@ -295,10 +299,10 @@ export function BookingSubmitBar({ formId, disabled, busy, price, deposit, label
         <div className="bk-submit-total" aria-hidden="true">
           <div className="bk-submit-badge-row">
             <span className="bk-pulse-dot" aria-hidden="true" />
-            <span>{isDeposit ? `มัดจำ ฿${deposit.toLocaleString("th-TH")} · ล็อกคิวทันที` : "ชำระเงินหลังรับบริการ"}</span>
+            <span>{isDeposit ? `มัดจำ ฿${deposit.toLocaleString("th-TH")} · รับ QR หลังยืนยัน` : "ชำระเงินตามเงื่อนไขของร้าน"}</span>
           </div>
           <div className="bk-submit-price-row">
-            <small>{isDeposit ? "คงเหลือชำระหน้าร้าน" : label}</small>
+            <small>{label}</small>
             <strong>{price}</strong>
           </div>
         </div>
@@ -318,7 +322,7 @@ export function BookingSubmitBar({ formId, disabled, busy, price, deposit, label
               <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
               <polyline points="22 4 12 14.01 9 11.01" />
             </svg>
-            <span>{isDeposit ? `ยืนยันและชำระมัดจำ ฿${deposit.toLocaleString("th-TH")} (Confirm Booking)` : "ยืนยันการจองคิว (Confirm Booking)"}</span>
+            <span>{isDeposit ? "ยืนยันและดู QR มัดจำ" : "ยืนยันการจองคิว"}</span>
           </span>
         )}
       </button>

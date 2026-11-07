@@ -332,3 +332,14 @@ test('stylists as a row of faces on the day-and-time screen: anyone first, a ful
   assert.match(html, /data-value="a2" data-selected="false" aria-checked="false" disabled=""/);
   assert.match(html, /ไม่ว่าง/);
 });
+
+test('under the PromptPay QR one short line: the amount is above and the account below', () => {
+  const { DepositBox } = loadComponents();
+  const html = render(DepositBox, {
+    deposit: { due: 1800, qr: 'data:image/png;base64,AAAA', paymentInfo: { bank: 'กสิกรไทย', accountNumber: '123-4-56789-0', accountName: 'ประภาวัชร์ สุทธิประภา', promptPay: '0812345678' } },
+    status: 'held', deadline: '00:32 น.', uploadUrl: '/x', onUploaded() {}
+  });
+  assert.match(html, /<figcaption><strong>สแกนด้วยแอปธนาคาร<\/strong><\/figcaption>/);
+  assert.doesNotMatch(html, /ใส่ให้แล้ว|สแกนจ่าย/);
+  assert.match(html, /123-4-56789-0/);
+});

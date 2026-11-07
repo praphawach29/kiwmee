@@ -299,3 +299,12 @@ test('header shows today\'s hours, or that the shop is closed today', () => {
   assert.match(render(ShopHeader, { shop: { name: 'Bloom', today: null } }), /วันนี้ร้านปิด/);
   assert.doesNotMatch(render(ShopHeader, { shop: { name: 'Bloom' } }), /เปิดวันนี้|วันนี้ร้านปิด/);
 });
+
+test('ยอดนิยม only on a service the shop really books most; no made-up badge from the price', () => {
+  const { OptionBody } = loadComponents('booking-v2-client.jsx');
+  const base = { ask: 'offering', option: { value: 'c1' }, resourceWord: 'ช่าง', shop: {} };
+  const cheap = render(OptionBody, { ...base, offering: { id: 'c1', name: 'ตัดผม', price: { amount: 450, unit: 'per_booking' }, popular: false } });
+  assert.doesNotMatch(cheap, /ยอดนิยม|บริการแนะนำ/);
+  const hot = render(OptionBody, { ...base, offering: { id: 'c1', name: 'ตัดผม', price: { amount: 450, unit: 'per_booking' }, popular: true } });
+  assert.match(hot, /ยอดนิยม/);
+});

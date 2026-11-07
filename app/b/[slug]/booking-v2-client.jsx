@@ -1562,7 +1562,8 @@ function OptionBody({ ask, option, offering, resource, resourceWord, date, shop,
     const length = offeringLength(offering);
     const depVal = shop?.deposit?.mode === "fixed" ? shop.deposit.value : shop?.deposit?.mode === "percent" && offering.price?.amount ? Math.round((offering.price.amount * shop.deposit.value) / 100) : null;
     const isSelected = Boolean(chosen || option?.["data-selected"]);
-    const isPopular = offering.badge === "popular" || offering.name?.includes("ยอดนิยม") || (offering.price?.amount && offering.price.amount < 1000);
+    // booked most here in the last 30 days (shopInfo counts real bookings)
+    const isPopular = offering.popular === true;
     const isPremium = offering.badge === "premium" || offering.name?.includes("พรีเมียม") || (offering.price?.amount && offering.price.amount >= 2000);
 
     return (
@@ -1582,15 +1583,11 @@ function OptionBody({ ask, option, offering, resource, resourceWord, date, shop,
             </span>
           )}
           <div className="bk-offering-card-body">
-            <div className="bk-offering-badges">
-              {isPopular ? (
-                <span className="bk-badge-popular">ยอดนิยม 🔥</span>
-              ) : isPremium ? (
-                <span className="bk-badge-premium">พรีเมียม ✨</span>
-              ) : (
-                <span className="bk-badge-rec">บริการแนะนำ</span>
-              )}
-            </div>
+            {(isPopular || isPremium) && (
+              <div className="bk-offering-badges">
+                {isPopular ? <span className="bk-badge-popular">ยอดนิยม 🔥</span> : <span className="bk-badge-premium">พรีเมียม ✨</span>}
+              </div>
+            )}
             <strong className="bk-offering-name">{offering.name}</strong>
             {offering.description && (
               <span className="bk-option-desc">{offering.description}</span>

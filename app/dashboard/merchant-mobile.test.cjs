@@ -95,3 +95,19 @@ test('checkout after a confirmed deposit: the deposit is taken off what the desk
   assert.doesNotMatch(fresh, /หักมัดจำ/);
   assert.match(fresh, /รับเงิน 600 บาท และปิดบิล/);
 });
+
+test('overview (design AdminMobile): three numbers, the next customers, and "+" to take a booking', () => {
+  const { OverviewTab, lengthText } = load('[slug]/shop-admin-client.jsx', '\nexport { OverviewTab, lengthText };');
+  assert.equal(lengthText('13:00', '14:00'), '1 ชม.');
+  assert.equal(lengthText('13:00', '13:45'), '45 นาที');
+  assert.equal(lengthText('13:00', '14:30'), '1 ชม. 30 นาที');
+  assert.equal(lengthText('13:00', '15:00'), '2 ชม.');
+  assert.equal(lengthText('13:00', null), '');
+  const html = render(OverviewTab, { slug: 'bloom-hair', catalog: { shop: { name: 'Bloom' }, resources: [], offerings: [] }, onNavigate() {}, onOpenBooking() {}, onAddBooking() {} });
+  assert.match(html, /นัดวันนี้/);
+  assert.match(html, /รอยืนยัน/);
+  assert.match(html, /ยอดวันนี้/);
+  assert.match(html, /คิวถัดไป/);
+  assert.match(html, /class="ad-fab" aria-label="เพิ่มการจอง"/);
+  assert.doesNotMatch(html, /ทางลัด|ทรัพยากร \/ บริการ/);
+});

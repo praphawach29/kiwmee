@@ -531,3 +531,18 @@ test("in a browser, a shop with LINE set up offers to sign in with LINE", async 
   await login.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
   expect(await page.evaluate(() => window.__lineLogin)).toBe(true);
 });
+
+// A link tapped in a LINE chat opens LINE's in-app browser, not LIFF: LINE's login there says "logged in"
+// but never hands the page the session. "เข้าสู่ระบบ" reopens the same page through the LIFF URL instead.
+test("inside LINE's in-app browser, signing in reopens the page through LIFF", async ({ browser }) => {
+  test.skip(!process.env.NEXT_PUBLIC_LIFF_ID, "start the app (and the tests) with NEXT_PUBLIC_LIFF_ID");
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, userAgent: "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126 Mobile Safari/537.36 Line/14.20.0" });
+  await noLine(context);
+  await context.route("https://liff.line.me/**", (r) => r.fulfill({ contentType: "text/html", body: "<title>LIFF</title>" }));
+  const page = await context.newPage();
+  await start(page);
+  await page.getByTestId("member-login").getByRole("button", { name: "เข้าสู่ระบบ" }).click();
+  await expect(page).toHaveURL(`https://liff.line.me/${process.env.NEXT_PUBLIC_LIFF_ID}/bloom-hair`);
+  expect(await page.evaluate(() => window.__lineLogin)).toBeUndefined();
+  await context.close();
+});

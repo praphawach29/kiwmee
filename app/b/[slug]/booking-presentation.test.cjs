@@ -313,6 +313,11 @@ test('ยอดนิยม only on a service the shop really books most; no mad
   assert.doesNotMatch(cheap, /ยอดนิยม|บริการแนะนำ/);
   const hot = render(OptionBody, { ...base, offering: { id: 'c1', name: 'ตัดผม', price: { amount: 450, unit: 'per_booking' }, popular: true } });
   assert.match(hot, /ยอดนิยม/);
+  // พรีเมียม is the shop's tick, not the price
+  const dear = render(OptionBody, { ...base, offering: { id: 'c1', name: 'ทำสีผม', price: { amount: 2500, unit: 'per_booking' }, premium: false } });
+  assert.doesNotMatch(dear, /พรีเมียม/);
+  const ticked = render(OptionBody, { ...base, offering: { id: 'c1', name: 'ทำสีผม', price: { amount: 900, unit: 'per_booking' }, premium: true } });
+  assert.match(ticked, /พรีเมียม/);
 });
 
 test('stylists as a row of faces on the day-and-time screen: anyone first, a full one cannot be tapped', () => {

@@ -9,7 +9,7 @@ const { transformSync } = require('next/dist/build/swc');
 
 function loadComponents(file = 'booking-presentation.jsx') {
   const filename = path.join(__dirname, file);
-  const source = fs.readFileSync(filename, 'utf8') + (file.includes('shop-admin-client') ? '\nexport { ResourceEditor, ResourcesTab, emptyResource, ReadOnly };' : file === 'booking-v2-client.jsx' ? '\nexport { OptionBody };' : '');
+  const source = fs.readFileSync(filename, 'utf8') + (file.includes('shop-admin-client') ? '\nexport { ResourceEditor, ResourcesTab, emptyResource, ReadOnly };' : file === 'booking-v2-client.jsx' ? '\nexport { OptionBody, DateStrip, TimeTabs };' : '');
   const { code } = transformSync(source, {
     filename,
     jsc: { parser: { syntax: 'ecmascript', jsx: true }, transform: { react: { runtime: 'automatic' } } },
@@ -228,6 +228,26 @@ test('times are grouped into morning, afternoon and evening, keeping server orde
     ['ช่วงเช้า', ['10:00', '11:45']], ['ช่วงบ่าย', ['12:00', '16:59']], ['ช่วงเย็น', ['17:00']],
   ]);
   assert.deepEqual(groupTimes([{ value: '18:30' }]).map((g) => g.key), ['evening']);
+});
+
+test('date picker and time slots show the Stitch date strip and every available period together', () => {
+  const { DateStrip, TimeTabs } = loadComponents('booking-v2-client.jsx');
+  const dates = render(DateStrip, {
+    options: [{ value: '2026-11-12', available: true }, { value: '2026-11-13', available: false, reason: 'FULLY_BOOKED' }],
+    today: '2026-11-12',
+    optionProps: (o) => ({ type: 'button', className: 'bk-option', 'data-value': o.value, disabled: !o.available })
+  });
+  assert.match(dates, /class="bk-date-strip"/);
+  assert.match(dates, /data-value="2026-11-12"/);
+  assert.match(dates, /data-value="2026-11-13"[^>]*disabled=""/);
+
+  const times = render(TimeTabs, {
+    options: [{ value: '09:00', available: true }, { value: '13:30', available: true }, { value: '18:00', available: true }],
+    optionButton: (o) => React.createElement('button', { type: 'button', key: o.value }, o.value)
+  });
+  for (const label of ['เวลาช่วงเช้า', 'เวลาช่วงบ่าย', 'เวลาช่วงเย็น']) assert.match(times, new RegExp(`aria-label="${label}"`));
+  assert.equal((times.match(/ว่าง 1 เวลา/g) || []).length, 3);
+  assert.doesNotMatch(times, /role="tab"/);
 });
 
 test('initials skip the kind word and keep a Thai leading vowel with its consonant', () => {

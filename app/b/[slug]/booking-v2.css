@@ -1651,5 +1651,23 @@ a.bk-points-button { display: inline-flex; align-items: center; text-decoration:
   .bk-options-offering .bk-offering-badges { padding-right: 38px; }
 }
 
+/* Stitch Step 2: dates and every available time period stay together on one screen. */
+.bk-time-date-section { display: grid; gap: 8px; }
+.bk-time-date-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 12px; }
+.bk-time-date-heading h3 { margin: 0; font-family: var(--font-display); font-size: 1rem; font-weight: 500; color: var(--ink); }
+.bk-time-date-heading > span { color: var(--grape-deep); font-size: .82rem; font-weight: 600; }
+.bk-time-group-head { justify-content: space-between; gap: 8px; color: var(--ink); }
+.bk-time-group-head > span { display: inline-flex; align-items: center; gap: 5px; }
+.bk-time-group-head > small { flex: none; padding: 3px 8px; border-radius: 999px; background: var(--mint-tint); color: var(--mint-deep); font-size: .72rem; font-weight: 600; }
+.bk-options-time { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.bk-options-time .bk-option { display: grid; justify-items: center; align-content: center; gap: 3px; min-height: 68px; padding: 10px 6px; border-radius: 14px; }
+.bk-options-time .bk-option strong { font-family: var(--font-display); font-size: 1rem; font-variant-numeric: tabular-nums; }
+.bk-time-slot-available { color: var(--mint-deep); font-size: .72rem; font-weight: 600; }
+.bk-options-time .bk-option[data-selected="true"] .bk-time-slot-available { color: rgba(255, 255, 255, .9); }
+@media (max-width: 360px) {
+  .bk-options-time { gap: 7px; }
+  .bk-options-time .bk-option { min-height: 62px; padding-inline: 4px; }
+}
+
 
 

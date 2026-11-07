@@ -242,14 +242,28 @@ export function groupTimes(options) {
   return parts.filter((part) => part.options.length > 0);
 }
 
+const STEP_ICON = {
+  offering: "✂️",
+  resource: "👤",
+  date: "📅",
+  time: "⏰",
+  duration: "⏱️",
+  party: "👥",
+  addons: "➕"
+};
+
 export function BookingReview({ items, onEdit, busy, price, id = "booking-review-title" }) {
   return (
     <section className="bk-card bk-review" aria-labelledby={id}>
-      <h2 id={id}>สรุปการจอง</h2>
+      <div className="bk-review-head">
+        <span className="bk-review-icon-pill" aria-hidden="true">📋</span>
+        <h2 id={id}>สรุปการจอง</h2>
+      </div>
       <ul className="bk-review-list">
         {items.map((item) => (
           <li key={item.step}>
             <button type="button" className="bk-review-row" disabled={busy} onClick={() => onEdit(item.step)} aria-label={`เปลี่ยน${item.label}: ${item.value}`}>
+              <span className="bk-review-step-icon" aria-hidden="true">{STEP_ICON[item.step] || "•"}</span>
               <span className="bk-review-label">{item.label}</span>
               <strong>{item.display ?? item.value}</strong>
               <span className="bk-review-edit" aria-hidden="true">
@@ -259,36 +273,58 @@ export function BookingReview({ items, onEdit, busy, price, id = "booking-review
           </li>
         ))}
       </ul>
-      {price && <div className="bk-review-total"><span>{price.label}</span><strong>{price.value}</strong></div>}
+      {price && (
+        <div className="bk-review-total">
+          <div className="bk-review-total-main">
+            <span>{price.label}</span>
+            <strong>{price.value}</strong>
+          </div>
+          <small className="bk-review-tax-note">รวมภาษีมูลค่าเพิ่มแล้ว · ชำระเงินหลังรับบริการ</small>
+        </div>
+      )}
     </section>
   );
 }
 
-// The total on the left, the button on the right (like an app's checkout bar)
+// Stacked confirmation drawer matching Stitch Screen 3: status badge + price on top, full-width button below
 export function BookingSubmitBar({ formId, disabled, busy, price, deposit, label = "ราคารวม" }) {
   const isDeposit = typeof deposit === "number" && deposit > 0;
   return (
     <div className="bk-submit-bar" data-has-price={Boolean(price) || undefined}>
       {price && (
         <div className="bk-submit-total" aria-hidden="true">
-          <small>{isDeposit ? "ราคาสุทธิ (ชำระหน้าร้าน)" : label}</small>
-          <strong>{price}</strong>
-          {isDeposit && (
-            <span style={{ fontSize: "0.78rem", color: "var(--grape-deep)", fontWeight: 700 }}>
-              มัดจำ ฿{deposit.toLocaleString("th-TH")}
-            </span>
-          )}
+          <div className="bk-submit-badge-row">
+            <span className="bk-pulse-dot" aria-hidden="true" />
+            <span>{isDeposit ? `มัดจำ ฿${deposit.toLocaleString("th-TH")} · ล็อกคิวทันที` : "ชำระเงินหลังรับบริการ"}</span>
+          </div>
+          <div className="bk-submit-price-row">
+            <small>{isDeposit ? "คงเหลือชำระหน้าร้าน" : label}</small>
+            <strong>{price}</strong>
+          </div>
         </div>
       )}
       <button
         type="submit"
         form={formId}
-        className="bk-primary"
+        className="bk-primary bk-btn-full"
         disabled={disabled}
         aria-label={busy ? undefined : price ? `ยืนยันการจอง · ${price}` : undefined}
       >
-        {busy ? "กำลังยืนยัน…" : isDeposit ? `ยืนยันและไปโอนมัดจำ (฿${deposit.toLocaleString("th-TH")})` : "ยืนยันการจองคิว"}
+        {busy ? (
+          "กำลังยืนยัน…"
+        ) : (
+          <span className="bk-btn-content">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+              <polyline points="22 4 12 14.01 9 11.01" />
+            </svg>
+            <span>{isDeposit ? `ยืนยันและชำระมัดจำ ฿${deposit.toLocaleString("th-TH")} (Confirm Booking)` : "ยืนยันการจองคิว (Confirm Booking)"}</span>
+          </span>
+        )}
       </button>
+      <p className="bk-submit-fine" aria-hidden="true">
+        เมื่อกดยืนยัน ถือว่าท่านยอมรับ <a href="/terms" target="_blank" rel="noreferrer">เงื่อนไขการให้บริการ</a> ของ Kiwmee
+      </p>
     </div>
   );
 }

@@ -360,12 +360,11 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
 
   const categories = ask === "offering" ? [...new Set((view?.options ?? []).map((o) => offerings.get(o.value)?.category).filter(Boolean))] : [];
   const shownOptions = (view?.options ?? []).filter((o) => ask !== "offering" || !category || categories.length < 2 || offerings.get(o.value)?.category === category);
-  // big photo cards when every service (or every court / stylist, "any" aside) has a photo
+  // big photo cards when every resource has a photo (only physical resources use billboard layout)
   const pictured = shownOptions.filter((o) => o.value !== null);
   const photoCards =
     pictured.length > 0 &&
-    ((ask === "offering" && pictured.every((o) => withMedia(offerings.get(o.value)))) ||
-      (ask === "resource" && pictured.every((o) => withMedia(resources.get(o.value)))));
+    (ask === "resource" && pictured.every((o) => withMedia(resources.get(o.value))));
   // แผนผังสนาม: when at least two of the courts / tables offered have a spot on the shop's map
   const mapped = ask === "resource" && pictured.filter((o) => resources.get(o.value)?.layout).length >= 2;
   const optionProps = (o) => {
@@ -385,9 +384,11 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     };
   };
   const optionButton = (o) => {
+    const tapped = pending?.step === ask && pending.value === o.value;
+    const chosen = pending?.step === ask ? tapped : selected[KEY[ask]] === o.value;
     const button = (
       <button key={String(o.value)} {...optionProps(o)}>
-        <OptionBody ask={ask} option={o} offering={offerings.get(o.value)} resource={resources.get(o.value)} resourceWord={resourceWord} date={selected.date} shop={shop} />
+        <OptionBody ask={ask} option={o} offering={offerings.get(o.value)} resource={resources.get(o.value)} resourceWord={resourceWord} date={selected.date} shop={shop} chosen={chosen} />
         {!o.available && <small className="bk-reason">{REASON_TEXT[o.reason] ?? "ไม่ว่าง"}</small>}
       </button>
     );
@@ -409,7 +410,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
       hero={withMedia(shop) ? <ShopHero shop={shop} compact={Boolean(atCustomer)} /> : null}
       aside={<SummaryAside items={summaryItems} estimate={estimate} shop={shop} onEdit={showStep} busy={busy} />}
     >
-      <main className={liffId && !atCustomer ? "bk-shell bk-with-tabs" : "bk-shell"} aria-busy={busy}>
+      <main className={liffId && atStart && !selected.offeringId ? "bk-shell bk-with-tabs" : "bk-shell"} aria-busy={busy}>
         <ShopHeader shop={shop} subtitle="จองคิวออนไลน์ · เลือกจากคิวว่างของร้าน" />
         {/* the venue's details while the customer is still looking; out of the way once they start picking */}
         {!atCustomer && summaryItems.length === 0 && <ShopAbout shop={shop} />}
@@ -517,7 +518,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
             )}
             {ask === "offering" && (
               <div className="bk-guarantee-banner">
-                <span>🛡️</span>
+                <span className="bk-guarantee-icon">🛡️</span>
                 <div>
                   <strong>รับประกันความพึงพอใจ 7 วัน</strong>
                   <p>ดูแลอย่างใส่ใจ ปรับแก้ทรงฟรีไม่มีค่าใช้จ่ายหากไม่ตรงใจ</p>
@@ -527,50 +528,163 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
           </section>
         )}
 
+        {ask === "offering" && selected.offeringId && offerings.get(selected.offeringId) && (
+          <div className="bk-step1-drawer">
+            <div className="bk-step1-drawer-inner">
+              <div className="bk-step1-drawer-info">
+                <div className="bk-step1-drawer-meta">
+                  <span className="bk-step1-badge">เลือกแล้ว 1 รายการ</span>
+                  <span className="bk-step1-duration">⏱ {offeringLength(offerings.get(selected.offeringId))}</span>
+                </div>
+                <div className="bk-step1-drawer-price">
+                  <small>ยอดรวม</small>
+                  <strong>฿{(offerings.get(selected.offeringId).price?.amount ?? 0).toLocaleString("th-TH")}</strong>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="bk-primary bk-step1-drawer-cta"
+                disabled={busy}
+                onClick={() => {
+                  if (next?.step && next.step !== "offering") showStep(next.step);
+                  else choose("offering", selected.offeringId);
+                }}
+              >
+                <span>ถัดไป: เลือกช่างและเวลา</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+              </button>
+            </div>
+          </div>
+        )}
+
         {atCustomer && (
           <>
+            {liff.name ? (
+              <div className="bk-line-connected-card">
+                <div className="bk-line-avatar-wrap">
+                  <div className="bk-line-avatar">
+                    {liff.pictureUrl ? (
+                      <img src={liff.pictureUrl} alt={liff.name} />
+                    ) : (
+                      <span className="bk-line-initial">{liff.name[0]}</span>
+                    )}
+                  </div>
+                  <span className="bk-line-chat-badge" aria-hidden="true">💬</span>
+                </div>
+                <div className="bk-line-info">
+                  <div className="bk-line-status-row">
+                    <span className="bk-line-tag">เชื่อมต่อ LINE แล้ว</span>
+                    <span className="bk-line-dot-sep">•</span>
+                    <span className="bk-line-subtag">ดึงข้อมูลอัตโนมัติ</span>
+                  </div>
+                  <p className="bk-line-name">คุณ {customer.name || liff.name}</p>
+                </div>
+                <span className="bk-line-verified" aria-hidden="true">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--mint-deep)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                </span>
+              </div>
+            ) : null}
+
+            <form id="booking-customer" className="bk-card bk-customer-form" onSubmit={submit}>
+              <div className="bk-customer-form-head">
+                <div className="bk-customer-form-title">
+                  <span className="bk-icon-pill">🪪</span>
+                  <h2>ข้อมูลผู้รับบริการ</h2>
+                </div>
+                <span className="bk-muted-badge">แก้ไขได้</span>
+              </div>
+
+              <div className="bk-field-group">
+                <label className="bk-field" htmlFor="cust-name">
+                  <span className="bk-field-label">ชื่อ-นามสกุล (ผู้เข้ารับบริการ) <strong className="bk-req">*</strong></span>
+                  <div className="bk-input-wrap">
+                    <span className="bk-input-icon" aria-hidden="true">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="8" r="4"/><path d="M6 20v-2a6 6 0 0 1 12 0v2"/></svg>
+                    </span>
+                    <input
+                      id="cust-name"
+                      name="name"
+                      required
+                      maxLength={100}
+                      autoComplete="name"
+                      placeholder="ระบุชื่อ-นามสกุล"
+                      value={customer.name}
+                      onChange={(e) => setCustomer({ ...customer, name: e.target.value })}
+                    />
+                  </div>
+                </label>
+
+                <label className="bk-field" htmlFor="cust-phone">
+                  <span className="bk-field-label">เบอร์โทรศัพท์สำหรับติดต่อ {!liff.idToken && <strong className="bk-req">*</strong>}</span>
+                  <div className="bk-input-wrap">
+                    <span className="bk-input-icon" aria-hidden="true">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                    </span>
+                    <input
+                      id="cust-phone"
+                      name="phone"
+                      inputMode="tel"
+                      autoComplete="tel"
+                      required={!liff.idToken}
+                      pattern="0[0-9\- ]{8,11}"
+                      placeholder="08x-xxx-xxxx"
+                      value={customer.phone}
+                      onChange={(e) => setCustomer({ ...customer, phone: e.target.value })}
+                    />
+                  </div>
+                  <p className="bk-field-hint">
+                    <span>💬</span>
+                    <span>ร้านจะส่งข้อความแจ้งเตือนคิวก่อนนัดหมาย 1 ชม.</span>
+                  </p>
+                </label>
+
+                <label className="bk-field" htmlFor="cust-note">
+                  <span className="bk-field-label">โน้ตเพิ่มเติมถึงช่าง <small className="bk-muted">(ถ้ามี)</small></span>
+                  <div className="bk-input-wrap">
+                    <textarea
+                      id="cust-note"
+                      name="note"
+                      rows={2}
+                      placeholder="เช่น ทรงผมที่ต้องการ หรือสไตล์ที่ชอบ"
+                      value={customer.note || ""}
+                      onChange={(e) => setCustomer({ ...customer, note: e.target.value })}
+                    />
+                  </div>
+                </label>
+              </div>
+              {shop.deposit && <DepositNote deposit={shop.deposit} estimate={estimate} />}
+            </form>
+
             <BookingReview items={summaryItems} onEdit={showStep} busy={busy} price={shownPrice} />
             {points && !points.none && points.rewards.length > 0 && (
               <PointsChoice points={points} chosen={rewardId} onChoose={setRewardId} busy={busy} valueOf={rewardOff} />
             )}
-            <form id="booking-customer" className="bk-card" onSubmit={submit}>
-              <h2>ข้อมูลผู้จอง</h2>
-              {liff.idToken && customer.name && (
-                <div className="bk-line-badge" role="status">
-                  <span className="bk-line-dot" aria-hidden="true" />
-                  <span>เชื่อมต่อ LINE แล้ว · ดึงข้อมูลอัตโนมัติ</span>
-                </div>
-              )}
-              <label className="bk-field">
-                <span>ชื่อ</span>
-                <input name="name" required maxLength={100} autoComplete="name" value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} />
-              </label>
-              <label className="bk-field">
-                <span>เบอร์โทร{liff.idToken ? " (ไม่บังคับ)" : ""}</span>
-                <input
-                  name="phone"
-                  inputMode="tel"
-                  autoComplete="tel"
-                  required={!liff.idToken}
-                  pattern="0[0-9\- ]{8,11}"
-                  value={customer.phone}
-                  onChange={(e) => setCustomer({ ...customer, phone: e.target.value })}
-                />
-              </label>
-              {shop.deposit && <DepositNote deposit={shop.deposit} estimate={estimate} />}
-              <div className="bk-policy-box">
-                <span className="bk-policy-icon" aria-hidden="true">ℹ️</span>
+
+            <div className="bk-cancellation-banner">
+              <div className="bk-cancellation-icon" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--mint-deep)" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+              </div>
+              <div className="bk-cancellation-text">
+                <strong>นโยบายการเปลี่ยนแปลงนัดหมาย</strong>
                 <p>
-                  <SelfServiceNote shop={shop} /> ร้านใช้ชื่อและเบอร์นี้เพื่อติดต่อเรื่องนัดหมายนี้เท่านั้น
+                  สามารถเลื่อนหรือยกเลิกได้<b>ฟรี</b> ก่อนเวลานัดอย่างน้อย{" "}
+                  <span className="bk-cancellation-highlight">{shop.selfService?.cutoffHours || shop.cancellation_lead_hours || 2} ชั่วโมง</span>{" "}
+                  สะดวก รวดเร็ว ผ่านระบบ LINE OA นี้ได้ทันที
                 </p>
               </div>
-              <p className="bk-fine">
-                การกดยืนยันถือว่ายอมรับ{" "}
-                <a href="/terms" target="_blank" rel="noreferrer">ข้อตกลงการใช้บริการ</a>
-                {" และ "}
-                <a href="/privacy" target="_blank" rel="noreferrer">นโยบายความเป็นส่วนตัว</a>
-              </p>
-            </form>
+            </div>
+
+            <div className="bk-trust-badges">
+              <div className="bk-trust-badge">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--mint-deep)" strokeWidth="2.2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                <span>ข้อมูลปลอดภัย 100%</span>
+              </div>
+              <span className="bk-trust-sep">•</span>
+              <div className="bk-trust-badge">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--grape)" strokeWidth="2.2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                <span>การแจ้งเตือนสดผ่าน LINE</span>
+              </div>
+            </div>
           </>
         )}
         {atCustomer && (
@@ -584,7 +698,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
         )}
         <PoweredBy />
       </main>
-      {liffId && !atCustomer && <CustomerTabs slug={shop.slug} active="book" />}
+      {liffId && atStart && !selected.offeringId && <CustomerTabs slug={shop.slug} active="book" />}
       {details && offerings.get(details.value) && (
         <OfferingDetails
           offering={offerings.get(details.value)}
@@ -1272,28 +1386,73 @@ function PoweredBy() {
   );
 }
 
-function OptionBody({ ask, option, offering, resource, resourceWord, date, shop }) {
+function OptionBody({ ask, option, offering, resource, resourceWord, date, shop, chosen = false }) {
   if (ask === "offering" && offering) {
     const length = offeringLength(offering);
     const depVal = shop?.deposit?.mode === "fixed" ? shop.deposit.value : shop?.deposit?.mode === "percent" && offering.price?.amount ? Math.round((offering.price.amount * shop.deposit.value) / 100) : null;
+    const isSelected = Boolean(chosen || option?.["data-selected"]);
+    const isPopular = offering.badge === "popular" || offering.name?.includes("ยอดนิยม") || (offering.price?.amount && offering.price.amount < 1000);
+    const isPremium = offering.badge === "premium" || offering.name?.includes("พรีเมียม") || (offering.price?.amount && offering.price.amount >= 2000);
+
     return (
-      <>
-        <OfferingThumbnail offering={offering} />
-        <span className="bk-option-text">
-          <span style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, width: "100%" }}>
-            <strong>{offering.name}</strong>
-            {offering.price && <b className="bk-option-price">{priceText(offering.price)}</b>}
-          </span>
-          {offering.description && (
-            <span className="bk-option-desc">{offering.description}</span>
+      <div className="bk-offering-card-layout">
+        {isSelected && (
+          <div className="bk-offering-tag-selected" aria-hidden="true">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+            <span>เลือกแล้ว</span>
+          </div>
+        )}
+        <div className="bk-offering-card-top">
+          {withMedia(offering) ? (
+            <OfferingThumbnail offering={offering} />
+          ) : (
+            <span className="bk-offering-icon-avatar" aria-hidden="true">
+              {offering.name?.includes("ฟุตบอล") ? "⚽" : offering.name?.includes("แบด") ? "🏸" : offering.name?.includes("นวด") ? "💆" : offering.name?.includes("สปา") ? "🌿" : "✂️"}
+            </span>
           )}
-          <span className="bk-option-meta">
-            <span className="bk-duration-tag">⏱ {length}</span>
-            {depVal > 0 && <span className="bk-deposit-tag">🔒 มัดจำ ฿{depVal.toLocaleString("th-TH")}</span>}
+          <div className="bk-offering-card-body">
+            <div className="bk-offering-badges">
+              {isPopular ? (
+                <span className="bk-badge-popular">ยอดนิยม 🔥</span>
+              ) : isPremium ? (
+                <span className="bk-badge-premium">พรีเมียม ✨</span>
+              ) : (
+                <span className="bk-badge-rec">บริการแนะนำ</span>
+              )}
+            </div>
+            <strong className="bk-offering-name">{offering.name}</strong>
+            {offering.description && (
+              <span className="bk-option-desc">{offering.description}</span>
+            )}
+            <div className="bk-offering-meta-row">
+              <span className="bk-duration-tag">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span>{length}</span>
+              </span>
+              {depVal > 0 && <span className="bk-deposit-tag">🔒 มัดจำ ฿{depVal.toLocaleString("th-TH")}</span>}
+            </div>
+          </div>
+        </div>
+        <div className="bk-offering-card-bottom">
+          <div className="bk-offering-price-box">
+            <span className="bk-offering-price-label">ราคาบริการ</span>
+            <strong className="bk-offering-price-val">{offering.price ? priceText(offering.price) : "ฟรี"}</strong>
+          </div>
+          <span className={`bk-offering-action-pill ${isSelected ? "bk-pill-selected" : "bk-pill-add"}`}>
+            {isSelected ? (
+              <>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+                <span>เลือกอยู่</span>
+              </>
+            ) : (
+              <>
+                <span>+</span>
+                <span>เลือกบริการ</span>
+              </>
+            )}
           </span>
-        </span>
-        <span className="bk-choice-mark" aria-hidden="true" />
-      </>
+        </div>
+      </div>
     );
   }
   if (ask === "resource") return <ResourceChoice resource={resource} label={option.label} resourceWord={resourceWord} any={option.value === null} />;

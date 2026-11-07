@@ -338,6 +338,9 @@ test("deposit: the booking is held, the customer sees the account and sends a sl
     const choice = page.getByTestId("pay-choice");
     await expect(choice.getByRole("radio", { name: /มัดจำ 200 บาท/ })).toHaveAttribute("aria-checked", "true");
     await expect(choice.getByRole("radio", { name: /จ่ายเต็มจำนวน/ })).toHaveAttribute("aria-checked", "false");
+    // the bar: the whole price, and the deposit paid now
+    await expect(page.locator(".bk-submit-sum")).toContainText("ราคารวม");
+    await expect(page.locator(".bk-submit-now")).toContainText("มัดจำตอนนี้200 บาท");
     await fillAndConfirm(page, "ลูกค้ามัดจำ");
 
     const done = page.getByTestId("booking-done");
@@ -391,7 +394,7 @@ test("deposit: the customer picks paying in full, and is asked for the whole pri
     await full.click();
     await expect(full).toHaveAttribute("aria-checked", "true");
     await expect(page.locator(".bk-submit-bar")).toContainText("ยืนยันและดู QR ชำระเงิน");
-    await expect(page.locator(".bk-submit-bar")).toContainText(`จ่ายเต็ม ฿${amount}`);
+    await expect(page.locator(".bk-submit-bar")).toContainText(`จ่ายเต็มตอนนี้${amount} บาท`);
     await fillAndConfirm(page, "ลูกค้าจ่ายเต็ม");
 
     const done = page.getByTestId("booking-done");

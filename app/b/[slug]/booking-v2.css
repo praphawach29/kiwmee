@@ -1814,3 +1814,14 @@ a.bk-points-button { display: inline-flex; align-items: center; text-decoration:
 .bk-shop-line { margin: 0; font-size: .84rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bk-shop-line .bk-shop-today { margin: 0; font-size: inherit; }
 .bk-shop-place { color: var(--muted); }
+
+/* The bar above the confirm button: the price, and what is paid now — each a label over an amount */
+.bk-submit-total { align-items: stretch; gap: 10px; }
+.bk-submit-sum, .bk-submit-now { display: grid; align-content: center; gap: 2px; min-width: 0; line-height: 1.2; }
+.bk-submit-sum small, .bk-submit-now small { font-size: .76rem; font-weight: 500; color: var(--muted); }
+.bk-submit-sum strong { font-family: var(--font-display); font-size: 1.45rem; font-weight: 700; color: var(--grape-deep); white-space: nowrap; }
+.bk-submit-now { justify-items: end; text-align: right; padding: 6px 12px; border-radius: 14px; background: var(--bg); }
+.bk-submit-now strong { font-size: 1rem; font-weight: 700; color: var(--ink); white-space: nowrap; }
+.bk-submit-now[data-now] { background: var(--mint-tint); }
+.bk-submit-now[data-now] small { color: var(--mint-deep); }
+.bk-submit-now[data-now] strong { color: var(--mint-deep); font-size: 1.1rem; }

@@ -5,12 +5,12 @@
 // reason), and tapping an earlier step lets them change it without starting over.
 // The server decides what comes next (POST /api/b/{slug}/step); this page only shows it.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import CustomerFrame from "./customer-frame.jsx";
 import { useLiff } from "./use-liff.jsx";
 import { CheckinQr } from "./qr.jsx";
 import { bookingCode } from "../../../src/v2/scan-codes.js";
-import { BookingProgress, BookingReview, BookingSubmitBar, CustomerTabs, DepositBox, DirectionsButton, DocumentsBox, OfferingDetails, ShopAbout, ShopHeader, ShopHero, OfferingThumbnail, ResourceChoice, groupTimes, withMedia } from "./booking-presentation.jsx";
+import { BookingProgress, BookingReview, BookingSubmitBar, CustomerTabs, DepositBox, DirectionsButton, DocumentsBox, OfferingDetails, ShopAbout, ShopHeader, ShopHero, OfferingThumbnail, ResourceChoice, ResourceThumbnail, groupTimes, withMedia } from "./booking-presentation.jsx";
 
 const RESOURCE_WORD = { staff: "ช่าง", court: "สนาม", room: "ห้อง", equipment: "อุปกรณ์" };
 const STEP_TITLE = {
@@ -232,12 +232,16 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     [offerings, resources, resourceWord, addonInfo]
   );
 
+  // only the answer to the latest request counts (a tap while an automatic pick is on its way wins)
+  const runSeq = useRef(0);
   const run = useCallback(
-    async (body) => {
+    async (body, { keepNotice = false } = {}) => {
+      const seq = ++runSeq.current;
       setBusy(true);
       setError(null);
       try {
         const data = await post(`${api}/step`, body);
+        if (seq !== runSeq.current) return;
         setSelected(data.selected);
         setView(data);
         if (data.ask === "date") setDateOptions(data.options ?? []);
@@ -255,6 +259,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
           return trail;
         });
         const dropped = data.cleared.filter((c) => c.reason);
+        if (keepNotice && !dropped.length) return;
         setNotice(
           dropped.length
             ? dropped
@@ -263,10 +268,12 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
             : null
         );
       } catch (e) {
-        setError(e.message);
+        if (seq === runSeq.current) setError(e.message);
       } finally {
-        setBusy(false);
-        setPending(null);
+        if (seq === runSeq.current) {
+          setBusy(false);
+          setPending(null);
+        }
       }
     },
     [api, valueLabel]
@@ -299,6 +306,47 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
 
   const [category, setCategory] = useState(null);
   const rental = offerings.get(selected.offeringId)?.minDays != null;
+  // วันและเวลาในหน้าเดียว (design "Kiwmee ปรับหน้าตา" · DateTime): once the service is chosen, the
+  // stylist, the day and the time are picked on one screen. Not for rentals (days) or a venue drawn
+  // on a map (courts keep their own step with the map).
+  const venue = shop.resources.filter((r) => r.layout).length >= 2;
+  const combined = Boolean(selected.offeringId) && !rental && !venue && ["resource", "date", "time"].includes(ask);
+  const [staff, setStaff] = useState({ key: null, options: [] });
+  const staffKey = `${selected.offeringId}|${selected.durationMinutes ?? ""}|${selected.partySize ?? ""}`;
+  useEffect(() => {
+    if (!combined) return;
+    if (ask === "resource") {
+      setStaff({ key: staffKey, options: view.options ?? [] });
+      return;
+    }
+    if (staff.key === staffKey) return;
+    let current = true;
+    post(`${api}/step`, { selected: { offeringId: selected.offeringId, durationMinutes: selected.durationMinutes, partySize: selected.partySize }, ask: "resource" })
+      .then((data) => { if (current) setStaff({ key: staffKey, options: data.options ?? [] }); })
+      .catch(() => { if (current) setStaff({ key: staffKey, options: [] }); });
+    return () => { current = false; };
+  }, [combined, ask, view, staffKey, staff.key, api, selected.offeringId, selected.durationMinutes, selected.partySize]);
+  const staffOptions = staff.key === staffKey && staff.options.some((o) => o.value !== null) ? staff.options : [];
+  // The defaults the design shows: anyone (when the shop allows it), then the first day with room
+  const autoKey = useRef(null);
+  // before the screen is painted, so no tap can land between the answer and the next automatic pick
+  useLayoutEffect(() => {
+    if (!combined || busy || !view?.options) return;
+    let pick = null;
+    if (ask === "resource" && selected.resourceId === undefined) {
+      const any = view.options.find((o) => o.value === null && o.available);
+      if (any) pick = ["resource", null];
+    } else if (ask === "date" && !selected.date) {
+      const first = view.options.find((o) => o.available);
+      if (first) pick = ["date", first.value];
+    }
+    if (!pick) return;
+    const key = `${pick[0]}|${JSON.stringify(selected)}`;
+    if (autoKey.current === key) return;
+    autoKey.current = key;
+    setPending({ step: pick[0], value: pick[1] });
+    run({ selected: { ...selected, [KEY[pick[0]]]: pick[1] }, changed: pick[0] }, { keepNotice: true });
+  }, [combined, busy, view, ask, selected, run]);
   const summaryItems = SUMMARY_ORDER.filter((s) => selected[KEY[s]] !== undefined).map((s) => ({
     step: s,
     label: s === "resource" ? resourceWord : (rental && RENTAL_LABEL[s]) || SUMMARY_LABEL[s] || s,
@@ -371,7 +419,13 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     setPending({ step: "show", value: step });
     return run({ selected, ask: step });
   };
-  const backStep = atCustomer ? stepTrail.at(-1) : stepTrail.length > 1 ? stepTrail.at(-2) : null;
+  const GROUPED = ["resource", "date", "time"];
+  // on the one-screen stylist/day/time step, back goes to what came before it (the service)
+  const backStep = atCustomer
+    ? stepTrail.at(-1)
+    : combined
+      ? [...stepTrail].reverse().find((step) => !GROUPED.includes(step)) ?? null
+      : stepTrail.length > 1 ? stepTrail.at(-2) : null;
   const backStepLabel = backStep === "resource" ? resourceWord : (rental && RENTAL_TITLE[backStep]) || STEP_TITLE[backStep] || "ขั้นตอนก่อนหน้า";
 
   // Pre-select offering if passed in URL (?offeringId=... or ?serviceId=...)
@@ -526,11 +580,11 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
         )}
         {/* the venue's details while the customer is still looking; out of the way once they start picking */}
         {!atCustomer && summaryItems.length === 0 && <ShopAbout shop={shop} />}
-        <BookingProgress phase={atCustomer ? "customer" : "selection"} ask={ask} resourceWord={resourceWord} />
+        <BookingProgress phase={atCustomer ? "customer" : "selection"} ask={combined ? "time" : ask} resourceWord={resourceWord} />
 
-        {!atCustomer && summaryItems.length > 0 && (
+        {!atCustomer && summaryItems.some((item) => !(combined && GROUPED.includes(item.step))) && (
           <nav className="bk-chips" aria-label="ที่เลือกไว้">
-            {summaryItems.map((item) => (
+            {summaryItems.filter((item) => !(combined && GROUPED.includes(item.step))).map((item) => (
               <button key={item.step} type="button" className="bk-chip" data-active={ask === item.step} data-pending={(pending?.step === "show" && pending.value === item.step) || undefined} onClick={() => showStep(item.step)} disabled={busy}>
                 <span>{item.step === "date" ? shortDate(selected.date) : item.value}</span>
                 <small>เปลี่ยน</small>
@@ -572,8 +626,8 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
         {ask && view.options && (
           <section className="bk-card" data-step={ask}>
             <div className="bk-step-head">
-              <h2>{ask === "resource" ? `เลือก${resourceWord}` : ask === "time" ? "เลือกวันและเวลา" : (rental && RENTAL_TITLE[ask]) || STEP_TITLE[ask]}</h2>
-              {ask === "time" && selected.date && (
+              <h2>{combined || ask === "time" ? "เลือกวันและเวลา" : ask === "resource" ? `เลือก${resourceWord}` : (rental && RENTAL_TITLE[ask]) || STEP_TITLE[ask]}</h2>
+              {ask === "time" && selected.date && (rental || !combined) && (
                 <p className="bk-muted">
                   {rental ? "เลือกเวลาที่สะดวกรับ · คืนเวลาเดียวกัน" : "เลือกเวลาว่างของร้านในวันที่เลือก"}
                   {rental && selected.durationMinutes ? ` วัน${returnDay(selected.date, selected.durationMinutes)}` : ""}
@@ -600,7 +654,24 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
                 ))}
               </div>
             )}
-            {ask === "addons" ? (
+            {combined && staffOptions.length > 0 && (
+              <StaffRow
+                options={ask === "resource" ? view.options : staffOptions}
+                resources={resources}
+                resourceWord={resourceWord}
+                chosen={pending?.step === "resource" ? pending.value : selected.resourceId}
+                busy={busy}
+                onChoose={(value) => choose("resource", value)}
+              />
+            )}
+            {combined && ask === "resource" ? (
+              <p className="bk-muted bk-combined-hint">เลือก{resourceWord}ด้านบน แล้วเลือกวันและเวลาที่ว่าง</p>
+            ) : combined && ask === "date" ? (
+              <>
+                <DateStrip options={view.options} today={todayIn(shop.timezone)} optionProps={optionProps} />
+                <p className="bk-muted bk-combined-hint">เลือกวันเพื่อดูเวลาที่ว่าง</p>
+              </>
+            ) : ask === "addons" ? (
               <AddonsStep key={`${selected.date}-${selected.time}`} view={view} info={addonInfo} initial={selected.addons} busy={busy} onDone={(picks) => choose("addons", picks)} />
             ) : ask === "date" ? (
               <DateStrip options={view.options} today={todayIn(shop.timezone)} optionProps={optionProps} />
@@ -937,6 +1008,41 @@ function TimeTabs({ options, optionButton }) {
 
 // "ใช้คะแนน" (migration …003200): a LINE member picks one reward; its points are set aside with the
 // booking and the discount comes off at the desk. Rewards they cannot use yet say why.
+// Stylists as a row of round faces (design DateTime): "anyone" first, then each one; a full one is grey
+function StaffRow({ options, resources, resourceWord, chosen, busy, onChoose }) {
+  return (
+    <>
+    <span className="bk-staff-label">{resourceWord}</span>
+    <div className="bk-staff-row" role="radiogroup" aria-label={`เลือก${resourceWord}`}>
+      {options.map((o) => {
+        const resource = o.value === null ? null : resources.get(o.value);
+        const on = chosen === o.value;
+        return (
+          <button
+            key={o.value ?? "any"}
+            type="button"
+            role="radio"
+            className="bk-staff"
+            data-testid="option-resource"
+            data-value={o.value === null ? "any" : o.value}
+            data-selected={on}
+            aria-checked={on}
+            disabled={busy || !o.available}
+            onClick={() => onChoose(o.value)}
+          >
+            <span className="bk-staff-face" aria-hidden="true">
+              {o.value === null ? "✱" : <ResourceThumbnail resource={resource ?? { name: o.label }} />}
+            </span>
+            <span className="bk-staff-name">{o.value === null ? "ใครก็ได้" : resource?.name ?? o.label}</span>
+            {!o.available && <small className="bk-staff-reason">ไม่ว่าง</small>}
+          </button>
+        );
+      })}
+    </div>
+    </>
+  );
+}
+
 // The first thing a LINE member sees: their LINE picture and name, tier, points, and the next booking
 // still to come. Outside LINE (a browser, with the shop's LIFF app set up): one tap to sign in with LINE.
 function MemberWelcome({ liff, welcome, slug, rebook = null, onRebook, busy = false }) {

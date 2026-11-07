@@ -218,7 +218,7 @@ export function BookingProgress({ phase, ask, resourceWord = "รายการ
     stepTitle = "เลือกบริการ";
   } else {
     stepIndex = 1;
-    stepTitle = ask === "resource" ? `เลือก${resourceWord}` : ask === "date" ? "เลือกวัน" : ask === "time" ? "เลือกเวลา" : ask === "duration" ? "เลือกระยะเวลา" : ask === "addons" ? "เลือกตัวเลือกเสริม" : "เลือกคิว";
+    stepTitle = ask === "resource" ? `เลือก${resourceWord}` : ask === "date" ? "เลือกวัน" : ask === "time" ? "วันและเวลา" : ask === "duration" ? "เลือกระยะเวลา" : ask === "addons" ? "เลือกตัวเลือกเสริม" : "เลือกคิว";
   }
 
   const percent = Math.round(((stepIndex + 1) / totalSteps) * 100);

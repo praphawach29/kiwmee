@@ -193,9 +193,24 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
   const kind = shop.resources[0]?.kind;
   const resourceWord = RESOURCE_WORD[kind] ?? kind ?? "ช่าง";
 
+  // A LINE member: who they are to this shop (name and phone from last time, points, next booking).
+  // The form is filled from their last booking; a first-timer gets their LINE name.
+  const [welcome, setWelcome] = useState(null);
   useEffect(() => {
-    if (liff.name) setCustomer((c) => (c.name ? c : { ...c, name: liff.name }));
-  }, [liff.name]);
+    if (!liff.idToken) return;
+    let cancelled = false;
+    post(`/api/b/${shop.slug}/me/welcome`, { lineIdToken: liff.idToken }).then(
+      (w) => {
+        if (cancelled) return;
+        setWelcome(w);
+        setCustomer((c) => ({ ...c, name: c.name || w?.customer?.name || liff.name || "", phone: c.phone || w?.customer?.phone || "" }));
+      },
+      () => !cancelled && setCustomer((c) => (c.name ? c : { ...c, name: liff.name || "" }))
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [liff.idToken, liff.name, shop.slug]);
 
   const valueLabel = useCallback(
     (step, value) => {
@@ -476,6 +491,9 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
             <small>ไปยัง{backStepLabel}</small>
           </button>
         )}
+        {!atCustomer && summaryItems.length === 0 && (
+          <MemberWelcome liff={liff} welcome={welcome} slug={shop.slug} />
+        )}
         {/* the venue's details while the customer is still looking; out of the way once they start picking */}
         {!atCustomer && summaryItems.length === 0 && <ShopAbout shop={shop} />}
         <BookingProgress phase={atCustomer ? "customer" : "selection"} ask={ask} resourceWord={resourceWord} />
@@ -636,11 +654,8 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
               <div className="bk-line-connected-card">
                 <div className="bk-line-avatar-wrap">
                   <div className="bk-line-avatar">
-                    {liff.pictureUrl ? (
-                      <img src={liff.pictureUrl} alt={liff.name} />
-                    ) : (
-                      <span className="bk-line-initial">{liff.name[0]}</span>
-                    )}
+                    <span className="bk-line-initial">{(customer.name || liff.name)[0]}</span>
+                    {liff.pictureUrl && <img src={liff.pictureUrl} alt={liff.name} onError={(e) => e.currentTarget.remove()} />}
                   </div>
                   <span className="bk-line-chat-badge" aria-hidden="true">💬</span>
                 </div>
@@ -921,6 +936,62 @@ function TimeTabs({ options, optionButton }) {
 
 // "ใช้คะแนน" (migration …003200): a LINE member picks one reward; its points are set aside with the
 // booking and the discount comes off at the desk. Rewards they cannot use yet say why.
+// The first thing a LINE member sees: their LINE picture and name, tier, points, and the next booking
+// still to come. Outside LINE (a browser, with the shop's LIFF app set up): one tap to sign in with LINE.
+function MemberWelcome({ liff, welcome, slug }) {
+  if (!liff.idToken) {
+    if (!liff.login) return null;
+    return (
+      <section className="bk-member bk-member-login" data-testid="member-login">
+        <span className="bk-member-line" aria-hidden="true">LINE</span>
+        <span className="bk-member-copy">
+          <strong>เข้าสู่ระบบด้วย LINE</strong>
+          <small>จองเร็วขึ้น · สะสมคะแนน · ดูการจองของคุณ</small>
+        </span>
+        <button type="button" className="bk-member-button" onClick={liff.login}>เข้าสู่ระบบ</button>
+      </section>
+    );
+  }
+  const name = welcome?.customer?.name || liff.name;
+  const visits = welcome?.customer?.visits ?? 0;
+  const points = welcome?.points;
+  const next = welcome?.next;
+  return (
+    <section className="bk-member" data-testid="member-welcome" aria-label="สมาชิก">
+      <div className="bk-member-head">
+        <span className="bk-member-avatar" aria-hidden="true">
+          <span>{(name || "?")[0]}</span>
+          {liff.pictureUrl && <img src={liff.pictureUrl} alt="" onError={(e) => e.currentTarget.remove()} />}
+        </span>
+        <span className="bk-member-copy">
+          <small>{welcome?.customer ? (visits > 0 ? `ยินดีต้อนรับกลับมา · มาแล้ว ${visits} ครั้ง` : "ยินดีต้อนรับกลับมา") : "ยินดีต้อนรับ"}</small>
+          <strong>คุณ {name || "ลูกค้า"}</strong>
+        </span>
+        {points?.tier && <span className="bk-member-tier">{points.tier.name}</span>}
+      </div>
+      {(points || next) && (
+        <div className="bk-member-stats">
+          {points && (
+            <a className="bk-member-stat" href={`/b/${slug}/me`}>
+              <small>คะแนนสะสม</small>
+              <strong>{points.balance.toLocaleString("th-TH")} <span>คะแนน</span></strong>
+              {points.usable > 0 && <em>แลกได้ {points.usable} รางวัล</em>}
+            </a>
+          )}
+          {next && (
+            <a className="bk-member-stat" href={next.link ?? `/b/${slug}/me`} data-testid="member-next">
+              <small>นัดถัดไป</small>
+              <strong>{shortDate(next.date)} · {next.start} น.</strong>
+              <em>{next.offering}{["held", "pending"].includes(next.status) ? " · รอชำระ/ตรวจสลิป" : ""}</em>
+            </a>
+          )}
+        </div>
+      )}
+      <a className="bk-member-link" href={`/b/${slug}/me`}>บัตรสมาชิกและประวัติการจอง ›</a>
+    </section>
+  );
+}
+
 // Deposit or the whole price, the customer's choice (migration …003800). Either way the booking waits
 // for the transfer; paying in full leaves nothing to pay at the shop.
 function PayChoice({ deposit, full, payFull, onChoose, busy, holdMinutes }) {

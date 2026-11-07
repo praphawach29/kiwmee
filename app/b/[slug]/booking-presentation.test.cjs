@@ -9,7 +9,7 @@ const { transformSync } = require('next/dist/build/swc');
 
 function loadComponents(file = 'booking-presentation.jsx') {
   const filename = path.join(__dirname, file);
-  const source = fs.readFileSync(filename, 'utf8') + (file.includes('shop-admin-client') ? '\nexport { ResourceEditor, ResourcesTab, emptyResource, ReadOnly };' : file === 'booking-v2-client.jsx' ? '\nexport { OptionBody, DateStrip, TimeTabs };' : '');
+  const source = fs.readFileSync(filename, 'utf8') + (file.includes('shop-admin-client') ? '\nexport { ResourceEditor, ResourcesTab, emptyResource, ReadOnly };' : file === 'booking-v2-client.jsx' ? '\nexport { OptionBody, DateStrip, TimeTabs, MemberWelcome };' : '');
   const { code } = transformSync(source, {
     filename,
     jsc: { parser: { syntax: 'ecmascript', jsx: true }, transform: { react: { runtime: 'automatic' } } },
@@ -257,4 +257,31 @@ test('initials skip the kind word and keep a Thai leading vowel with its consona
   assert.equal(initial('สนาม A'), 'A');
   assert.equal(initial('ช่าง'), 'ช');
   assert.equal(initial(''), '◇');
+});
+
+test('LINE member welcome: picture, name, tier, points and the next booking; outside LINE a sign-in button; nothing without LIFF', () => {
+  const { MemberWelcome } = loadComponents('booking-v2-client.jsx');
+  const liff = { idToken: 't', name: 'malee', pictureUrl: 'https://profile.line-scdn.net/x' };
+  const welcome = {
+    customer: { name: 'มาลี ใจดี', phone: '0812345678', visits: 3 },
+    points: { name: 'Bloom Club', balance: 1250, tier: { name: 'Gold' }, usable: 2 },
+    next: { status: 'confirmed', date: '2026-11-10', start: '14:00', offering: 'ตัดผม', link: '/b/bloom-hair/manage/abc' }
+  };
+  const html = render(MemberWelcome, { liff, welcome, slug: 'bloom-hair' });
+  assert.match(html, /src="https:\/\/profile.line-scdn.net\/x"/);
+  assert.match(html, /คุณ มาลี ใจดี/);
+  assert.match(html, /มาแล้ว 3 ครั้ง/);
+  assert.match(html, />Gold</);
+  assert.match(html, /1,250/);
+  assert.match(html, /แลกได้ 2 รางวัล/);
+  assert.match(html, /href="\/b\/bloom-hair\/manage\/abc"/);
+  assert.match(html, /14:00 น\./);
+  // first time here: welcome, LINE name, no stats
+  const first = render(MemberWelcome, { liff: { ...liff, pictureUrl: null }, welcome: { customer: null, points: null, next: null }, slug: 'bloom-hair' });
+  assert.match(first, /ยินดีต้อนรับ</);
+  assert.match(first, /คุณ malee/);
+  assert.doesNotMatch(first, /คะแนนสะสม|นัดถัดไป/);
+  // a browser with LIFF set up: sign in; no LIFF at all: nothing
+  assert.match(render(MemberWelcome, { liff: { idToken: null, login: () => {} }, welcome: null, slug: 'bloom-hair' }), /เข้าสู่ระบบด้วย LINE/);
+  assert.equal(render(MemberWelcome, { liff: { idToken: null, login: null }, welcome: null, slug: 'bloom-hair' }), '');
 });

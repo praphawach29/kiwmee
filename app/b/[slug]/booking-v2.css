@@ -3,9 +3,9 @@
    Brand tokens come from globals.css (docs/BRAND_COLORS.md). */
 
 /* ---------- frame ---------- */
-/* phones (and LINE's in-app browser) should not enlarge text on their own; the layout below still
-   holds when the customer's own font size setting makes everything bigger */
-html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+/* Keep WebKit/Android WebView from inflating individual text blocks without scaling their layout.
+   Pinch zoom remains available, and the components below still wrap when the user's text is larger. */
+html { -webkit-text-size-adjust: none; text-size-adjust: none; }
 .customer-workspace { position: relative; min-height: 100svh; background: var(--bg); }
 .customer-cover { height: 112px; background: linear-gradient(135deg, var(--grape) 0%, var(--grape-night) 100%); position: relative; overflow: hidden; }
 .customer-cover::after { content: ""; position: absolute; right: -48px; top: -72px; width: 220px; height: 220px; border-radius: 50%; background: rgba(155, 135, 255, .45); }
@@ -48,9 +48,9 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 
 /* ---------- progress ---------- */
 .bk-progress-wrap { display: grid; gap: 8px; padding: 12px; background: var(--surface); border: 1px solid var(--line-soft); border-radius: 16px; box-shadow: 0 3px 16px rgba(27, 22, 64, .06); }
-.bk-progress-meta { display: flex; justify-content: space-between; align-items: center; padding: 0 2px; }
-.bk-step-badge { font-size: .78rem; font-weight: 700; color: var(--grape-deep); background: var(--selected); padding: 3px 10px; border-radius: 999px; }
-.bk-progress-pct { font-size: .78rem; font-weight: 600; color: var(--muted); }
+.bk-progress-meta { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 8px; padding: 0 2px; }
+.bk-step-badge { flex: 1 1 13em; min-width: 0; font-size: .78rem; font-weight: 700; color: var(--grape-deep); background: var(--selected); padding: 3px 10px; border-radius: 999px; }
+.bk-progress-pct { flex: 0 1 auto; font-size: .78rem; font-weight: 600; color: var(--muted); text-align: right; }
 .bk-progress { list-style: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 0; padding: 0; }
 .bk-progress li { min-width: 0; display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: .8rem; }
 .bk-progress li > span { display: grid; place-items: center; width: 26px; height: 26px; flex: none; border: 2px solid transparent; border-radius: 50%; font-size: .76rem; font-weight: 700; background: var(--selected); color: var(--grape-deep); }

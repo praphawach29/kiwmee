@@ -276,6 +276,11 @@ test('LINE member welcome: picture, name, tier, points and the next booking; out
   assert.match(html, /แลกได้ 2 รางวัล/);
   assert.match(html, /href="\/b\/bloom-hair\/manage\/abc"/);
   assert.match(html, /14:00 น\./);
+  assert.doesNotMatch(html, /จองซ้ำ/, 'no rebook unless the page offers it');
+  const again = render(MemberWelcome, { liff, welcome, slug: 'bloom-hair', rebook: { offeringId: 'c1', offering: 'ตัดผม', resourceId: 'a1', resource: 'ช่างแนน' }, onRebook() {} });
+  assert.match(again, /data-testid="member-rebook"/);
+  assert.match(again, /จองซ้ำ/);
+  assert.match(again, /ตัดผม · ช่างแนน/);
   // first time here: welcome, LINE name, no stats
   const first = render(MemberWelcome, { liff: { ...liff, pictureUrl: null }, welcome: { customer: null, points: null, next: null }, slug: 'bloom-hair' });
   assert.match(first, /ยินดีต้อนรับ</);
@@ -284,4 +289,13 @@ test('LINE member welcome: picture, name, tier, points and the next booking; out
   // a browser with LIFF set up: sign in; no LIFF at all: nothing
   assert.match(render(MemberWelcome, { liff: { idToken: null, login: () => {} }, welcome: null, slug: 'bloom-hair' }), /เข้าสู่ระบบด้วย LINE/);
   assert.equal(render(MemberWelcome, { liff: { idToken: null, login: null }, welcome: null, slug: 'bloom-hair' }), '');
+});
+
+test('header shows today\'s hours, or that the shop is closed today', () => {
+  const { ShopHeader } = loadComponents();
+  assert.match(render(ShopHeader, { shop: { name: 'Bloom', today: { open: '10:00', close: '20:00', state: 'later' } } }), /เปิดวันนี้ 10:00–20:00 น\./);
+  assert.match(render(ShopHeader, { shop: { name: 'Bloom', today: { open: '10:00', close: '20:00', state: 'open' } } }), /เปิดอยู่ · ถึง 20:00 น\./);
+  assert.match(render(ShopHeader, { shop: { name: 'Bloom', today: { open: '10:00', close: '20:00', state: 'closed' } } }), /วันนี้ปิดแล้ว/);
+  assert.match(render(ShopHeader, { shop: { name: 'Bloom', today: null } }), /วันนี้ร้านปิด/);
+  assert.doesNotMatch(render(ShopHeader, { shop: { name: 'Bloom' } }), /เปิดวันนี้|วันนี้ร้านปิด/);
 });

@@ -103,7 +103,7 @@ const welcome = (sub, slug = "bloom-hair") => myWelcome(db, slug, { lineIdToken:
 
 test("the booking page's welcome: name and phone from my last booking, my next booking with its link, visits; a first-timer gets nothing filled", { skip }, async () => {
   await inTx(async () => {
-    assert.deepEqual(await welcome(ME), { customer: null, points: null, next: null }, "never booked here");
+    assert.deepEqual(await welcome(ME), { last: null, customer: null, points: null, next: null }, "never booked here");
 
     const later = await book(db, "bloom-hair", { selected: { offeringId: CUT, resourceId: NAN, date: LATER, time: "11:00" }, customer: { name: "มาลี ใจดี", phone: "0899998888" }, lineIdToken: "t" }, as(ME));
     const soon = await lineBook(ME, DAY, "10:00");
@@ -116,10 +116,12 @@ test("the booking page's welcome: name and phone from my last booking, my next b
     assert.equal(w.customer.visits, 1);
     assert.deepEqual([w.next.date, w.next.start, w.next.status, w.next.link], [DAY, "10:00", "confirmed", `/b/bloom-hair/manage/${soon.manageToken}`]);
     assert.equal(w.points, null, "no points programme");
+    // "จองซ้ำ": the latest booking (the later one, already done here) — its service and stylist
+    assert.deepEqual([w.last.offeringId, w.last.resourceId, w.last.resource], [CUT, NAN, "ช่างแนน"]);
 
     // someone else sees their own; another shop knows nobody; no LINE proof = refused
     assert.equal((await welcome(SOMEONE)).next.start, "12:00");
-    assert.deepEqual(await welcome(ME, "gentleman-barber"), { customer: null, points: null, next: null });
+    assert.deepEqual(await welcome(ME, "gentleman-barber"), { last: null, customer: null, points: null, next: null });
     await assert.rejects(() => myWelcome(db, "bloom-hair", {}, as(ME)), (e) => e.status === 403);
     await assert.rejects(() => myWelcome(db, "bloom-hair", { lineIdToken: "t" }, { verifyLineToken: async () => null }), (e) => e.status === 403);
   });

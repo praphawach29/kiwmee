@@ -154,8 +154,22 @@ async function myWelcome(db, slug, body = {}, { now = new Date(), verifyLineToke
     const token = openLink(n.id, n.line_manage_token, env);
     next = { status: n.status, date: start.date, start: start.time, offering: n.offering, link: token ? `/b/${shop.slug}/manage/${token}` : null };
   }
+  // what they had last time (not cancelled), for "จองซ้ำ": the service and who did it
+  const { rows: [l] } = await db.query(
+    `select b.offering_id, o.name as offering, o.active,
+            (select r.id from public.booking_resources br join public.resources r on r.id = br.resource_id
+              where br.booking_id = b.id and br.addon_id is null and r.active order by r.sort_order, r.name limit 1) as resource_id,
+            (select r.name from public.booking_resources br join public.resources r on r.id = br.resource_id
+              where br.booking_id = b.id and br.addon_id is null and r.active order by r.sort_order, r.name limit 1) as resource
+       from public.bookings b join public.customers c on c.id = b.customer_id join public.offerings o on o.id = b.offering_id
+      where b.business_id = $1 and c.business_id = $1 and c.line_user_id = $2 and b.status in ('confirmed', 'checked_in', 'completed')
+      order by b.start_at desc limit 1`,
+    [shop.id, line.sub]
+  );
+  const last = l?.active ? { offeringId: l.offering_id, offering: l.offering, resourceId: l.resource_id ?? null, resource: l.resource ?? null } : null;
   const card = await memberCard(db, shop, line.sub).catch(() => null);
   return {
+    last,
     customer: c ? { name: c.name ?? "", phone: c.phone ?? "", visits: c.visits } : null,
     points: card ? { name: card.name, balance: card.balance, tier: card.tier ? { name: card.tier.name } : null, usable: card.rewards.filter((r) => r.usable).length } : null,
     next

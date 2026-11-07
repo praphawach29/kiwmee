@@ -69,6 +69,21 @@ test("shop info lists what the page needs and nothing private", { skip }, async 
   await assert.rejects(shopInfo(db, "../etc"), (e) => e.status === 404);
 });
 
+test("today's hours for the header, in the shop's time; a full-day closure or a closed weekday = closed today", { skip }, async () => {
+  const noon = new Date(`${DAY}T05:00:00Z`).getTime(); // 12:00 Bangkok
+  assert.deepEqual((await shopInfo(db, "bloom-hair", { now: noon })).today, { open: "10:00", close: "20:00", state: "open" });
+  assert.equal((await shopInfo(db, "bloom-hair", { now: noon - 4 * 3600000 })).today.state, "later"); // 08:00
+  assert.equal((await shopInfo(db, "bloom-hair", { now: noon + 9 * 3600000 })).today.state, "closed"); // 21:00
+  await inTx(async () => {
+    await db.query("insert into public.business_closures (business_id, date, is_full_day, reason) select id, $1, true, 'หยุด' from public.businesses where slug = 'bloom-hair'", [DAY]);
+    assert.equal((await shopInfo(db, "bloom-hair", { now: noon })).today, null);
+  });
+  await inTx(async () => {
+    await db.query("update public.business_hours set is_open = false where business_id = (select id from public.businesses where slug = 'bloom-hair') and day_of_week = extract(dow from $1::date)", [DAY]);
+    assert.equal((await shopInfo(db, "bloom-hair", { now: noon })).today, null);
+  });
+});
+
 test("the salon page: start page, then each way in walks to the customer form", { skip }, async () => {
   const first = await step(db, "bloom-hair", { selected: {} });
   assert.deepEqual(first.next, { step: "start", choices: ["date", "offering"] });

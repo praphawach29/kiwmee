@@ -138,6 +138,7 @@ async function queryBookings(client, shop, where, params) {
                from public.payment_slips ps where ps.booking_id = b.id order by ps.created_at desc limit 1) as slip_check,
             (b.price_snapshot->>'total')::float8 as price, b.offering_id, o.name as offering_name,
             coalesce(b.customer_name, c.name) as customer_name, c.phone as customer_phone, c.line_user_id is not null as from_line,
+            b.customer_note,
             (select h.reason from public.booking_status_history h where h.booking_id = b.id
               order by h.created_at desc, (h.to_status = b.status) desc limit 1) as status_reason,
             (select json_build_object('id', bl.id, 'status', bl.status, 'total', bl.total,
@@ -182,6 +183,8 @@ async function queryBookings(client, shop, where, params) {
       price: b.price,
       offering: { id: b.offering_id, name: b.offering_name },
       customer: { name: b.customer_name, phone: b.customer_phone, fromLine: b.from_line },
+      // "ฝากถึงร้าน" from the booking page (migration …003900)
+      note: b.customer_note ?? null,
       resources: b.resources,
       addons: b.addons.map((a) => ({ name: a.name, quantity: a.quantity, total: Number(a.total) })),
       // the customer already has a link (from booking online, or one the shop sent)

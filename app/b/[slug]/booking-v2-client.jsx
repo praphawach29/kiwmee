@@ -721,6 +721,14 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
 
         {atCustomer && (
           <>
+            <ConfirmSummary
+              selected={selected}
+              items={summaryItems}
+              price={shownPrice}
+              deposit={Boolean(shop.deposit)}
+              busy={busy}
+              onEdit={() => showStep(selected.time && !rental && !venue ? "time" : summaryItems.at(-1)?.step ?? "offering")}
+            />
             {liff.name ? (
               <div className="bk-line-connected-card">
                 <div className="bk-line-avatar-wrap">
@@ -798,13 +806,14 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
                 </label>
 
                 <label className="bk-field" htmlFor="cust-note">
-                  <span className="bk-field-label">โน้ตเพิ่มเติมถึงช่าง <small className="bk-muted">(ถ้ามี)</small></span>
+                  <span className="bk-field-label">ฝากถึงร้าน <small className="bk-muted">(ไม่บังคับ)</small></span>
                   <div className="bk-input-wrap">
                     <textarea
                       id="cust-note"
                       name="note"
                       rows={2}
-                      placeholder="เช่น ทรงผมที่ต้องการ หรือสไตล์ที่ชอบ"
+                      maxLength={300}
+                      placeholder="เช่น ขอสระด้วยน้ำอุ่น หรือทรงที่อยากได้"
                       value={customer.note || ""}
                       onChange={(e) => setCustomer({ ...customer, note: e.target.value })}
                     />
@@ -814,7 +823,6 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
               {shop.deposit && !canPayFull && <DepositNote deposit={shop.deposit} estimate={estimate} />}
             </form>
 
-            <BookingReview items={summaryItems} onEdit={showStep} busy={busy} price={shownPrice} />
             {points && !points.none && points.rewards.length > 0 && (
               <PointsChoice points={points} chosen={rewardId} onChoose={setRewardId} busy={busy} valueOf={rewardOff} />
             )}
@@ -822,19 +830,12 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
             {canPayFull && (
               <PayChoice deposit={depositAmount} full={fullAmount} payFull={payFull} onChoose={setPayFull} busy={busy} holdMinutes={shop.deposit.holdMinutes} />
             )}
-            {(shop.selfService?.cancel || shop.selfService?.reschedule) && <div className="bk-cancellation-banner">
-              <div className="bk-cancellation-icon" aria-hidden="true">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--mint-deep)" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-              </div>
-              <div className="bk-cancellation-text">
-                <strong>นโยบายการเปลี่ยนแปลงนัดหมาย</strong>
-                <p>
-                  {shop.selfService?.reschedule && shop.selfService?.cancel ? "เลื่อนหรือยกเลิกนัดได้" : shop.selfService?.reschedule ? "เลื่อนนัดได้" : "ยกเลิกนัดได้"} ก่อนเวลานัดอย่างน้อย{" "}
-                  <span className="bk-cancellation-highlight">{shop.selfService?.cutoffHours ?? shop.cancellation_lead_hours ?? 2} ชั่วโมง</span>{" "}
-                  ผ่านลิงก์จัดการการจอง
-                </p>
-              </div>
-            </div>}
+            {(shop.selfService?.cancel || shop.selfService?.reschedule) && (
+              <p className="bk-confirm-policy">
+                {shop.selfService?.reschedule && shop.selfService?.cancel ? "เลื่อนหรือยกเลิก" : shop.selfService?.reschedule ? "เลื่อน" : "ยกเลิก"}เองได้ถึง{" "}
+                <b>{shop.selfService?.cutoffHours ?? shop.cancellation_lead_hours ?? 2} ชม.</b> ก่อนนัด จากลิงก์ที่ได้หลังจอง · ข้อมูลของคุณใช้เพื่อการนัดหมายนี้เท่านั้น
+              </p>
+            )}
 
           </>
         )}
@@ -1007,6 +1008,39 @@ function TimeTabs({ options, optionButton }) {
 
 // "ใช้คะแนน" (migration …003200): a LINE member picks one reward; its points are set aside with the
 // booking and the discount comes off at the desk. Rewards they cannot use yet say why.
+// What is being booked, on top of the form (design Confirm): the day in a tile, the service, when and
+// with whom, the extras, the price — and one way back to change it
+function ConfirmSummary({ selected, items, price, deposit, busy, onEdit }) {
+  const by = (step) => items.find((item) => item.step === step)?.value;
+  const when = [selected.date ? shortDate(selected.date) : null, selected.time ? `${selected.time} น.` : null, by("resource")].filter(Boolean).join(" · ");
+  const more = items.filter((item) => !["date", "time", "offering", "resource"].includes(item.step));
+  const tile = selected.date ? new Date(`${selected.date}T00:00:00Z`) : null;
+  return (
+    <section className="bk-card bk-confirm-summary" aria-labelledby="confirm-summary-title" data-testid="confirm-summary">
+      <div className="bk-confirm-row">
+        {tile && (
+          <span className="bk-date-tile bk-confirm-tile" aria-hidden="true">
+            <small>{new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", month: "short" }).format(tile)}</small>
+            <strong>{tile.getUTCDate()}</strong>
+          </span>
+        )}
+        <div className="bk-confirm-what">
+          <strong id="confirm-summary-title">{by("offering") ?? "นัดหมาย"}</strong>
+          {when && <span>{when}</span>}
+          {more.map((item) => <small key={item.step}>{item.label}: {item.value}</small>)}
+        </div>
+        <button type="button" className="bk-text-button bk-confirm-edit" disabled={busy} onClick={onEdit}>แก้ไข</button>
+      </div>
+      {price?.value && (
+        <div className="bk-confirm-price">
+          <span>{price.label}</span>
+          <strong>{price.value}{deposit ? "" : " · จ่ายที่ร้าน"}</strong>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // Stylists as a row of round faces (design DateTime): "anyone" first, then each one; a full one is grey
 function StaffRow({ options, resources, resourceWord, chosen, busy, onChoose }) {
   return (

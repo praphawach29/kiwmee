@@ -270,6 +270,8 @@ async function book(
     if (!line) throw new AppError("FORBIDDEN", "ยืนยันตัวตน LINE ไม่สำเร็จ กรุณาเปิดจาก LINE อีกครั้ง", 403);
   }
   if (!name) throw new AppError("INVALID_CUSTOMER", "กรุณากรอกชื่อ", 422);
+  // "ฝากถึงร้าน": a short note kept with the booking for the shop (migration …003900)
+  const note = typeof body.customer?.note === "string" ? body.customer.note.replace(/\s+/g, " ").trim().slice(0, 300) : "";
   if (phone ? !THAI_PHONE.test(phone) : !line) {
     throw new AppError("INVALID_CUSTOMER", "กรุณากรอกเบอร์โทร 10 หลัก", 422);
   }
@@ -308,6 +310,7 @@ async function book(
       ]
     );
     const b = rows[0].booking;
+    if (note) await db.query("update public.bookings set customer_note = $2 where id = $1", [b.id, note]);
     const ids = b.resources.filter((r) => !r.addon_id).map((r) => r.resource_id); // a rented racket is not "the stylist"
     const names = (await db.query("select id, name from public.resources where business_id = $1 and id = any($2::uuid[])", [shop.id, ids])).rows;
     result = {

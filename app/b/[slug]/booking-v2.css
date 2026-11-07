@@ -1794,3 +1794,19 @@ a.bk-points-button { display: inline-flex; align-items: center; text-decoration:
 .bk-done-qr-title { font-size: .95rem; }
 .bk-done-qr .bk-checkin { border: 0; padding: 0; background: none; }
 .bk-again { justify-self: center; display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; color: var(--grape-deep); font-weight: 600; text-decoration: none; }
+
+/* Confirm step (design "Kiwmee ปรับหน้าตา" · Confirm): what is booked on top, then the form */
+.bk-confirm-summary { gap: 12px; padding: 16px; }
+.bk-confirm-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.bk-confirm-tile { background: var(--selected); color: var(--ink); width: 52px; }
+.bk-confirm-tile small { color: var(--grape-deep); opacity: 1; }
+.bk-confirm-what { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.bk-confirm-what strong { font-size: 1rem; overflow-wrap: anywhere; }
+.bk-confirm-what span { color: var(--muted); font-size: .88rem; overflow-wrap: anywhere; }
+.bk-confirm-what small { color: var(--muted); font-size: .8rem; overflow-wrap: anywhere; }
+.bk-confirm-edit { flex: none; align-self: flex-start; min-height: 36px; padding: 0 4px; font-size: .9rem; }
+.bk-confirm-price { display: flex; justify-content: space-between; gap: 10px; padding-top: 10px; border-top: 1px dashed var(--line); font-size: .92rem; }
+.bk-confirm-price span { color: var(--muted); }
+.bk-confirm-price strong { color: var(--ink); text-align: right; }
+.bk-confirm-policy { margin: 0 4px; color: var(--muted); font-size: .84rem; line-height: 1.6; }
+.bk-confirm-policy b { color: var(--ink); }

@@ -171,6 +171,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
   const api = `/api/b/${shop.slug}`;
   const [selected, setSelected] = useState(() => initialView?.selected ?? {});
   const [view, setView] = useState(initialView); // { next, ask, options, reason }
+  const [stepTrail, setStepTrail] = useState(() => initialView?.ask ? [initialView.ask] : []);
   const [pending, setPending] = useState(null); // { step, value } tapped, waiting for the server
   const [details, setDetails] = useState(null); // the offering option whose details are open
   const [notice, setNotice] = useState(null);
@@ -220,6 +221,19 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
         const data = await post(`${api}/step`, body);
         setSelected(data.selected);
         setView(data);
+        setStepTrail((previous) => {
+          let trail = previous;
+          const current = body.ask ?? body.changed;
+          if (current) {
+            const index = trail.lastIndexOf(current);
+            trail = index >= 0 ? trail.slice(0, index + 1) : [...trail, current];
+          }
+          if (data.ask) {
+            const index = trail.lastIndexOf(data.ask);
+            trail = index >= 0 ? trail.slice(0, index + 1) : [...trail, data.ask];
+          }
+          return trail;
+        });
         const dropped = data.cleared.filter((c) => c.reason);
         setNotice(
           dropped.length
@@ -288,6 +302,8 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     setPending({ step: "show", value: step });
     return run({ selected, ask: step });
   };
+  const backStep = atCustomer ? stepTrail.at(-1) : stepTrail.length > 1 ? stepTrail.at(-2) : null;
+  const backStepLabel = backStep === "resource" ? resourceWord : (rental && RENTAL_TITLE[backStep]) || STEP_TITLE[backStep] || "ขั้นตอนก่อนหน้า";
 
   // Pre-select offering if passed in URL (?offeringId=... or ?serviceId=...)
   useEffect(() => {
@@ -412,6 +428,13 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     >
       <main className={liffId && atStart && !selected.offeringId ? "bk-shell bk-with-tabs" : "bk-shell"} aria-busy={busy}>
         <ShopHeader shop={shop} subtitle="จองคิวออนไลน์ · เลือกจากคิวว่างของร้าน" />
+        {backStep && (
+          <button type="button" className="bk-flow-back" onClick={() => showStep(backStep)} disabled={busy}>
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /><path d="M9 12h11" /></svg>
+            <span>ย้อนกลับ</span>
+            <small>ไปยัง{backStepLabel}</small>
+          </button>
+        )}
         {/* the venue's details while the customer is still looking; out of the way once they start picking */}
         {!atCustomer && summaryItems.length === 0 && <ShopAbout shop={shop} />}
         <BookingProgress phase={atCustomer ? "customer" : "selection"} ask={ask} resourceWord={resourceWord} />
@@ -481,12 +504,19 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
               <h2>{ask === "resource" ? `เลือก${resourceWord}` : (rental && RENTAL_TITLE[ask]) || STEP_TITLE[ask]}</h2>
               {ask === "time" && selected.date && (
                 <p className="bk-muted">
-                  {formatDate(selected.date, { long: true })} · {rental ? "คืนเวลาเดียวกัน" : "เวลาตามร้าน"}
+                  {rental ? "เลือกเวลาที่สะดวกรับ · คืนเวลาเดียวกัน" : "เลือกเวลาว่างของร้านในวันที่เลือก"}
                   {rental && selected.durationMinutes ? ` วัน${returnDay(selected.date, selected.durationMinutes)}` : ""}
                 </p>
               )}
               {ask === "duration" && rental && <p className="bk-muted">เช่าเป็นรอบ 24 ชม. คืนเวลาเดียวกับที่รับ</p>}
             </div>
+            {ask === "time" && selected.date && (
+              <div className="bk-time-date-card">
+                <span className="bk-time-date-icon" aria-hidden="true"><CalendarIcon /></span>
+                <span className="bk-time-date-copy"><small>วันที่เลือก</small><strong>{formatDate(selected.date, { long: true })}</strong></span>
+                {stepTrail.includes("date") && <button type="button" onClick={() => showStep("date")} disabled={busy}>เปลี่ยนวัน</button>}
+              </div>
+            )}
             {ask !== "addons" && (view.options.length === 0 || !view.options.some((o) => o.available)) ? (
               <p className="bk-empty">{ask === "time" ? "วันนี้ไม่มีเวลาว่างแล้ว" : "ไม่มีตัวเลือกที่ว่าง"} {view.reason ? `(${REASON_TEXT[view.reason] ?? view.reason})` : ""} — ลองเปลี่ยนตัวเลือกด้านบน</p>
             ) : null}

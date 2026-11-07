@@ -549,3 +549,44 @@ test("inside LINE's in-app browser, signing in reopens the page through LIFF", a
   expect(await page.evaluate(() => window.__lineLogin)).toBeUndefined();
   await context.close();
 });
+
+// Wide screens (design "Kiwmee ปรับหน้าตา" · BookDesktop): the steps in the header, the summary beside
+// the page with the way on, the times of day side by side, and no second summary above the form.
+test("desktop: steps in the header, the summary beside the page leads on, and edits from the form", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await start(page);
+  const steps = page.locator(".bk-header-steps");
+  await expect(steps).toBeVisible();
+  await expect(steps.locator('[aria-current="step"]')).toContainText("บริการ");
+  await expect(page.locator(".bk-progress-wrap")).toBeHidden();
+
+  await service(page, "ตัดผมหญิง");
+  await expect(steps.locator('[aria-current="step"]')).toContainText("วันและเวลา");
+  const aside = page.getByTestId("summary-aside");
+  await expect(aside).toContainText("ตัดผมหญิง + สระไดร์");
+  await expect(aside).toContainText("ระยะเวลา");
+  await expect(aside).toContainText("450 บาท");
+  await expect(page.getByTestId("pick-bar")).toBeHidden();
+  // morning, afternoon and evening side by side
+  const groups = page.locator(".bk-time-group");
+  const [first, second] = [await groups.nth(0).boundingBox(), await groups.nth(1).boundingBox()];
+  expect(Math.abs(first.y - second.y)).toBeLessThan(4);
+  expect(second.x).toBeGreaterThan(first.x + 100);
+
+  await enabled(page, "time").first().click();
+  await expect(page.getByRole("heading", { name: "ข้อมูลผู้รับบริการ" })).toBeVisible();
+  await expect(steps.locator('[aria-current="step"]')).toContainText("ข้อมูลผู้จอง");
+  await expect(aside).toContainText("วันเวลา");
+  await expect(page.getByTestId("confirm-summary")).toBeHidden();
+  // back to the times from the summary, then to the services
+  await aside.getByRole("button", { name: "แก้ไข" }).click();
+  await expect(page.getByRole("heading", { name: "เลือกวันและเวลา" })).toBeVisible();
+  await page.locator(".bk-flow-back").click();
+  await expect(option(page, "offering", "ตัดผมหญิง")).toHaveAttribute("data-selected", "true");
+  // everything is still chosen: the summary leads straight back to the form
+  await aside.getByRole("button", { name: "ต่อไป: ข้อมูลผู้จอง" }).click();
+  await expect(page.getByRole("heading", { name: "ข้อมูลผู้รับบริการ" })).toBeVisible();
+  expect(errors).toEqual([]);
+});

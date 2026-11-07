@@ -562,10 +562,16 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
   return (
     <CustomerFrame
       hero={withMedia(shop) ? <ShopHero shop={shop} compact={Boolean(atCustomer)} /> : null}
-      aside={<SummaryAside items={summaryItems} estimate={estimate} shop={shop} onEdit={showStep} busy={busy} />}
+      aside={
+        <SummaryAside items={summaryItems} estimate={shownPrice} shop={shop} busy={busy}
+          length={selected.offeringId ? offeringLength(offerings.get(selected.offeringId)) : null}
+          when={[selected.date ? shortDate(selected.date) : null, selected.time ? `${selected.time} น.` : null].filter(Boolean).join(" · ")}
+          next={ask && canContinue ? { label: continueLabel, go: continueOn } : null}
+          onEdit={atCustomer ? () => showStep(selected.time && !rental && !venue ? "time" : summaryItems.at(-1)?.step ?? "offering") : null} />
+      }
     >
       <main className={liffId && atStart && !selected.offeringId ? "bk-shell bk-with-tabs" : "bk-shell"} aria-busy={busy}>
-        <ShopHeader shop={shop} subtitle="จองคิวออนไลน์ · เลือกจากคิวว่างของร้าน" />
+        <ShopHeader shop={shop} subtitle="จองคิวออนไลน์ · เลือกจากคิวว่างของร้าน" steps={atCustomer ? 3 : ask && ask !== "offering" ? 2 : 1} />
         {backStep && (
           <button type="button" className="bk-flow-back" onClick={() => showStep(backStep)} disabled={busy}>
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /><path d="M9 12h11" /></svg>
@@ -1443,16 +1449,41 @@ function SelfServiceNote({ shop }) {
 }
 
 // Wide screens: what has been picked so far, beside the step being answered.
-function SummaryAside({ items, estimate, shop, onEdit, busy }) {
+// Wide screens (design "Kiwmee ปรับหน้าตา" · BookDesktop): what is picked, how long, the total, and the
+// way on, beside the step being answered
+function SummaryAside({ items, estimate, shop, busy, length = null, when = "", next = null, onEdit = null }) {
+  // the day and the time on one line ("วันเวลา"), after what and with whom
+  const rows = [
+    ...items.filter((item) => item.step !== "date" && item.step !== "time")
+      .flatMap((item) => (item.step === "offering" && length ? [item, { step: "length", label: "ระยะเวลา", value: length }] : [item])),
+    ...(when ? [{ step: "when", label: "วันเวลา", value: when }] : [])
+  ];
   return (
-    <div className="bk-aside-card">
+    <div className="bk-aside-card" data-testid="summary-aside">
+      <div className="bk-aside-head">
+        <h2>สรุปการจอง</h2>
+        {onEdit && <button type="button" className="bk-text-button" disabled={busy} onClick={onEdit}>แก้ไข</button>}
+      </div>
       {items.length === 0 ? (
-        <>
-          <h2>สรุปการจอง</h2>
-          <p className="bk-muted">ยังไม่ได้เลือก · ทุกตัวเลือกแสดงตามคิวว่างจริงของร้าน</p>
-        </>
+        <p className="bk-muted">ยังไม่ได้เลือก · ทุกตัวเลือกแสดงตามคิวว่างจริงของร้าน</p>
       ) : (
-        <BookingReview id="booking-aside-title" items={items} onEdit={onEdit} busy={busy} price={estimate} />
+        <dl className="bk-aside-list">
+          {rows.map((item) => (
+            <div key={item.step}>
+              <dt>{item.label}</dt>
+              <dd data-strong={item.step === "when" || undefined}>{item.value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {estimate?.value && (
+        <div className="bk-aside-total">
+          <span>รวม</span>
+          <strong>{estimate.value}</strong>
+        </div>
+      )}
+      {next && (
+        <button type="button" className="bk-primary bk-aside-next" disabled={busy} onClick={next.go}>{next.label}</button>
       )}
       <p className="bk-fine">
         <SelfServiceNote shop={shop} /> จองกับ {shop.name}

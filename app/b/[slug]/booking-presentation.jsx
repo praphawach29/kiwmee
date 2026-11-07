@@ -164,7 +164,9 @@ export function ResourceSummary({ resources }) {
   return <span className="bk-manage-resources">{resources.map((resource) => <span className="bk-manage-resource" key={resource.id || resource.name}>{safeMedia(resource.media).length > 0 && <ResourceThumbnail resource={resource} />}<span>{resource.name}</span></span>)}</span>;
 }
 
-export function ShopHeader({ shop, subtitle }) {
+// steps: 1–3, the three steps shown at the header's right on wide screens (design BookDesktop)
+const HEADER_STEPS = ["บริการ", "วันและเวลา", "ข้อมูลผู้จอง"];
+export function ShopHeader({ shop, subtitle, steps = null }) {
   return (
     <header className="bk-header bk-shop-header">
       <span className="bk-shop-monogram" aria-hidden="true">{shop.name?.[0]}</span>
@@ -196,6 +198,15 @@ export function ShopHeader({ shop, subtitle }) {
           </p>
         )}
       </div>
+      {steps && (
+        <ol className="bk-header-steps" aria-label="ขั้นตอนการจอง">
+          {HEADER_STEPS.map((label, i) => (
+            <li key={label} data-state={i + 1 < steps ? "done" : i + 1 === steps ? "now" : "later"} aria-current={i + 1 === steps ? "step" : undefined}>
+              {i + 1 < steps ? "✓" : i + 1} {label}
+            </li>
+          ))}
+        </ol>
+      )}
     </header>
   );
 }

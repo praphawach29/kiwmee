@@ -180,6 +180,25 @@ test("the customer may pay in full instead of the deposit: the due is the price,
   }, { depositMode: "full" });
 });
 
+test("ฝากถึงร้าน: the customer's note is kept with the booking for the shop only, tidied and capped at 300", { skip }, async () => {
+  await inTx(async () => {
+    const made = await book(db, "bloom-hair", { ...booking("11:00"), customer: { ...booking("11:00").customer, note: "  ขอสระน้ำอุ่น \n ด้วยนะคะ  " } });
+    const long = await book(db, "bloom-hair", { ...booking("13:00"), customer: { ...booking("13:00").customer, note: "ก".repeat(400) } });
+    const none = await book(db, "bloom-hair", booking("15:00", BEE));
+    const desk = await as(DESK);
+    const list = await bookings.listBookings(db, desk, { from: DAY });
+    assert.equal(list.find((b) => b.id === made.id).note, "ขอสระน้ำอุ่น ด้วยนะคะ");
+    assert.equal(list.find((b) => b.id === long.id).note.length, 300);
+    assert.equal(list.find((b) => b.id === none.id).note, null);
+    // another shop's owner sees no booking of this shop, so no note; anon reads no bookings at all
+    await as(OTHER, "gentleman-barber");
+    assert.equal((await db.query("select count(*)::int as n from public.bookings where customer_note is not null")).rows[0].n, 0);
+    await db.query("reset role");
+    await db.query("set local role anon");
+    await refused(() => db.query("select customer_note from public.bookings"), (e) => e.code === "42501");
+  }, { depositMode: "none" });
+});
+
 test("a shop that takes PromptPay gets a QR with the deposit filled in, until the slip is sent", { skip }, async () => {
   const { promptPayPayload } = require("../../src/v2/promptpay");
   await inTx(async () => {

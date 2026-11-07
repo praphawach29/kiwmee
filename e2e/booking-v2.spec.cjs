@@ -32,10 +32,11 @@ async function service(page, text, staff = null) {
   }
 }
 
-async function fillAndConfirm(page, name) {
+async function fillAndConfirm(page, name, note = null) {
   await expect(page.getByRole("heading", { name: "ข้อมูลผู้รับบริการ" })).toBeVisible();
   await page.getByLabel(/ชื่อ-นามสกุล/).fill(name);
   await page.getByLabel(/เบอร์โทรศัพท์/).fill("0812345678");
+  if (note) await page.getByLabel(/ฝากถึงร้าน/).fill(note);
   await page.getByRole("button", { name: /^ยืนยันการจอง/ }).click();
 }
 
@@ -82,7 +83,16 @@ test("salon: a cut, then anyone, the day and a time on one screen", async ({ pag
   await expect(page.getByRole("heading", { name: "เลือกวันและเวลา" })).toBeVisible();
   await pickDayAndTime(page, 2);
 
-  await fillAndConfirm(page, "ลูกค้าเลือกตัดผม");
+  // the confirm step (design Confirm): what is booked on top, one way back to change it, then the form
+  await expect(page.getByRole("heading", { name: "ข้อมูลผู้รับบริการ" })).toBeVisible();
+  const summary = page.getByTestId("confirm-summary");
+  await expect(summary).toContainText("ตัดผมหญิง + สระไดร์");
+  await expect(summary).toContainText("450 บาท · จ่ายที่ร้าน");
+  await summary.getByRole("button", { name: "แก้ไข" }).click();
+  await expect(page.getByRole("heading", { name: "เลือกวันและเวลา" })).toBeVisible();
+  await idle(page);
+  await enabled(page, "time").first().click();
+  await fillAndConfirm(page, "ลูกค้าเลือกตัดผม", "ขอสระด้วยน้ำอุ่น");
   const done = page.getByTestId("booking-done");
   await expect(done).toContainText("จองคิวสำเร็จ");
   await expect(done).toContainText("450 บาท");
@@ -95,6 +105,16 @@ test("salon: a cut, then anyone, the day and a time on one screen", async ({ pag
   await expect(done.getByRole("button", { name: "เพิ่มลงปฏิทิน" })).toBeVisible();
   await expect(done.locator(".bk-done-qr")).toBeVisible();
   await expect(done.getByRole("link", { name: "จองคิวอีกครั้ง" })).toHaveAttribute("href", "/b/bloom-hair");
+  // "ฝากถึงร้าน" is kept with the booking for the shop
+  const { Client } = require("pg");
+  const db = new Client({ connectionString: process.env.BOOKING_DB_URL || "postgres://postgres@127.0.0.1:54329/booking_test" });
+  await db.connect();
+  try {
+    const { rows: [kept] } = await db.query("select customer_note from public.bookings where customer_name = 'ลูกค้าเลือกตัดผม' order by created_at desc limit 1");
+    expect(kept.customer_note).toBe("ขอสระด้วยน้ำอุ่น");
+  } finally {
+    await db.end();
+  }
   expect(errors).toEqual([]);
 });
 

@@ -595,6 +595,7 @@ function BookingsTab({ slug, catalog, initialDay, focusId = null }) {
                         : " · ยังไม่ได้ส่งสลิป"}
                     </div>
                   )}
+                  {b.note && <div className="ad-booking-note">📝 {b.note}</div>}
                   <div className="ad-muted">
                     {b.customer.phone && <a className="ad-link" href={`tel:${b.customer.phone}`}>{b.customer.phone}</a>}
                     {b.customer.phone ? " · " : ""}
@@ -1295,6 +1296,7 @@ function ScanTab({ slug, initial = null, onBooking, onSale }) {
             <div><dt>บริการ</dt><dd>{b.offering.name}{b.resources.length ? ` · ${b.resources.map((r) => r.name).join(", ")}` : ""}</dd></div>
             {b.price ? <div><dt>ราคา</dt><dd>{money(b.price)}{b.bill?.status === "closed" ? " · ชำระแล้ว" : ""}</dd></div> : null}
             {b.customer.phone && <div><dt>โทร</dt><dd><a className="ad-link" href={`tel:${b.customer.phone}`}>{b.customer.phone}</a></dd></div>}
+            {b.note && <div><dt>ฝากถึงร้าน</dt><dd>{b.note}</dd></div>}
           </dl>
           {b.status === "held" && <p className="ad-notice">ยังรอมัดจำ — ยืนยันมัดจำในรายการจองก่อนเช็กอิน</p>}
           <div className="ad-row ad-wrap">

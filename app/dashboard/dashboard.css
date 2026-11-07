@@ -946,3 +946,4 @@
 .ad-logo-row { display: grid; gap: 16px; align-items: center; }
 @media (min-width: 700px) { .ad-logo-row { grid-template-columns: minmax(0, 360px) auto; } }
 .ad-upload-button { display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.ad-booking-note { margin: 4px 0; padding: 6px 10px; border-radius: 10px; background: #fff8e6; color: #5c4400; font-size: .86rem; line-height: 1.5; overflow-wrap: anywhere; }

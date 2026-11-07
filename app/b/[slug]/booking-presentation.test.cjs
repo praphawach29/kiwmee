@@ -9,7 +9,7 @@ const { transformSync } = require('next/dist/build/swc');
 
 function loadComponents(file = 'booking-presentation.jsx') {
   const filename = path.join(__dirname, file);
-  const source = fs.readFileSync(filename, 'utf8') + (file.includes('shop-admin-client') ? '\nexport { ResourceEditor, ResourcesTab, emptyResource, ReadOnly };' : file === 'booking-v2-client.jsx' ? '\nexport { OptionBody, DateStrip, TimeTabs, MemberWelcome };' : '');
+  const source = fs.readFileSync(filename, 'utf8') + (file.includes('shop-admin-client') ? '\nexport { ResourceEditor, ResourcesTab, emptyResource, ReadOnly };' : file === 'booking-v2-client.jsx' ? '\nexport { OptionBody, DateStrip, TimeTabs, MemberWelcome, StaffRow };' : '');
   const { code } = transformSync(source, {
     filename,
     jsc: { parser: { syntax: 'ecmascript', jsx: true }, transform: { react: { runtime: 'automatic' } } },
@@ -307,4 +307,17 @@ test('ยอดนิยม only on a service the shop really books most; no mad
   assert.doesNotMatch(cheap, /ยอดนิยม|บริการแนะนำ/);
   const hot = render(OptionBody, { ...base, offering: { id: 'c1', name: 'ตัดผม', price: { amount: 450, unit: 'per_booking' }, popular: true } });
   assert.match(hot, /ยอดนิยม/);
+});
+
+test('stylists as a row of faces on the day-and-time screen: anyone first, a full one cannot be tapped', () => {
+  const { StaffRow } = loadComponents('booking-v2-client.jsx');
+  const resources = new Map([['a1', { id: 'a1', name: 'ช่างแนน', media: [] }], ['a2', { id: 'a2', name: 'ช่างบี', media: [] }]]);
+  const options = [{ value: null, available: true }, { value: 'a1', label: 'ช่างแนน', available: true }, { value: 'a2', label: 'ช่างบี', available: false }];
+  const html = render(StaffRow, { options, resources, resourceWord: 'ช่าง', chosen: null, busy: false, onChoose() {} });
+  assert.equal((html.match(/data-testid="option-resource"/g) || []).length, 3);
+  assert.match(html, /data-value="any" data-selected="true"/);
+  assert.match(html, /ใครก็ได้/);
+  assert.match(html, /ช่างแนน/);
+  assert.match(html, /data-value="a2" data-selected="false" aria-checked="false" disabled=""/);
+  assert.match(html, /ไม่ว่าง/);
 });

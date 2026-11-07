@@ -1756,3 +1756,19 @@ a.bk-points-button { display: inline-flex; align-items: center; text-decoration:
   .customer-workspace[data-has-aside="true"] .bk-step1-drawer:not([data-action]) { display: none; }
   .customer-workspace[data-has-aside="true"] .bk-shell:has(.bk-step1-drawer:not([data-action])) { padding-bottom: 24px; }
 }
+
+/* Stylist, day and time on one screen (design DateTime): stylists as a row of faces */
+.bk-staff-row { display: flex; gap: 6px; overflow-x: auto; padding: 4px 2px 6px; margin: 0 -2px; scrollbar-width: none; }
+.bk-staff-row::-webkit-scrollbar { display: none; }
+.bk-staff { flex: none; display: grid; justify-items: center; gap: 4px; width: 76px; padding: 4px 0; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: .8rem; cursor: pointer; }
+.bk-staff:disabled { cursor: default; }
+.bk-staff[data-unavailable], .bk-staff:disabled:not([data-selected="true"]) .bk-staff-face { opacity: .45; }
+.bk-staff-face { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; overflow: hidden; background: var(--selected); color: var(--grape-deep); font-family: var(--font-display); font-size: 1.15rem; transition: box-shadow .15s; }
+.bk-staff-face .bk-avatar, .bk-staff-face .bk-resource-media { width: 100%; height: 100%; border-radius: 50%; display: grid; place-items: center; background: none; color: inherit; font-size: inherit; }
+.bk-staff-face img { width: 100%; height: 100%; object-fit: cover; }
+.bk-staff[data-selected="true"] .bk-staff-face { background: var(--grape); color: #fff; box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--grape); }
+.bk-staff[data-selected="true"] .bk-staff-name { color: var(--grape-deep); font-weight: 600; }
+.bk-staff-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bk-staff-reason { font-size: .7rem; color: var(--muted); }
+.bk-combined-hint { margin: 0; font-size: .86rem; }
+.bk-staff-label { font-size: .84rem; color: var(--muted); margin-bottom: -8px; }

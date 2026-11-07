@@ -10,11 +10,26 @@ test.use({ viewport: { width: 390, height: 844 } });
 const enabled = (page, step) => page.locator(`[data-testid="option-${step}"]:not([disabled])`);
 const option = (page, step, text) => page.getByTestId(`option-${step}`).filter({ hasText: text });
 
-// The customer flow (docs/DESIGN_BOOKING_V3.md): service → stylist / court → day → day and time → the
-// customer's details → booked. Every shop starts from the service now.
+// The customer flow (docs/DESIGN_BOOKING_V3.md + design "Kiwmee ปรับหน้าตา"): service → one screen with
+// the stylist (anyone, picked for them), the day (the first free one, picked for them) and the time →
+// the customer's details → booked. Every shop starts from the service now.
 async function start(page, slug = "bloom-hair") {
   await page.goto(`/b/${slug}`);
   await expect(page.getByRole("heading", { name: "เลือกบริการ" })).toBeVisible();
+}
+
+const idle = (page) => expect(page.locator("main.bk-shell")).toHaveAttribute("aria-busy", "false");
+
+// a service, then (optionally) a stylist by name on the day-and-time screen
+async function service(page, text, staff = null) {
+  await option(page, "offering", text).click();
+  await expect(page.getByRole("heading", { name: "เลือกวันและเวลา" })).toBeVisible();
+  await expect(enabled(page, "time").first()).toBeVisible(); // the first free day is already picked
+  if (staff) {
+    await option(page, "resource", staff).click();
+    await expect(option(page, "resource", staff)).toHaveAttribute("data-selected", "true");
+    await idle(page);
+  }
 }
 
 async function fillAndConfirm(page, name) {
@@ -24,16 +39,20 @@ async function fillAndConfirm(page, name) {
   await page.getByRole("button", { name: /^ยืนยันการจอง/ }).click();
 }
 
-// a day, then its first free time (both on the "day and time" step)
+// a day from the strip, then one of its free times (all on the "day and time" screen)
 async function pickDayAndTime(page, day, time = 0) {
-  await expect(page.getByRole("heading", { name: "เลือกวัน", exact: true })).toBeVisible();
-  await enabled(page, "date").nth(day).click();
   await expect(page.getByRole("heading", { name: "เลือกวันและเวลา" })).toBeVisible();
+  await idle(page);
+  const date = enabled(page, "date").nth(day);
+  const value = await date.getAttribute("data-value");
+  await date.click();
+  await expect(page.locator(`[data-testid="option-date"][data-value="${value}"]`).first()).toHaveAttribute("data-selected", "true");
+  await idle(page);
   const slot = time === "last" ? enabled(page, "time").last() : enabled(page, "time").nth(time);
   await slot.click();
 }
 
-test("salon: a cut, anyone, then the day and a time on one step", async ({ page }) => {
+test("salon: a cut, then anyone, the day and a time on one screen", async ({ page }) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await start(page);
@@ -42,31 +61,26 @@ test("salon: a cut, anyone, then the day and a time on one step", async ({ page 
   await expect(page.locator(".bk-shop-today")).toHaveText(/เปิดวันนี้|เปิดอยู่|ปิดแล้ว|ร้านปิด/);
   await expect(page.locator(".bk-progress-meta")).toContainText("ต่อไป: วันและเวลา");
   await expect(page.locator(".bk-storefront-banner")).toHaveCount(0);
-  await option(page, "offering", "ตัดผมหญิง").click();
+  await service(page, "ตัดผมหญิง");
 
-  await expect(page.getByRole("heading", { name: "เลือกช่าง" })).toBeVisible();
-  // the bar at the bottom keeps what is picked and the price; the progress says the day comes next
+  // one screen: the stylists as a row ("anyone" picked), the days (the first free one picked), the times
+  await expect(option(page, "resource", "ใครก็ได้")).toHaveAttribute("data-selected", "true");
+  // ช่างพลอย does colour only, so she is not offered for a cut
+  await expect(page.getByTestId("option-resource")).not.toContainText(["ช่างพลอย"]);
+  await expect(page.locator('[data-testid="option-date"][data-selected="true"]')).toHaveCount(1);
+  await expect(page.getByTestId("option-date").first()).toContainText(/วันนี้|จ\.|อ\.|พ\.|พฤ\.|ศ\.|ส\.|อา\./);
+  await expect(page.getByRole("heading", { name: /ช่วง(เช้า|บ่าย|เย็น)/ }).first()).toBeVisible();
+  await expect(page.locator(".bk-progress-meta")).toContainText("ต่อไป: ข้อมูลผู้จอง");
+  // the bar at the bottom keeps what is picked and the price
   const bar = page.getByTestId("pick-bar");
   await expect(bar).toContainText("ตัดผมหญิง + สระไดร์");
   await expect(bar).toContainText("450 บาท");
-  await expect(page.locator(".bk-progress-meta")).toContainText("ต่อไป: วันและเวลา");
-  // back to the services: the cut is ticked, and the bar goes on to the stylists
-  await page.locator(".bk-chip").first().click();
+  // back to the services: the cut is ticked, and the bar goes on to the times
+  await page.locator(".bk-flow-back").click();
   await expect(option(page, "offering", "ตัดผมหญิง")).toHaveAttribute("data-selected", "true");
-  await bar.getByRole("button", { name: /ต่อไป: เลือกช่าง/ }).click();
-  await expect(page.getByRole("heading", { name: "เลือกช่าง" })).toBeVisible();
-  // ช่างพลอย does colour only, so she is not offered for a cut
-  await expect(page.getByTestId("option-resource")).not.toContainText(["ช่างพลอย"]);
-  await option(page, "resource", "ช่างคนไหนก็ได้").click();
-
-  await expect(page.getByRole("heading", { name: "เลือกวัน", exact: true })).toBeVisible();
-  await expect(page.getByTestId("option-date").first()).toContainText(/วันนี้|จ\.|อ\.|พ\.|พฤ\.|ศ\.|ส\.|อา\./);
-  await enabled(page, "date").nth(2).click();
-  // the times come in parts of the day, with the days still there to change
+  await bar.getByRole("button", { name: /ต่อไป/ }).click();
   await expect(page.getByRole("heading", { name: "เลือกวันและเวลา" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: /ช่วง(เช้า|บ่าย|เย็น)/ }).first()).toBeVisible();
-  await expect(page.getByTestId("option-date").first()).toBeVisible();
-  await enabled(page, "time").first().click();
+  await pickDayAndTime(page, 2);
 
   await fillAndConfirm(page, "ลูกค้าเลือกตัดผม");
   const done = page.getByTestId("booking-done");
@@ -84,9 +98,7 @@ test("date step: the month calendar shows the same days, picks one, and is remem
   page.on("pageerror", (e) => errors.push(e.message));
   const toDays = async () => {
     await start(page);
-    await option(page, "offering", "ตัดผมหญิง").click();
-    await option(page, "resource", "ช่างคนไหนก็ได้").click();
-    await expect(page.getByRole("heading", { name: "เลือกวัน", exact: true })).toBeVisible();
+    await service(page, "ตัดผมหญิง");
   };
   await toDays();
   await page.getByRole("button", { name: /ปฏิทิน/ }).click();
@@ -100,7 +112,7 @@ test("date step: the month calendar shows the same days, picks one, and is remem
   const value = await days.nth(3).getAttribute("data-value");
   await days.nth(3).click();
   await expect(page.getByRole("heading", { name: "เลือกวันและเวลา" })).toBeVisible();
-  await expect(page.locator(".bk-chips")).toContainText(String(Number(value.slice(8))));
+  await expect(page.locator(`[data-testid="option-date"][data-value="${value}"]`)).toHaveAttribute("data-selected", "true");
 
   // back on the date step later: the calendar again
   await toDays();
@@ -112,8 +124,7 @@ test("date step: the month calendar shows the same days, picks one, and is remem
 
 test("salon: colour with the colourist, then the day and time", async ({ page }) => {
   await start(page);
-  await option(page, "offering", "ทำสีผม").click();
-  await option(page, "resource", "ช่างพลอย").click();
+  await service(page, "ทำสีผม", "ช่างพลอย");
   await pickDayAndTime(page, 3);
   await fillAndConfirm(page, "ลูกค้าทำสี");
   const done = page.getByTestId("booking-done");
@@ -127,27 +138,25 @@ test("salon: colour with the colourist, then the day and time", async ({ page })
 
 test("salon: going back to change the service drops a stylist who does not do it", async ({ page }) => {
   await start(page);
-  await option(page, "offering", "ทำสีผม").click();
-  await option(page, "resource", "ช่างพลอย").click();
-  await expect(page.getByRole("heading", { name: "เลือกวัน", exact: true })).toBeVisible();
+  await service(page, "ทำสีผม", "ช่างพลอย");
 
-  // tap the service chip and switch to a cut
+  // tap the service chip and switch to a cut: she is dropped (and said so), anyone is picked instead
   await page.getByRole("button", { name: /ทำสีผม\s*เปลี่ยน/ }).click();
   await option(page, "offering", "ตัดผมหญิง").click();
   await expect(page.getByRole("status")).toContainText("ช่างพลอย (ทำสีเท่านั้น) ไม่มีบริการนี้");
-  await expect(page.getByRole("heading", { name: "เลือกช่าง" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "เลือกวันและเวลา" })).toBeVisible();
+  await expect(option(page, "resource", "ใครก็ได้")).toHaveAttribute("data-selected", "true");
+  await expect(page.getByTestId("option-resource")).not.toContainText(["ช่างพลอย"]);
   await expect(page.getByRole("button", { name: /ตัดผมหญิง.*เปลี่ยน/ })).toBeVisible();
 });
 
 test("barber: no barber to pick; Mondays are greyed out as closed", async ({ page }) => {
   await start(page, "gentleman-barber");
-  await option(page, "offering", "ตัดผมชาย").click();
-  await expect(page.getByRole("heading", { name: "เลือกวัน", exact: true })).toBeVisible();
+  await service(page, "ตัดผมชาย");
+  // the shop assigns a barber: no row of barbers
+  await expect(page.getByTestId("option-resource")).toHaveCount(0);
   await expect(page.locator('[data-testid="option-date"][disabled]').filter({ hasText: "ร้านปิด" }).first()).toBeVisible();
-  await enabled(page, "date").nth(1).click();
-  // the shop assigns a barber
-  await expect(page.getByRole("heading", { name: "เลือกวันและเวลา" })).toBeVisible();
-  await enabled(page, "time").first().click();
+  await pickDayAndTime(page, 1);
   await fillAndConfirm(page, "ลูกค้าร้านตัดผม");
   const done = page.getByTestId("booking-done");
   await expect(done).toContainText("จองคิวสำเร็จ");
@@ -159,8 +168,7 @@ test("two customers on one slot: the second is told it was just taken and picks 
   const b = await browser.newPage();
   for (const page of [a, b]) {
     await start(page);
-    await option(page, "offering", "ทรีตเมนต์").click();
-    await option(page, "resource", "ช่างแนน").click();
+    await service(page, "ทรีตเมนต์", "ช่างแนน");
     await pickDayAndTime(page, 5);
   }
   await fillAndConfirm(a, "ลูกค้า A");
@@ -180,8 +188,7 @@ test("the customer opens their link, moves the booking, then cancels it", async 
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await start(page);
-  await option(page, "offering", "ทรีตเมนต์").click();
-  await option(page, "resource", "ช่างบี").click();
+  await service(page, "ทรีตเมนต์", "ช่างบี");
   await pickDayAndTime(page, 4);
   await fillAndConfirm(page, "ลูกค้าเลื่อนเอง");
   await expect(page.getByTestId("booking-done")).toContainText("เลื่อนหรือยกเลิกนัดเองได้");
@@ -241,8 +248,7 @@ test("add-ons: after the time the customer picks extras, the price adds up, and 
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
     await start(page);
-    await option(page, "offering", "ตัดผมหญิง").click();
-    await option(page, "resource", "ช่างแนน").click();
+    await service(page, "ตัดผมหญิง", "ช่างแนน");
     await pickDayAndTime(page, 6);
 
     await expect(page.getByRole("heading", { name: "ตัวเลือกเพิ่มเติม" })).toBeVisible();
@@ -286,8 +292,7 @@ test("deposit: the booking is held, the customer sees the account and sends a sl
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
     await start(page);
-    await option(page, "offering", "ทรีตเมนต์").click();
-    await option(page, "resource", "ช่างบี").click();
+    await service(page, "ทรีตเมนต์", "ช่างบี");
     await pickDayAndTime(page, 7, "last");
     // the customer may pay the deposit (picked) or the whole price
     const choice = page.getByTestId("pay-choice");
@@ -338,8 +343,7 @@ test("deposit: the customer picks paying in full, and is asked for the whole pri
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
     await start(page);
-    await option(page, "offering", "ทรีตเมนต์").click();
-    await option(page, "resource", "ช่างบี").click();
+    await service(page, "ทรีตเมนต์", "ช่างบี");
     await pickDayAndTime(page, 6, "last");
     const choice = page.getByTestId("pay-choice");
     const full = choice.getByRole("radio", { name: /จ่ายเต็มจำนวน/ });

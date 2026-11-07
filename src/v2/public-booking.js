@@ -67,6 +67,24 @@ function priceFrom(prices, offeringId) {
   return { amount: cheapest.amount, unit: cheapest.unit, varies: new Set(own.map((p) => p.amount)).size > 1 };
 }
 
+// The services booked most at this shop in the last 30 days: the top 2 (the top 1 when the shop has
+// only 1–3 services), each with at least POPULAR_MIN bookings that went ahead. None for a new shop.
+const POPULAR_MIN = 3;
+async function popularOfferings(db, businessId, offeringCount, now = Date.now()) {
+  if (offeringCount < 2) return new Set();
+  const { rows } = await db.query(
+    `select b.offering_id, count(*)::int as n
+       from public.bookings b join public.offerings o on o.id = b.offering_id and o.active
+      where b.business_id = $1 and b.status in ('confirmed', 'checked_in', 'completed')
+        and b.created_at >= $2::timestamptz - interval '30 days'
+      group by b.offering_id having count(*) >= $3
+      order by count(*) desc, b.offering_id
+      limit $4`,
+    [businessId, new Date(now).toISOString(), POPULAR_MIN, offeringCount <= 3 ? 1 : 2]
+  );
+  return new Set(rows.map((r) => r.offering_id));
+}
+
 // Today's opening hours in the shop's own time, for the page header: { open, close } or null (closed today)
 function todayHours(catalog, timezone, now = Date.now()) {
   const date = msToLocal(now, timezone).date;
@@ -107,6 +125,7 @@ async function shopInfo(db, slug, { now = Date.now() } = {}) {
       .filter(Boolean)
   );
   const bySort = (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name.localeCompare(b.name);
+  const popular = await popularOfferings(db, shop.id, catalog.offerings.length, now);
   return {
     slug: shop.slug,
     name: shop.name,
@@ -155,7 +174,9 @@ async function shopInfo(db, slug, { now = Date.now() } = {}) {
       minDays: o.duration_mode === "days" ? o.min_days : null,
       maxDays: o.duration_mode === "days" ? o.max_days : null,
       maxPartySize: o.max_party_size,
-      price: priceFrom(catalog.prices, o.id)
+      price: priceFrom(catalog.prices, o.id),
+      // "ยอดนิยม": among the most booked here in the last 30 days (real bookings, not a guess)
+      popular: popular.has(o.id)
     })),
     resources: catalog.resources
       .filter((r) => pickable.has(r.id))

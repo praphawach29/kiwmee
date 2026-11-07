@@ -112,8 +112,8 @@ Next.js 15 + Supabase · deploy บน Railway service `salon-booking-os-v1` →
 | #110 | **ป้าย "พรีเมียม" ร้านติ๊กเอง**: เดิมหน้าจองเดาจากราคา ≥ 2,000 บาท (หรือชื่อมีคำว่าพรีเมียม) → `offerings.premium` (ค่าตั้งต้น false) ติ๊กในหน้าแก้บริการของแดชบอร์ด "แสดงป้าย พรีเมียม ✨ บนหน้าจอง" · บันทึกบริการโดยไม่ส่งค่านี้ = คงค่าเดิม · migration `20261025004000_offering_premium.sql` |
 | #30 | **CI** (`.github/workflows/ci.yml`: unit, DB, build ทุก PR) · ปรับ roadmap ให้ตรงสถานะจริง |
 
-**Migration ล่าสุดที่รันบนโปรเจกต์ Kiwmee (เดิมชื่อ booking-v2, ref `ezubgqeqdipwfnmorqkj`) แล้ว: `20261025003900_booking_note.sql`** (เจ้าของยืนยัน 7 พ.ย. 2569, PR #108)
-ไฟล์ถึง `20261025003900_booking_note.sql` รันครบแล้วทั้งหมด — เจ้าของยืนยัน 7 พ.ย. 2569 · ไฟล์ถัดไปตั้งชื่อ `20261025004000_…` · Supabase Auth ต้องเปิด "Confirm email" ไว้ (คำเชิญรับเฉพาะอีเมลที่ยืนยันแล้ว)
+**Migration ล่าสุดที่รันบนโปรเจกต์ Kiwmee (เดิมชื่อ booking-v2, ref `ezubgqeqdipwfnmorqkj`) แล้ว: `20261025004000_offering_premium.sql`** (เจ้าของยืนยัน 7 พ.ย. 2569, PR #110)
+ไฟล์ถึง `20261025004000_offering_premium.sql` รันครบแล้วทั้งหมด — เจ้าของยืนยัน 7 พ.ย. 2569 · ไฟล์ถัดไปตั้งชื่อ `20261025004100_…` · Supabase Auth ต้องเปิด "Confirm email" ไว้ (คำเชิญรับเฉพาะอีเมลที่ยืนยันแล้ว)
 แพ็กเกจของแบรนด์ตั้งด้วย SQL (ยังไม่มีระบบเก็บเงิน): `supabase/README.md` → "ตั้งแพ็กเกจของแบรนด์"
 
 ตัวอย่างหน้าจอบัตรสมาชิก (ยังไม่ใช่โค้ดจริง): https://claude.ai/artifact/Whda2NEfEyUgwDL62cWfKz

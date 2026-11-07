@@ -6,7 +6,7 @@ const assert = require("node:assert/strict");
 const { Client } = require("pg");
 const { book } = require("../../src/v2/public-booking");
 const manage = require("../../src/v2/manage-booking");
-const { myBookings } = require("../../src/v2/my-bookings");
+const { myBookings, myWelcome } = require("../../src/v2/my-bookings");
 
 const url = process.env.SUPABASE_TEST_DB_URL;
 const skip = !url && "set SUPABASE_TEST_DB_URL (scripts/db-test.sh)";
@@ -96,5 +96,31 @@ test("a booking from before links were kept shows no button; a hold that ran out
     await db.query("update public.bookings set status = 'held', hold_expires_at = now() - interval '1 minute' where id = $1", [old.id]);
     const expired = await mine(ME);
     assert.deepEqual([expired.upcoming.length, expired.past[0].status], [0, "expired"]);
+  });
+});
+
+const welcome = (sub, slug = "bloom-hair") => myWelcome(db, slug, { lineIdToken: "t" }, { ...as(sub), env });
+
+test("the booking page's welcome: name and phone from my last booking, my next booking with its link, visits; a first-timer gets nothing filled", { skip }, async () => {
+  await inTx(async () => {
+    assert.deepEqual(await welcome(ME), { customer: null, points: null, next: null }, "never booked here");
+
+    const later = await book(db, "bloom-hair", { selected: { offeringId: CUT, resourceId: NAN, date: LATER, time: "11:00" }, customer: { name: "มาลี ใจดี", phone: "0899998888" }, lineIdToken: "t" }, as(ME));
+    const soon = await lineBook(ME, DAY, "10:00");
+    await db.query("update public.bookings set status = 'completed', created_at = now() - interval '1 day' where id = $1", [later.id]); // a visit done (status only, for the count)
+    await lineBook(SOMEONE, DAY, "12:00", BEE);
+
+    const w = await welcome(ME);
+    assert.equal(w.customer.name, "ลูกค้า LINE", "the name from the latest booking");
+    assert.equal(w.customer.phone, "0899998888", "the phone kept on the customer");
+    assert.equal(w.customer.visits, 1);
+    assert.deepEqual([w.next.date, w.next.start, w.next.status, w.next.link], [DAY, "10:00", "confirmed", `/b/bloom-hair/manage/${soon.manageToken}`]);
+    assert.equal(w.points, null, "no points programme");
+
+    // someone else sees their own; another shop knows nobody; no LINE proof = refused
+    assert.equal((await welcome(SOMEONE)).next.start, "12:00");
+    assert.deepEqual(await welcome(ME, "gentleman-barber"), { customer: null, points: null, next: null });
+    await assert.rejects(() => myWelcome(db, "bloom-hair", {}, as(ME)), (e) => e.status === 403);
+    await assert.rejects(() => myWelcome(db, "bloom-hair", { lineIdToken: "t" }, { verifyLineToken: async () => null }), (e) => e.status === 403);
   });
 });

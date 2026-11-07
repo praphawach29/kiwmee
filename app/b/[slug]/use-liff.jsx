@@ -25,7 +25,14 @@ export function useLiff(liffId) {
           return;
         }
         const profile = await window.liff.getProfile().catch(() => null);
-        if (!cancelled) setLiff({ ready: true, idToken: window.liff.getIDToken(), name: profile?.displayName ?? "", login });
+        if (!cancelled) setLiff({
+            ready: true,
+            idToken: window.liff.getIDToken(),
+            name: profile?.displayName ?? "",
+            // LINE's profile picture (https, on LINE's own host) for the member card on the booking page
+            pictureUrl: typeof profile?.pictureUrl === "string" && profile.pictureUrl.startsWith("https://") ? profile.pictureUrl : null,
+            login
+          });
       } catch {
         if (!cancelled) setLiff({ ready: true, idToken: null, name: "", login: null });
       }

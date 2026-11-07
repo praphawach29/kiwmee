@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { liffTarget } from "./liff-state.mjs";
+import { liffTarget, liffRedirect } from "./liff-state.mjs";
 
 test("a LIFF link opens the shop's booking page or a booking's own link", () => {
   assert.equal(liffTarget("/bloom-hair"), "/b/bloom-hair");
@@ -20,4 +20,16 @@ test("anything else goes home, never to another site", () => {
   for (const bad of [undefined, "", "/", "//evil.example", "https://evil.example/x", "/bloom-hair/../../admin", "/Bloom", "/bloom-hair/manage/short", "/bloom-hair/me/x", "/bloom-hair/mee", "%E0%A4%A", "/x"]) {
     assert.equal(liffTarget(bad), null, String(bad));
   }
+});
+
+test("signing in with LINE in a browser: the sign-in code goes along to the shop's page", () => {
+  assert.equal(
+    liffRedirect({ "liff.state": "/jackshop", code: "abc123", state: "xyz", liffClientId: "2010969802", liffRedirectUri: "https://kiwmee.up.railway.app/b/jackshop" }),
+    "/b/jackshop?code=abc123&state=xyz&liffClientId=2010969802&liffRedirectUri=https%3A%2F%2Fkiwmee.up.railway.app%2Fb%2Fjackshop"
+  );
+  assert.equal(liffRedirect({ "liff.state": "/jackshop" }), "/b/jackshop");
+  assert.equal(liffRedirect({ "liff.state": ["/jackshop/me", "/x"], code: ["a", "b"] }), "/b/jackshop/me?code=a&code=b");
+  // nowhere else, whatever comes with it
+  assert.equal(liffRedirect({ "liff.state": "//evil.example", code: "abc" }), "/");
+  assert.equal(liffRedirect({}), "/");
 });

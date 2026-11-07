@@ -143,6 +143,8 @@ jobs:
       LINE_REMINDERS: "off"
       NEXT_TELEMETRY_DISABLED: "1"
       PILOT_BASE_URL: http://127.0.0.1:3100
+      # a LIFF ID so the LINE member parts of the booking page render; the e2e tests stand in for LINE's SDK
+      NEXT_PUBLIC_LIFF_ID: 1234567890-AbCdEfGh
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

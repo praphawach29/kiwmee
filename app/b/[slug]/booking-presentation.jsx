@@ -223,11 +223,17 @@ export function BookingProgress({ phase, ask, resourceWord = "รายการ
 
   const percent = Math.round(((stepIndex + 1) / totalSteps) * 100);
   const current = phase === "complete" ? 3 : phase === "customer" ? 2 : stepIndex === 0 ? 0 : 1;
+  // what comes after this screen: the day and time still to pick come before the form
+  const nextText = phase === "selection" && ["resource", "duration", "party"].includes(ask)
+    ? "ต่อไป: วันและเวลา"
+    : phase === "selection" && ask === "date"
+      ? "ต่อไป: เลือกเวลา"
+      : PHASES[current + 1] ? `ต่อไป: ${PHASES[current + 1].label}` : "เสร็จแล้ว";
   return (
     <div className="bk-progress-wrap">
       <div className="bk-progress-meta">
         <span className="bk-step-badge"><b>ขั้นที่ {stepIndex + 1}</b> จาก {totalSteps} · {stepTitle}</span>
-        <span className="bk-progress-pct">{PHASES[current + 1] ? `ต่อไป: ${PHASES[current + 1].label}` : "เสร็จแล้ว"}</span>
+        <span className="bk-progress-pct">{nextText}</span>
       </div>
       <ol className="bk-progress" aria-label="ภาพรวมการจอง">
         {PHASES.map((item, index) => (

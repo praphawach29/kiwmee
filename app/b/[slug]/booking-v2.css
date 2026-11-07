@@ -1722,3 +1722,37 @@ a.bk-points-button { display: inline-flex; align-items: center; text-decoration:
 .bk-member-rebook .bk-member-copy strong { font-size: 1rem; color: var(--grape-deep); }
 .bk-member-rebook > span:last-child { color: var(--grape-deep); font-size: 1.3rem; }
 .bk-member-rebook-icon { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 50%; background: var(--selected); color: var(--grape-deep); font-size: 1.15rem; font-weight: 700; }
+
+/* Service cards in one row (design "Kiwmee ปรับหน้าตา" · Main): 4–5 services on a phone screen */
+.bk-options-offering { gap: 10px; }
+.bk-options-offering .bk-option { flex-direction: row; align-items: center; padding: 12px; border-width: 1px; border-radius: 18px; box-shadow: none; }
+.bk-options-offering .bk-option:not(:disabled):hover { transform: none; box-shadow: 0 4px 14px rgba(106, 76, 255, .1); }
+.bk-options-offering .bk-option[data-selected="true"] { border-color: var(--grape); box-shadow: 0 0 0 1px var(--grape); }
+.bk-offering-row { display: flex; align-items: center; gap: 12px; width: 100%; min-width: 0; }
+.bk-options-offering .bk-offering-media, .bk-offering-initial { width: 64px; height: 64px; border-radius: 14px; flex: none; }
+.bk-offering-initial { display: grid; place-items: center; background: linear-gradient(135deg, #ECE8FF, #CFC6FF); color: var(--grape-deep); font-family: var(--font-display); font-size: 1.5rem; }
+.bk-offering-row-body { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.bk-offering-row-body .bk-offering-badges { margin: 0 0 2px; }
+.bk-offering-row-body .bk-offering-name { font-size: 1rem; font-weight: 600; overflow-wrap: anywhere; }
+.bk-offering-meta { font-size: .82rem; color: var(--muted); }
+.bk-offering-row-body .bk-option-desc { -webkit-line-clamp: 1; font-size: .8rem; }
+.bk-offering-price { font-size: .95rem; font-weight: 600; color: var(--grape-deep); }
+.bk-options-offering .bk-choice-mark { width: 26px; height: 26px; }
+.bk-options-offering .bk-choice-mark[data-on] { border: 0; background: var(--grape) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 12.5l4 4L18 8'/%3E%3C/svg%3E") center / 14px no-repeat; }
+/* a service with details: the (i) button sits under the tick */
+.bk-options-offering .bk-option-wrap > .bk-option { min-height: 0; padding-right: 12px; }
+.bk-options-offering .bk-option-wrap .bk-choice-mark { position: static; }
+.bk-options-offering .bk-option-wrap .bk-offering-row { padding-right: 0; }
+.bk-options-offering .bk-option-wrap .bk-offering-row-body { padding-right: 40px; }
+.bk-options-offering .bk-details-link { right: 50px; bottom: auto; top: 50%; transform: translateY(-50%); width: 34px; height: 34px; }
+
+/* The bottom bar on every choosing step: what is picked, the price, and on */
+.bk-step1-drawer-info { flex: 1; }
+.bk-pick-bar-what { font-size: .8rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bk-pick-bar-price { font-family: var(--font-display); font-weight: 500; font-size: 1.15rem; color: var(--ink); }
+.bk-step1-drawer-cta { min-height: 48px; border-radius: 16px; }
+/* wide screens show the summary beside the page: the bar only when it has somewhere to go */
+@media (min-width: 1024px) {
+  .customer-workspace[data-has-aside="true"] .bk-step1-drawer:not([data-action]) { display: none; }
+  .customer-workspace[data-has-aside="true"] .bk-shell:has(.bk-step1-drawer:not([data-action])) { padding-bottom: 24px; }
+}

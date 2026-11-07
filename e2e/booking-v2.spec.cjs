@@ -45,6 +45,16 @@ test("salon: a cut, anyone, then the day and a time on one step", async ({ page 
   await option(page, "offering", "ตัดผมหญิง").click();
 
   await expect(page.getByRole("heading", { name: "เลือกช่าง" })).toBeVisible();
+  // the bar at the bottom keeps what is picked and the price; the progress says the day comes next
+  const bar = page.getByTestId("pick-bar");
+  await expect(bar).toContainText("ตัดผมหญิง + สระไดร์");
+  await expect(bar).toContainText("450 บาท");
+  await expect(page.locator(".bk-progress-meta")).toContainText("ต่อไป: วันและเวลา");
+  // back to the services: the cut is ticked, and the bar goes on to the stylists
+  await page.locator(".bk-chip").first().click();
+  await expect(option(page, "offering", "ตัดผมหญิง")).toHaveAttribute("data-selected", "true");
+  await bar.getByRole("button", { name: /ต่อไป: เลือกช่าง/ }).click();
+  await expect(page.getByRole("heading", { name: "เลือกช่าง" })).toBeVisible();
   // ช่างพลอย does colour only, so she is not offered for a cut
   await expect(page.getByTestId("option-resource")).not.toContainText(["ช่างพลอย"]);
   await option(page, "resource", "ช่างคนไหนก็ได้").click();

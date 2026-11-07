@@ -50,6 +50,7 @@ const KEY = {
   party: "partySize",
   addons: "addons"
 };
+const STEP_KEYS = Object.keys(KEY);
 const SUMMARY_ORDER = ["date", "offering", "resource", "time", "duration", "party", "addons"];
 // labels in the summary (short, so the value keeps the room)
 const SUMMARY_LABEL = { date: "วัน", offering: "บริการ", time: "เวลา", duration: "ระยะเวลา", party: "จำนวน", addons: "เพิ่มเติม" };
@@ -338,6 +339,27 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     setPending({ step, value });
     return run({ selected: { ...selected, [KEY[step]]: value }, changed: step });
   };
+  // The bottom bar's button: on to the next thing not chosen yet (a step already answered can be left
+  // as it is), or to the form once everything is chosen
+  const canContinue = Boolean(ask && next?.step && next.step !== ask && next.step !== "start");
+  const continueOn = () => (STEP_KEYS.includes(next.step) ? showStep(next.step) : run({ selected }));
+  const continueLabel = !canContinue
+    ? ""
+    : next.step === "resource"
+      ? `ต่อไป: เลือก${resourceWord}`
+      : next.step === "date"
+        ? (rental ? "ต่อไป: วันรับ" : "ต่อไป: เลือกวัน")
+        : next.step === "time"
+          ? "ต่อไป: เลือกเวลา"
+          : next.step === "duration"
+            ? "ต่อไป: ระยะเวลา"
+            : next.step === "addons"
+              ? "ต่อไป: ตัวเลือกเสริม"
+              : next.step === "party"
+                ? "ต่อไป: จำนวนคน"
+                : STEP_KEYS.includes(next.step)
+                  ? "ต่อไป"
+                  : "ต่อไป: ข้อมูลผู้จอง";
   // "จองซ้ำ": last time's service (and stylist, if the customer can still pick them); then the day
   const rebook = (last) => {
     const resourceId = last.resourceId && resources.has(last.resourceId) ? last.resourceId : undefined;
@@ -609,31 +631,20 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
           </section>
         )}
 
-        {ask === "offering" && selected.offeringId && offerings.get(selected.offeringId) && (
-          <div className="bk-step1-drawer">
+        {/* what has been picked so far, the price, and the way on — on every step until the form */}
+        {ask && summaryItems.length > 0 && (
+          <div className="bk-step1-drawer" data-testid="pick-bar" data-action={canContinue || undefined}>
             <div className="bk-step1-drawer-inner">
               <div className="bk-step1-drawer-info">
-                <div className="bk-step1-drawer-meta">
-                  <span className="bk-step1-badge">เลือกแล้ว 1 รายการ</span>
-                  <span className="bk-step1-duration">⏱ {offeringLength(offerings.get(selected.offeringId))}</span>
-                </div>
-                <div className="bk-step1-drawer-price">
-                  <small>ยอดรวม</small>
-                  <strong>฿{(offerings.get(selected.offeringId).price?.amount ?? 0).toLocaleString("th-TH")}</strong>
-                </div>
+                <span className="bk-pick-bar-what">{summaryItems.map((item) => (item.step === "date" ? shortDate(selected.date) : item.value)).join(" · ")}</span>
+                <strong className="bk-pick-bar-price">{shownPrice?.short ?? (offerings.get(selected.offeringId)?.price ? priceText(offerings.get(selected.offeringId).price) : "เลือกต่อด้านบน")}</strong>
               </div>
-              <button
-                type="button"
-                className="bk-primary bk-step1-drawer-cta"
-                disabled={busy}
-                onClick={() => {
-                  if (next?.step && next.step !== "offering") showStep(next.step);
-                  else choose("offering", selected.offeringId);
-                }}
-              >
-                <span>ถัดไป: {next?.step === "resource" ? `เลือก${resourceWord}` : next?.step === "date" ? (rental ? "เลือกวันรับ" : "เลือกวัน") : next?.step === "time" ? (rental ? "เลือกเวลารับ" : "เลือกเวลา") : next?.step === "duration" ? "เลือกระยะเวลา" : next?.step === "addons" ? "เลือกตัวเลือกเสริม" : "เลือกคิว"}</span>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-              </button>
+              {canContinue && (
+                <button type="button" className="bk-primary bk-step1-drawer-cta" disabled={busy} onClick={continueOn}>
+                  <span>{continueLabel}</span>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -1566,60 +1577,29 @@ function OptionBody({ ask, option, offering, resource, resourceWord, date, shop,
     const isPopular = offering.popular === true;
     const isPremium = offering.badge === "premium" || offering.name?.includes("พรีเมียม") || (offering.price?.amount && offering.price.amount >= 2000);
 
+    // one row (design "Kiwmee ปรับหน้าตา" · Main): picture · name, length, price · a tick when chosen
     return (
-      <div className="bk-offering-card-layout">
-        {isSelected && (
-          <div className="bk-offering-tag-selected" aria-hidden="true">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
-            <span>เลือกแล้ว</span>
-          </div>
+      <div className="bk-offering-row">
+        {withMedia(offering) ? (
+          <OfferingThumbnail offering={offering} />
+        ) : (
+          <span className="bk-offering-initial" aria-hidden="true">{offering.name?.[0] ?? "•"}</span>
         )}
-        <div className="bk-offering-card-top">
-          {withMedia(offering) ? (
-            <OfferingThumbnail offering={offering} />
-          ) : (
-            <span className="bk-offering-icon-avatar" aria-hidden="true">
-              {offering.name?.includes("ฟุตบอล") ? "⚽" : offering.name?.includes("แบด") ? "🏸" : offering.name?.includes("นวด") ? "💆" : offering.name?.includes("สปา") ? "🌿" : "✂️"}
+        <span className="bk-offering-row-body">
+          {(isPopular || isPremium) && (
+            <span className="bk-offering-badges">
+              {isPopular ? <span className="bk-badge-popular">ยอดนิยม 🔥</span> : <span className="bk-badge-premium">พรีเมียม ✨</span>}
             </span>
           )}
-          <div className="bk-offering-card-body">
-            {(isPopular || isPremium) && (
-              <div className="bk-offering-badges">
-                {isPopular ? <span className="bk-badge-popular">ยอดนิยม 🔥</span> : <span className="bk-badge-premium">พรีเมียม ✨</span>}
-              </div>
-            )}
-            <strong className="bk-offering-name">{offering.name}</strong>
-            {offering.description && (
-              <span className="bk-option-desc">{offering.description}</span>
-            )}
-            <div className="bk-offering-meta-row">
-              <span className="bk-duration-tag">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                <span>{length}</span>
-              </span>
-              {depVal > 0 && <span className="bk-deposit-tag">🔒 มัดจำ ฿{depVal.toLocaleString("th-TH")}</span>}
-            </div>
-          </div>
-        </div>
-        <div className="bk-offering-card-bottom">
-          <div className="bk-offering-price-box">
-            <span className="bk-offering-price-label">ราคาบริการ</span>
-            <strong className="bk-offering-price-val">{offering.price ? priceText(offering.price) : "ฟรี"}</strong>
-          </div>
-          <span className={`bk-offering-action-pill ${isSelected ? "bk-pill-selected" : "bk-pill-add"}`}>
-            {isSelected ? (
-              <>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
-                <span>เลือกอยู่</span>
-              </>
-            ) : (
-              <>
-                <span>+</span>
-                <span>เลือกบริการ</span>
-              </>
-            )}
+          <strong className="bk-offering-name">{offering.name}</strong>
+          <span className="bk-offering-meta">
+            {length}
+            {depVal > 0 ? ` · มัดจำ ฿${depVal.toLocaleString("th-TH")}` : ""}
           </span>
-        </div>
+          {offering.description && <span className="bk-option-desc">{offering.description}</span>}
+          <span className="bk-offering-price">{offering.price ? priceText(offering.price) : "ฟรี"}</span>
+        </span>
+        <span className="bk-choice-mark" aria-hidden="true" data-on={isSelected || undefined} />
       </div>
     );
   }

@@ -349,7 +349,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     return (
       <CustomerFrame>
         <main className="bk-shell">
-          <BookingProgress phase="complete" />
+          <BookingProgress phase="complete" resourceWord={resourceWord} />
           <BookingDone shop={shop} booking={booking} items={summaryItems} selected={selected} resourceWord={resourceWord}
             onSlip={(view) => setBooking((b) => ({ ...b, status: view.booking.status, deposit: { ...b.deposit, slips: view.booking.deposit?.slips ?? 1 } }))} />
           <PoweredBy />
@@ -414,7 +414,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
         <ShopHeader shop={shop} subtitle="จองคิวออนไลน์ · เลือกจากคิวว่างของร้าน" />
         {/* the venue's details while the customer is still looking; out of the way once they start picking */}
         {!atCustomer && summaryItems.length === 0 && <ShopAbout shop={shop} />}
-        <BookingProgress phase={atCustomer ? "customer" : "selection"} ask={ask} />
+        <BookingProgress phase={atCustomer ? "customer" : "selection"} ask={ask} resourceWord={resourceWord} />
 
         {!atCustomer && summaryItems.length > 0 && (
           <nav className="bk-chips" aria-label="ที่เลือกไว้">
@@ -473,7 +473,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
                 </div>
                 <div className="bk-tip-notice">
                   <span>💡</span>
-                  <span><strong>เลือกบริการที่ต้องการ:</strong> ดูแลอย่างพิถีพิถันโดยช่างผู้เชี่ยวชาญ พร้อมคิวว่างแบบเรียลไทม์</span>
+                  <span><strong>เลือกตัวเลือกที่ต้องการ:</strong> ระบบแสดงเฉพาะคิวที่ร้านเปิดให้จอง</span>
                 </div>
               </>
             )}
@@ -516,15 +516,6 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
                 {shownOptions.map(optionButton)}
               </div>
             )}
-            {ask === "offering" && (
-              <div className="bk-guarantee-banner">
-                <span className="bk-guarantee-icon">🛡️</span>
-                <div>
-                  <strong>รับประกันความพึงพอใจ 7 วัน</strong>
-                  <p>ดูแลอย่างใส่ใจ ปรับแก้ทรงฟรีไม่มีค่าใช้จ่ายหากไม่ตรงใจ</p>
-                </div>
-              </div>
-            )}
           </section>
         )}
 
@@ -550,7 +541,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
                   else choose("offering", selected.offeringId);
                 }}
               >
-                <span>ถัดไป: เลือกช่างและเวลา</span>
+                <span>ถัดไป: {next?.step === "resource" ? `เลือก${resourceWord}` : next?.step === "date" ? (rental ? "เลือกวันรับ" : "เลือกวัน") : next?.step === "time" ? (rental ? "เลือกเวลารับ" : "เลือกเวลา") : next?.step === "duration" ? "เลือกระยะเวลา" : next?.step === "addons" ? "เลือกตัวเลือกเสริม" : "เลือกคิว"}</span>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
               </button>
             </div>
@@ -634,7 +625,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
                   </div>
                   <p className="bk-field-hint">
                     <span>💬</span>
-                    <span>ร้านจะส่งข้อความแจ้งเตือนคิวก่อนนัดหมาย 1 ชม.</span>
+                    <span>ใช้เบอร์นี้สำหรับติดต่อเกี่ยวกับการจอง</span>
                   </p>
                 </label>
 
@@ -660,31 +651,20 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
               <PointsChoice points={points} chosen={rewardId} onChoose={setRewardId} busy={busy} valueOf={rewardOff} />
             )}
 
-            <div className="bk-cancellation-banner">
+            {(shop.selfService?.cancel || shop.selfService?.reschedule) && <div className="bk-cancellation-banner">
               <div className="bk-cancellation-icon" aria-hidden="true">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--mint-deep)" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
               </div>
               <div className="bk-cancellation-text">
                 <strong>นโยบายการเปลี่ยนแปลงนัดหมาย</strong>
                 <p>
-                  สามารถเลื่อนหรือยกเลิกได้<b>ฟรี</b> ก่อนเวลานัดอย่างน้อย{" "}
-                  <span className="bk-cancellation-highlight">{shop.selfService?.cutoffHours || shop.cancellation_lead_hours || 2} ชั่วโมง</span>{" "}
-                  สะดวก รวดเร็ว ผ่านระบบ LINE OA นี้ได้ทันที
+                  {shop.selfService?.reschedule && shop.selfService?.cancel ? "เลื่อนหรือยกเลิกนัดได้" : shop.selfService?.reschedule ? "เลื่อนนัดได้" : "ยกเลิกนัดได้"} ก่อนเวลานัดอย่างน้อย{" "}
+                  <span className="bk-cancellation-highlight">{shop.selfService?.cutoffHours ?? shop.cancellation_lead_hours ?? 2} ชั่วโมง</span>{" "}
+                  ผ่านลิงก์จัดการการจอง
                 </p>
               </div>
-            </div>
+            </div>}
 
-            <div className="bk-trust-badges">
-              <div className="bk-trust-badge">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--mint-deep)" strokeWidth="2.2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                <span>ข้อมูลปลอดภัย 100%</span>
-              </div>
-              <span className="bk-trust-sep">•</span>
-              <div className="bk-trust-badge">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--grape)" strokeWidth="2.2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-                <span>การแจ้งเตือนสดผ่าน LINE</span>
-              </div>
-            </div>
           </>
         )}
         {atCustomer && (
@@ -1115,7 +1095,7 @@ function DepositNote({ deposit, estimate }) {
   const what = money(amount);
   return (
     <p className="bk-notice">
-      ร้านนี้ขอมัดจำ <b>{what}</b> โดยโอนเงินผ่าน PromptPay · หลังกดยืนยันจะได้รับ QR Code โอนเงิน แล้วโอนและแนบสลิปภายใน {formatMinutes(deposit.holdMinutes ?? 10)}
+      ร้านนี้ขอมัดจำ <b>{what}</b> · หลังกดยืนยันจะแสดงวิธีชำระและเวลาส่งสลิป {formatMinutes(deposit.holdMinutes ?? 10)}
     </p>
   );
 }
@@ -1225,11 +1205,7 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
           <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7" /></svg>
         </span>
         <h1>{held ? "กันคิวไว้ให้แล้ว" : booking.status === "pending" ? "ส่งสลิปแล้ว รอร้านยืนยัน" : "จองคิวสำเร็จเรียบร้อยแล้ว!"}</h1>
-        <p className="bk-muted">{held && booking.deposit ? "โอนมัดจำเพื่อยืนยันคิว" : "ระบบได้ส่งข้อความยืนยันและรายละเอียดไปที่ LINE เรียบร้อยแล้วค่ะ"}</p>
-        <div className="bk-line-pill">
-          <span className="bk-line-pill-icon">💬</span>
-          <span>แจ้งเตือนเข้า Official Account ทันที</span>
-        </div>
+        <p className="bk-muted">{held && booking.deposit ? "โอนมัดจำเพื่อยืนยันคิว" : "รายละเอียดการจองของคุณอยู่ด้านล่าง"}</p>
       </div>
 
       {booking.deposit && ["held", "pending"].includes(booking.status) && managePath && (
@@ -1249,7 +1225,7 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
       <div className="bk-card bk-done-card bk-pass-card">
         <div className="bk-pass-header">
           <div className="bk-pass-brand">
-            <span className="bk-pass-badge">KIWMEE SALON PASS</span>
+            <span className="bk-pass-badge">{shop.name} · BOOKING PASS</span>
             {booking.id && <strong className="bk-pass-code">#{bookingCode(booking.id)}</strong>}
           </div>
           <span className="bk-status" data-status={booking.status}>
@@ -1307,17 +1283,6 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
         <DirectionsButton href={shop.directions} />
       </div>
 
-      <div className="bk-loyalty-callout">
-        <div className="bk-loyalty-icon">⭐</div>
-        <div className="bk-loyalty-details">
-          <div className="bk-loyalty-title">
-            <strong>รับแต้มสะสม Kiwmee Points</strong>
-            <span className="bk-badge-tier">สมาชิก</span>
-          </div>
-          <p>แต้มจะเข้ากระเป๋าใน LINE อัตโนมัติหลังรับบริการสำเร็จ เพื่อใช้เป็นส่วนลดครั้งถัดไป</p>
-        </div>
-      </div>
-
       <div className="bk-actions-grid">
         {booking.startAt && booking.endAt && (
           <button type="button" className="bk-btn-primary-action bk-btn-calendar" onClick={addToCalendar}>
@@ -1335,9 +1300,6 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
         <span>🏠 กลับสู่หน้าหลัก / ดูบริการอื่นๆ</span>
       </a>
 
-      <div className="bk-trust-lock">
-        <span>🔒 การจองปลอดภัยด้วยการเข้ารหัส LINE LIFF Service</span>
-      </div>
     </section>
   );
 }

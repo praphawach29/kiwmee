@@ -255,7 +255,8 @@ test("opening hours and booking rules are saved and checked", { skip }, async ()
       paymentInfo: {},
       lineReminders: true,
       documentRetentionDays: 30,
-      slipAutoConfirm: false
+      slipAutoConfirm: false,
+      depositAllowFull: true
     });
 
     // what customers may change themselves from their booking link

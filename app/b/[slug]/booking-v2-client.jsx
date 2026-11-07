@@ -181,6 +181,8 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
   const [customer, setCustomer] = useState({ name: "", phone: "" });
   const [points, setPoints] = useState(null); // the LINE member's points and rewards (migration …003200)
   const [rewardId, setRewardId] = useState(null);
+  // the shop lets the customer transfer the whole price instead of the deposit (migration …003800)
+  const [payFull, setPayFull] = useState(false);
   const [booking, setBooking] = useState(null);
   const liff = useLiff(liffId);
 
@@ -309,6 +311,12 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     if (shop.deposit.mode === "percent") return est ? Math.round((est * shop.deposit.value) / 100) : null;
     return typeof shop.deposit.value === "number" ? (est ? Math.min(shop.deposit.value, est) : shop.deposit.value) : null;
   }, [shop.deposit, estimate]);
+  // what paying in full costs: the price after any reward; offered only when it is more than the deposit
+  const fullAmount = shop.deposit?.allowFull && estimate?.short && typeof estimate.amount === "number"
+    ? Math.max((estimate.amount ?? 0) - (chosenReward ? rewardOff(chosenReward) : 0), 0)
+    : null;
+  const canPayFull = fullAmount !== null && depositAmount > 0 && fullAmount > depositAmount;
+  const paying = canPayFull && payFull ? fullAmount : depositAmount;
 
   // the tapped choice lights up at once; the server's answer follows
   const choose = (step, value) => {
@@ -356,7 +364,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     setBusy(true);
     setError(null);
     try {
-      const result = await post(`${api}/bookings`, { selected, customer, lineIdToken: liff.idToken || undefined, rewardId: rewardId || undefined });
+      const result = await post(`${api}/bookings`, { selected, customer, lineIdToken: liff.idToken || undefined, rewardId: rewardId || undefined, payFull: canPayFull && payFull ? true : undefined });
       setBooking(result);
     } catch (e) {
       if (e.status === 409 && e.reason === "ADDON_UNAVAILABLE") {
@@ -717,7 +725,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
                   </div>
                 </label>
               </div>
-              {shop.deposit && <DepositNote deposit={shop.deposit} estimate={estimate} />}
+              {shop.deposit && !canPayFull && <DepositNote deposit={shop.deposit} estimate={estimate} />}
             </form>
 
             <BookingReview items={summaryItems} onEdit={showStep} busy={busy} price={shownPrice} />
@@ -725,6 +733,9 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
               <PointsChoice points={points} chosen={rewardId} onChoose={setRewardId} busy={busy} valueOf={rewardOff} />
             )}
 
+            {canPayFull && (
+              <PayChoice deposit={depositAmount} full={fullAmount} payFull={payFull} onChoose={setPayFull} busy={busy} holdMinutes={shop.deposit.holdMinutes} />
+            )}
             {(shop.selfService?.cancel || shop.selfService?.reschedule) && <div className="bk-cancellation-banner">
               <div className="bk-cancellation-icon" aria-hidden="true">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--mint-deep)" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
@@ -747,7 +758,8 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
             disabled={busy || !liff.ready}
             busy={busy}
             price={shownPrice?.short}
-            deposit={depositAmount}
+            deposit={paying}
+            payFull={canPayFull && payFull}
           />
         )}
         <PoweredBy />
@@ -909,6 +921,33 @@ function TimeTabs({ options, optionButton }) {
 
 // "ใช้คะแนน" (migration …003200): a LINE member picks one reward; its points are set aside with the
 // booking and the discount comes off at the desk. Rewards they cannot use yet say why.
+// Deposit or the whole price, the customer's choice (migration …003800). Either way the booking waits
+// for the transfer; paying in full leaves nothing to pay at the shop.
+function PayChoice({ deposit, full, payFull, onChoose, busy, holdMinutes }) {
+  const choices = [
+    { value: false, title: `มัดจำ ${money(deposit)}`, meta: `ส่วนที่เหลือ ${money(full - deposit)} จ่ายที่ร้าน` },
+    { value: true, title: `จ่ายเต็มจำนวน ${money(full)}`, meta: "ไม่ต้องจ่ายเพิ่มที่ร้าน" }
+  ];
+  return (
+    <section className="bk-card bk-pay-choice" aria-labelledby="pay-choice-title" data-testid="pay-choice">
+      <h2 id="pay-choice-title">เลือกวิธีชำระ</h2>
+      <div className="bk-options bk-options-reward" role="radiogroup" aria-label="เลือกวิธีชำระ">
+        {choices.map((c) => (
+          <button key={String(c.value)} type="button" className="bk-option" role="radio" aria-checked={payFull === c.value} data-selected={payFull === c.value}
+            disabled={busy} onClick={() => onChoose(c.value)}>
+            <span className="bk-option-text">
+              <strong>{c.title}</strong>
+              <span className="bk-option-meta"><span>{c.meta}</span></span>
+            </span>
+            <span className="bk-choice-mark" aria-hidden="true" />
+          </button>
+        ))}
+      </div>
+      <p className="bk-fine">หลังกดยืนยันจะแสดง QR และเวลาส่งสลิป {formatMinutes(holdMinutes ?? 10)}</p>
+    </section>
+  );
+}
+
 function PointsChoice({ points, chosen, onChoose, busy, valueOf }) {
   return (
     <section className="bk-card bk-points-choice" aria-labelledby="points-choice-title">
@@ -1230,7 +1269,7 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
   const statusLabel = held ? "รอชำระมัดจำ" : pendingStatus ? "รอร้านตรวจสอบ" : booking.status === "confirmed" ? "ยืนยันแล้ว" : "รอรับบริการ";
   const successTitle = held ? "กันคิวไว้ให้แล้ว" : pendingStatus ? "ส่งสลิปแล้ว รอร้านยืนยัน" : "จองคิวสำเร็จเรียบร้อยแล้ว!";
   const successCopy = held && booking.deposit
-    ? "ชำระมัดจำตามรายละเอียดด้านล่างเพื่อยืนยันคิว"
+    ? booking.deposit.payFull ? "ชำระเต็มจำนวนตามรายละเอียดด้านล่างเพื่อยืนยันคิว" : "ชำระมัดจำตามรายละเอียดด้านล่างเพื่อยืนยันคิว"
     : pendingStatus
       ? "ร้านกำลังตรวจสอบสลิป คุณดูสถานะการจองได้จากลิงก์ด้านล่าง"
       : "บันทึกหมายเลขการจองและ QR นี้ไว้ใช้เมื่อมาถึงร้าน";

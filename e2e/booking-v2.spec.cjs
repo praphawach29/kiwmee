@@ -275,7 +275,10 @@ test("deposit: the booking is held, the customer sees the account and sends a sl
     await option(page, "offering", "ทรีตเมนต์").click();
     await option(page, "resource", "ช่างบี").click();
     await pickDayAndTime(page, 7, "last");
-    await expect(page.getByText(/ร้านนี้ขอมัดจำ\s*200 บาท/)).toBeVisible();
+    // the customer may pay the deposit (picked) or the whole price
+    const choice = page.getByTestId("pay-choice");
+    await expect(choice.getByRole("radio", { name: /มัดจำ 200 บาท/ })).toHaveAttribute("aria-checked", "true");
+    await expect(choice.getByRole("radio", { name: /จ่ายเต็มจำนวน/ })).toHaveAttribute("aria-checked", "false");
     await fillAndConfirm(page, "ลูกค้ามัดจำ");
 
     const done = page.getByTestId("booking-done");
@@ -295,6 +298,50 @@ test("deposit: the booking is held, the customer sees the account and sends a sl
     await expect(page.getByTestId("manage-booking")).toContainText("รอร้านตรวจสลิป");
     await expect(page.getByText("ส่งสลิปแล้ว รอร้านตรวจ")).toBeVisible();
     await expect(page.getByText("QR เช็กอินจะแสดงเมื่อร้านยืนยันมัดจำแล้ว")).toBeVisible();
+    expect(errors).toEqual([]);
+  } finally {
+    await db.query(
+      "update public.business_booking_settings set deposit_mode = $2, deposit_value = $3, payment_info = $4, hold_minutes = $5 where business_id = $1",
+      [SALON, before.deposit_mode, before.deposit_value, before.payment_info, before.hold_minutes]
+    );
+    await db.end();
+  }
+});
+
+// The customer chooses to pay in full (migration …003800): the QR and the box ask for the whole price.
+test("deposit: the customer picks paying in full, and is asked for the whole price", async ({ page }) => {
+  const { Client } = require("pg");
+  const db = new Client({ connectionString: process.env.BOOKING_DB_URL || "postgres://postgres@127.0.0.1:54329/booking_test" });
+  await db.connect();
+  const SALON = "b1000000-0000-4000-8000-000000000001";
+  const { rows: [before] } = await db.query("select deposit_mode, deposit_value, payment_info, hold_minutes from public.business_booking_settings where business_id = $1", [SALON]);
+  try {
+    await db.query(
+      `update public.business_booking_settings set deposit_mode = 'fixed', deposit_value = 200, hold_minutes = 60, deposit_allow_full = true,
+              payment_info = '{"bank":"กสิกรไทย","accountNumber":"123-4-56789-0","accountName":"บลูม แฮร์"}' where business_id = $1`,
+      [SALON]
+    );
+    const errors = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    await start(page);
+    await option(page, "offering", "ทรีตเมนต์").click();
+    await option(page, "resource", "ช่างบี").click();
+    await pickDayAndTime(page, 6, "last");
+    const choice = page.getByTestId("pay-choice");
+    const full = choice.getByRole("radio", { name: /จ่ายเต็มจำนวน/ });
+    const amount = (await full.innerText()).match(/จ่ายเต็มจำนวน\s*([\d,]+) บาท/)[1];
+    await full.click();
+    await expect(full).toHaveAttribute("aria-checked", "true");
+    await expect(page.locator(".bk-submit-bar")).toContainText("ยืนยันและดู QR ชำระเงิน");
+    await expect(page.locator(".bk-submit-bar")).toContainText(`จ่ายเต็ม ฿${amount}`);
+    await fillAndConfirm(page, "ลูกค้าจ่ายเต็ม");
+
+    const done = page.getByTestId("booking-done");
+    await expect(done).toContainText("กันคิวไว้ให้แล้ว");
+    await expect(done).toContainText("โอนชำระเต็มจำนวนเพื่อยืนยันคิว");
+    await expect(done.locator(".bk-deposit-amount")).toContainText(amount);
+    const { rows: [b] } = await db.query("select deposit_due::float8 as due, (price_snapshot->>'total')::float8 as total from public.bookings where customer_name = 'ลูกค้าจ่ายเต็ม' order by created_at desc limit 1");
+    expect(b.due).toBe(b.total);
     expect(errors).toEqual([]);
   } finally {
     await db.query(

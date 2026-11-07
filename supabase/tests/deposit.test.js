@@ -88,7 +88,7 @@ const booking = (time, resourceId = NAN) => ({ selected: { offeringId: CUT, reso
 
 test("a held booking shows the deposit and where to transfer; the slip waits for the shop, which confirms it onto the bill", { skip }, async () => {
   await inTx(async () => {
-    assert.deepEqual((await shopInfo(db, "bloom-hair")).deposit, { mode: "fixed", value: 200, holdMinutes: 60 });
+    assert.deepEqual((await shopInfo(db, "bloom-hair")).deposit, { mode: "fixed", value: 200, holdMinutes: 60, allowFull: true });
     const made = await book(db, "bloom-hair", booking("11:00"));
     assert.equal(made.status, "held");
     assert.deepEqual(made.deposit, { due: 200, paymentInfo: BANK });
@@ -136,6 +136,48 @@ test("percentage and full deposits; no deposit set = the booking is confirmed st
     assert.deepEqual([plain.status, plain.deposit], ["confirmed", null]);
     assert.equal((await shopInfo(db, "bloom-hair")).deposit, null);
   }, { depositMode: "none" });
+});
+
+test("the customer may pay in full instead of the deposit: the due is the price, nothing is left at the desk", { skip }, async () => {
+  await inTx(async () => {
+    assert.equal((await shopInfo(db, "bloom-hair")).deposit.allowFull, true, "on by default");
+    const full = await book(db, "bloom-hair", { ...booking("11:00"), payFull: true });
+    assert.deepEqual([full.status, full.deposit.due, full.deposit.payFull], ["held", 450, true]);
+    const plain = await book(db, "bloom-hair", booking("13:00"));
+    assert.deepEqual([plain.deposit.due, plain.deposit.payFull], [200, undefined], "not asked: the deposit");
+
+    const sent = await manage.submitSlip(db, "bloom-hair", full.manageToken, SLIP);
+    assert.deepEqual([sent.booking.deposit.due, sent.booking.deposit.payFull], [450, true]);
+    const desk = await as(DESK);
+    await bookings.confirmDeposit(db, desk, full.id);
+    await bills.checkoutBooking(db, desk, full.id, { payments: [] });
+    const bill = (await db.query("select status, total::float8 as total, (select sum(amount)::float8 from public.bill_payments p where p.bill_id = b.id) as paid from public.bills b where b.booking_id = $1", [full.id])).rows[0];
+    assert.deepEqual([bill.status, bill.total, bill.paid], ["closed", 450, 450]);
+
+    // the server alone raises the due
+    await refused(() => db.query("select public.booking_pay_full($1, 0)", [plain.id]), (e) => e.code === "42501"); // a member of the shop, too
+    await db.query("reset role");
+    await db.query("set local role anon");
+    await refused(() => db.query("select public.booking_pay_full($1, 0)", [plain.id]), (e) => e.code === "42501");
+    await db.query("reset role");
+    // only a held booking of a shop that allows it
+    await refused(() => db.query("select public.booking_pay_full($1, 0)", [full.id]), (e) => e.code === "BK422");
+  });
+  // the shop switched it off: the deposit, whatever the page sent
+  await inTx(async () => {
+    assert.equal((await shopInfo(db, "bloom-hair")).deposit.allowFull, false);
+    const made = await book(db, "bloom-hair", { ...booking("11:00"), payFull: true });
+    assert.deepEqual([made.deposit.due, made.deposit.payFull], [200, undefined]);
+    const shop = await as(OWNER);
+    assert.equal((await admin.getCatalog(db, shop)).settings.depositAllowFull, false);
+  }, { depositMode: "fixed", depositValue: 200, depositAllowFull: false });
+  // a percentage too; a shop that already takes the whole price has nothing to choose
+  await inTx(async () => {
+    assert.equal((await book(db, "bloom-hair", { ...booking("11:00"), payFull: true })).deposit.due, 450);
+  }, { depositMode: "percent", depositValue: 30 });
+  await inTx(async () => {
+    assert.equal((await shopInfo(db, "bloom-hair")).deposit.allowFull, false);
+  }, { depositMode: "full" });
 });
 
 test("a shop that takes PromptPay gets a QR with the deposit filled in, until the slip is sent", { skip }, async () => {

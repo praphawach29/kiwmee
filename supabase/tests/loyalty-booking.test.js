@@ -97,6 +97,26 @@ async function bookWith(time, rewardId, sub = MALI) {
 }
 const bookingCount = async () => (await db.query("select count(*)::int as n from public.bookings where business_id = $1", [SALON])).rows[0].n;
 
+test("paying in full with a reward: the transfer is the price less the reward, and the bill closes on it", { skip }, async () => {
+  await inTx(async ({ reward }) => {
+    await db.query("reset role");
+    await db.query(
+      `insert into public.business_booking_settings (business_id, deposit_mode, deposit_value, payment_info) values ($1, 'fixed', 200, '{"accountNumber": "1234567890"}')
+       on conflict (business_id) do update set deposit_mode = 'fixed', deposit_value = 200, payment_info = excluded.payment_info`,
+      [SALON]
+    );
+    await give(MALI, 100);
+    await clear();
+    const made = await book(db, "bloom-hair", { selected: { offeringId: CUT, resourceId: NAN, date: DAY, time: "11:00" }, customer: { name: "มาลี" }, lineIdToken: "t", rewardId: reward.id, payFull: true }, lineFor(MALI));
+    assert.deepEqual([made.status, made.deposit.due, made.deposit.payFull, made.points.discountBaht], ["held", 400, true, 50]);
+    const desk = await as(DESK);
+    await bookings.confirmDeposit(db, desk, made.id);
+    const bill = await bills.checkoutBooking(db, desk, made.id, { payments: [] });
+    assert.equal(Number(bill.total), 400);
+    assert.equal((await db.query("select status from public.bills where booking_id = $1", [made.id])).rows[0].status, "closed");
+  });
+});
+
 test("a reward chosen when booking: points set aside at once, the desk takes them off the bill", { skip }, async () => {
   await inTx(async ({ reward }) => {
     await give(MALI, 100);

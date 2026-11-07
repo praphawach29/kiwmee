@@ -1772,3 +1772,25 @@ a.bk-points-button { display: inline-flex; align-items: center; text-decoration:
 .bk-staff-reason { font-size: .7rem; color: var(--muted); }
 .bk-combined-hint { margin: 0; font-size: .86rem; }
 .bk-staff-label { font-size: .84rem; color: var(--muted); margin-bottom: -8px; }
+
+/* Booking done (design "Kiwmee ปรับหน้าตา" · Done): a calm head, one card, the QR, the link, book again */
+.bk-done .bk-done-head { background: none; border: 0; box-shadow: none; padding: 20px 8px 4px; }
+.bk-done .bk-done-head h1 { font-weight: 500; font-size: 1.5rem; }
+.bk-done-card { gap: 12px; padding: 18px; }
+.bk-done-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: .8rem; color: var(--muted); }
+.bk-done-meta b { color: var(--grape-deep); letter-spacing: .03em; }
+.bk-done-card .bk-done-status { background: var(--mint-tint); color: var(--mint-deep); }
+.bk-done-card .bk-done-status[data-state="held"], .bk-done-card .bk-done-status[data-state="pending"] { background: #fff3d8; color: #805300; }
+.bk-done-card .bk-done-schedule { background: none; padding: 0; }
+.bk-done-card .bk-done-schedule .bk-date-tile { background: var(--ink); }
+.bk-done-card .bk-done-schedule .bk-when > div strong { font-size: 1rem; }
+.bk-done-card .bk-done-schedule .bk-when > div span { font-size: .88rem; }
+.bk-done-address { display: flex; align-items: flex-start; gap: 6px; margin: 0; color: var(--muted); font-size: .82rem; line-height: 1.5; }
+.bk-done-address svg { flex: none; width: 16px; height: 16px; margin-top: 2px; }
+.bk-done-actions { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 8px; padding-top: 12px; border-top: 1px dashed var(--line); }
+.bk-done-action { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 6px; border-radius: 12px; border: 1px solid var(--line); background: #fff; color: var(--grape-deep); font: inherit; font-size: .88rem; font-weight: 600; text-decoration: none; cursor: pointer; white-space: nowrap; }
+.bk-done-action:active { transform: scale(.98); }
+.bk-done-qr.bk-card { justify-items: center; gap: 4px; padding: 16px; }
+.bk-done-qr-title { font-size: .95rem; }
+.bk-done-qr .bk-checkin { border: 0; padding: 0; background: none; }
+.bk-again { justify-self: center; display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; color: var(--grape-deep); font-weight: 600; text-decoration: none; }

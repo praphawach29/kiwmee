@@ -110,6 +110,7 @@ Next.js 15 + Supabase · deploy บน Railway service `salon-booking-os-v1` →
 | #108 | **ขั้นยืนยันตามดีไซน์ Confirm + บันทึก "ฝากถึงร้าน"**: สรุปการจองอยู่บนสุด (กล่องวันที่ · บริการ · วัน เวลา ช่าง · ตัวเลือกอื่น · ราคา "· จ่ายที่ร้าน" · ปุ่ม "แก้ไข" กลับหน้าวันและเวลา) แล้วจึงฟอร์ม · นโยบายเลื่อน/ยกเลิกเหลือบรรทัดเดียว · **บั๊ก**: ช่อง "โน้ตเพิ่มเติมถึงช่าง" เดิมไม่ถูกบันทึกเลย → เปลี่ยนเป็น "ฝากถึงร้าน (ไม่บังคับ)" เก็บใน `bookings.customer_note` (≤300 ตัว, เซิร์ฟเวอร์เขียน) แสดงในหน้าการจองของร้าน (รายการ 📝 + รายละเอียด) · migration `20261025003900_booking_note.sql` |
 | #109 | **หัวร้านบรรทัดเดียว (ดีไซน์ Main)**: ใต้ชื่อร้านเหลือบรรทัดเดียว "เปิดอยู่ · ถึง 20:00 น. · <ที่อยู่>" (ยาวเกินตัดด้วย …) แทน 3 บรรทัด (เวลาเปิด / "จองคิวออนไลน์ · …" / ที่อยู่) · มีที่อยู่แล้วไม่ต่อท้าย "จองล่วงหน้าได้" · หน้าอื่นที่ไม่มี `shop.today` (ลิงก์การจอง ฯลฯ) แสดงแบบเดิม · ไม่มี migration |
 | #110 | **ป้าย "พรีเมียม" ร้านติ๊กเอง**: เดิมหน้าจองเดาจากราคา ≥ 2,000 บาท (หรือชื่อมีคำว่าพรีเมียม) → `offerings.premium` (ค่าตั้งต้น false) ติ๊กในหน้าแก้บริการของแดชบอร์ด "แสดงป้าย พรีเมียม ✨ บนหน้าจอง" · บันทึกบริการโดยไม่ส่งค่านี้ = คงค่าเดิม · migration `20261025004000_offering_premium.sql` |
+| #111 | **e2e สมาชิก LINE ใน CI**: job `e2e` ตั้ง `NEXT_PUBLIC_LIFF_ID` (ค่าทดสอบ) · ทุกเทสต์แทน LIFF SDK ด้วยตัวปลอม (`noLine`: เบราว์เซอร์ ไม่ได้เข้าสู่ระบบ) ไม่ติดต่อ LINE จริง · เทสต์ใหม่ 2 ข้อ: (1) สมาชิกใน LINE — การ์ดต้อนรับ (ชื่อ ครั้งที่มา ระดับ คะแนน นัดถัดไป) → "จองซ้ำ" ได้ช่างแนน + บริการเดิมในหน้าวันและเวลา → ฟอร์มเติมชื่อ/เบอร์จากครั้งก่อน เบอร์ไม่บังคับ (คำตอบ `/me/welcome` ถูกจำลอง; ฝั่งเซิร์ฟเวอร์ทดสอบใน my-bookings.test.js) (2) เบราว์เซอร์ — การ์ด "เข้าสู่ระบบด้วย LINE" กดแล้วเรียก `liff.login` · รันไม่มี LIFF ID สองข้อนี้ข้าม · ไม่มี migration |
 | #30 | **CI** (`.github/workflows/ci.yml`: unit, DB, build ทุก PR) · ปรับ roadmap ให้ตรงสถานะจริง |
 
 **Migration ล่าสุดที่รันบนโปรเจกต์ Kiwmee (เดิมชื่อ booking-v2, ref `ezubgqeqdipwfnmorqkj`) แล้ว: `20261025004000_offering_premium.sql`** (เจ้าของยืนยัน 7 พ.ย. 2569, PR #110)
@@ -215,9 +216,10 @@ SUPABASE_TEST_DB_URL=postgres://postgres@127.0.0.1:54329/booking_test npm run te
 **Playwright** (หน้าจองจริงกับ DB ทดสอบ):
 
 ```bash
-npx next build && BOOKING_DB_URL=postgres://postgres@127.0.0.1:54329/booking_test BOOKING_BOOK_LIMIT=100 SUPABASE_URL=https://example.supabase.co SUPABASE_PUBLISHABLE_KEY=test npx next start -p 3100   # รันค้างไว้ (next dev พังที่ /dashboard — ดู §4)
+export NEXT_PUBLIC_LIFF_ID=1234567890-AbCdEfGh   # เหมือน CI: ส่วนสมาชิก LINE แสดง (เทสต์ใช้ LIFF SDK ปลอม ไม่ติดต่อ LINE จริง)
+npx next build && BOOKING_DB_URL=postgres://postgres@127.0.0.1:54329/booking_test BOOKING_BOOK_LIMIT=100 SUPABASE_URL=https://example.supabase.co SUPABASE_PUBLISHABLE_KEY=test LINE_REMINDERS=off npx next start -p 3100   # รันค้างไว้ (next dev พังที่ /dashboard — ดู §4)
 PILOT_BASE_URL=http://127.0.0.1:3100 PW_EXECUTABLE=$(ls -d /opt/pw-browsers/chromium-*/chrome-linux*/chrome | head -1) \
-  npx playwright test e2e/booking-v2.spec.cjs                                                                  # ล่าสุด 8/8
+  npx playwright test e2e/booking-v2.spec.cjs                                                                  # ล่าสุด 14/14 (ไม่มี LIFF ID: 12 ผ่าน 2 ข้าม)
 ```
 - โหมด dev คอมไพล์ช้า: กดปุ่มก่อนหน้า hydrate จะไม่ตอบสนอง → ใช้ `waitForLoadState("networkidle")`
 - ห้าม format วันที่ด้วย `weekday: "short"` ในสิ่งที่ render ฝั่งเซิร์ฟเวอร์ (Node กับเบราว์เซอร์ให้ชื่อย่อต่างกัน → hydration mismatch) · หน้าจองใช้ตาราง `SHORT_DAYS` ของตัวเอง

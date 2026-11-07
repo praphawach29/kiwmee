@@ -1,11 +1,24 @@
 // The customer booking page (docs/DESIGN_BOOKING_V3.md) against the demo shops in supabase/seed.sql.
 // Needs the app running with BOOKING_DB_URL pointing at a database built by scripts/db-test.sh:
-//   BOOKING_DB_URL=postgres://… BOOKING_BOOK_LIMIT=100 npx next dev -p 3100
-//   PILOT_BASE_URL=http://127.0.0.1:3100 npx playwright test e2e/booking-v2.spec.cjs
+//   BOOKING_DB_URL=postgres://… BOOKING_BOOK_LIMIT=100 NEXT_PUBLIC_LIFF_ID=1234567890-AbCdEfGh npx next dev -p 3100
+//   NEXT_PUBLIC_LIFF_ID=1234567890-AbCdEfGh PILOT_BASE_URL=http://127.0.0.1:3100 npx playwright test e2e/booking-v2.spec.cjs
 // Dates and times are picked from what the page offers, so the tests do not depend on the day.
 const { test, expect } = require("@playwright/test");
 
 test.use({ viewport: { width: 390, height: 844 } });
+
+// LINE (LIFF): CI runs the app with a LIFF ID, so every page loads LINE's SDK. The tests never reach
+// LINE: the SDK is replaced by a stand-in — by default "a browser, not signed in to LINE"; the LINE
+// member test swaps in "inside LINE, signed in". What the server would say about the member is stubbed
+// too (the server checks the token with LINE; supabase/tests/my-bookings.test.js covers that part).
+const LINE_SDK = "https://static.line-scdn.net/**";
+const fakeLine = (inLine) => `window.liff = {
+  init: async () => {}, isInClient: () => ${inLine}, isLoggedIn: () => ${inLine},
+  login: () => { window.__lineLogin = true; }, getIDToken: () => ${inLine ? '"e2e-token"' : "null"},
+  getProfile: async () => ({ displayName: "Malee", pictureUrl: null })
+};`;
+const noLine = (target) => target.route(LINE_SDK, (r) => r.fulfill({ contentType: "text/javascript", body: fakeLine(false) }));
+test.beforeEach(async ({ context }) => noLine(context));
 
 const enabled = (page, step) => page.locator(`[data-testid="option-${step}"]:not([disabled])`);
 const option = (page, step, text) => page.getByTestId(`option-${step}`).filter({ hasText: text });
@@ -191,6 +204,8 @@ test("barber: no barber to pick; Mondays are greyed out as closed", async ({ pag
 test("two customers on one slot: the second is told it was just taken and picks again", async ({ browser }) => {
   const a = await browser.newPage();
   const b = await browser.newPage();
+  await noLine(a);
+  await noLine(b);
   for (const page of [a, b]) {
     await start(page);
     await service(page, "ทรีตเมนต์", "ช่างแนน");
@@ -442,6 +457,7 @@ test("rental by the day: pick-up day, how many days, pick-up time; back the same
 // as it would against zoomed page text.
 test("inside LINE, the app's own text zoom is undone; in a browser the page is left alone", async ({ browser }) => {
   const line = await browser.newContext({ viewport: { width: 390, height: 844 }, userAgent: "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126 Mobile Safari/537.36 Line/14.20.0" });
+  await noLine(line);
   const zoomed = await line.newPage();
   await zoomed.addInitScript(() => {
     const measure = CanvasRenderingContext2D.prototype.measureText;
@@ -457,7 +473,61 @@ test("inside LINE, the app's own text zoom is undone; in a browser the page is l
   await line.close();
 
   const plain = await browser.newPage();
+  await noLine(plain);
   await plain.goto("/b/bloom-hair");
   expect(await plain.evaluate(() => [getComputedStyle(document.documentElement).fontSize, document.documentElement.dataset.textZoom ?? null])).toEqual(["16px", null]);
   await plain.close();
+});
+
+// A LINE member (design "Kiwmee ปรับหน้าตา"): welcomed by name with points and the next booking, one tap
+// to book last time's service with the same stylist, and the form already filled from last time.
+test("LINE member: welcome card, book again with the same stylist, the form filled from last time", async ({ page, context }) => {
+  test.skip(!process.env.NEXT_PUBLIC_LIFF_ID, "start the app (and the tests) with NEXT_PUBLIC_LIFF_ID");
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await context.unroute(LINE_SDK);
+  await context.route(LINE_SDK, (r) => r.fulfill({ contentType: "text/javascript", body: fakeLine(true) }));
+  await page.route("**/me/rewards", (r) => r.fulfill({ contentType: "application/json", body: JSON.stringify({ data: null }) }));
+  await page.route("**/me/welcome", (r) => r.fulfill({ contentType: "application/json", body: JSON.stringify({ data: {
+    customer: { name: "มาลี ใจดี", phone: "0899998888", visits: 3 },
+    points: { name: "Bloom Club", balance: 1250, tier: { name: "Gold" }, usable: 2 },
+    next: { status: "confirmed", date: "2030-01-15", start: "14:00", offering: "ทรีตเมนต์บำรุงผม", link: "/b/bloom-hair/me" },
+    last: { offeringId: "c1000000-0000-4000-8000-000000000001", offering: "ตัดผมหญิง + สระไดร์", resourceId: "a1000000-0000-4000-8000-000000000001", resource: "ช่างแนน" }
+  } }) }));
+
+  await start(page);
+  const welcome = page.getByTestId("member-welcome");
+  await expect(welcome).toContainText("คุณ มาลี ใจดี");
+  await expect(welcome).toContainText("มาแล้ว 3 ครั้ง");
+  await expect(welcome).toContainText("Gold");
+  await expect(welcome).toContainText("1,250");
+  await expect(welcome).toContainText("แลกได้ 2 รางวัล");
+  await expect(welcome.getByTestId("member-next")).toContainText("14:00 น.");
+  await expect(page.getByTestId("member-login")).toHaveCount(0);
+
+  // จองซ้ำ: the cut with ช่างแนน, straight to the day and time
+  await welcome.getByTestId("member-rebook").click();
+  await expect(page.getByRole("heading", { name: "เลือกวันและเวลา" })).toBeVisible();
+  await expect(option(page, "resource", "ช่างแนน")).toHaveAttribute("data-selected", "true");
+  await expect(page.getByRole("button", { name: /ตัดผมหญิง.*เปลี่ยน/ })).toBeVisible();
+  await idle(page);
+  await enabled(page, "time").first().click();
+
+  // the form: last time's name and phone, the phone not required inside LINE
+  await expect(page.getByRole("heading", { name: "ข้อมูลผู้รับบริการ" })).toBeVisible();
+  await expect(page.getByLabel(/ชื่อ-นามสกุล/)).toHaveValue("มาลี ใจดี");
+  await expect(page.getByLabel(/เบอร์โทรศัพท์/)).toHaveValue("0899998888");
+  await expect(page.getByLabel(/เบอร์โทรศัพท์/)).not.toHaveAttribute("required", "");
+  await expect(page.locator(".bk-line-connected-card")).toContainText("เชื่อมต่อ LINE แล้ว");
+  expect(errors).toEqual([]);
+});
+
+test("in a browser, a shop with LINE set up offers to sign in with LINE", async ({ page }) => {
+  test.skip(!process.env.NEXT_PUBLIC_LIFF_ID, "start the app (and the tests) with NEXT_PUBLIC_LIFF_ID");
+  await start(page);
+  const login = page.getByTestId("member-login");
+  await expect(login).toContainText("เข้าสู่ระบบด้วย LINE");
+  await expect(page.getByTestId("member-welcome")).toHaveCount(0);
+  await login.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
+  expect(await page.evaluate(() => window.__lineLogin)).toBe(true);
 });

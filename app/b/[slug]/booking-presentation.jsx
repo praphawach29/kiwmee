@@ -315,18 +315,18 @@ export function BookingReview({ items, onEdit, busy, price, id = "booking-review
 // Stacked confirmation drawer matching Stitch Screen 3: status badge + price on top, full-width button below
 export function BookingSubmitBar({ formId, disabled, busy, price, deposit, payFull = false, label = "ราคารวม" }) {
   const isDeposit = typeof deposit === "number" && deposit > 0;
-  const what = payFull ? "จ่ายเต็ม" : "มัดจำ";
+  // two columns, each a label over its amount: the whole price, and what is paid now (or at the shop)
   return (
     <div className="bk-submit-bar" data-has-price={Boolean(price) || undefined}>
       {price && (
         <div className="bk-submit-total" aria-hidden="true">
-          <div className="bk-submit-badge-row">
-            <span className="bk-pulse-dot" aria-hidden="true" />
-            <span>{isDeposit ? `${what} ฿${deposit.toLocaleString("th-TH")} · รับ QR หลังยืนยัน` : "ชำระเงินตามเงื่อนไขของร้าน"}</span>
-          </div>
-          <div className="bk-submit-price-row">
+          <div className="bk-submit-sum">
             <small>{label}</small>
             <strong>{price}</strong>
+          </div>
+          <div className="bk-submit-now" data-now={isDeposit || undefined}>
+            <small>{isDeposit ? (payFull ? "จ่ายเต็มตอนนี้" : "มัดจำตอนนี้") : "ชำระเงิน"}</small>
+            <strong>{isDeposit ? `${deposit.toLocaleString("th-TH")} บาท` : "ที่ร้าน"}</strong>
           </div>
         </div>
       )}

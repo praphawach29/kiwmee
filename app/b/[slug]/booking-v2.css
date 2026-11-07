@@ -1825,3 +1825,39 @@ a.bk-points-button { display: inline-flex; align-items: center; text-decoration:
 .bk-submit-now[data-now] { background: var(--mint-tint); }
 .bk-submit-now[data-now] small { color: var(--mint-deep); }
 .bk-submit-now[data-now] strong { color: var(--mint-deep); font-size: 1.1rem; }
+
+/* Wide screens (design "Kiwmee ปรับหน้าตา" · BookDesktop) */
+.bk-header-steps { display: none; }
+.bk-aside-list { display: grid; gap: 10px; margin: 0; font-size: .9rem; }
+.bk-aside-list > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.bk-aside-list dt { color: var(--muted); flex: none; }
+.bk-aside-list dd { margin: 0; text-align: right; overflow-wrap: anywhere; color: var(--ink); }
+.bk-aside-total { display: flex; justify-content: space-between; align-items: baseline; padding-top: 12px; border-top: 1px dashed var(--line); }
+.bk-aside-total span { color: var(--muted); }
+.bk-aside-total strong { font-family: var(--font-display); font-weight: 500; font-size: 1.5rem; color: var(--ink); }
+.bk-aside-next { width: 100%; min-height: 52px; border-radius: 16px; font-family: var(--font-display); font-size: 1rem; }
+@media (min-width: 1024px) {
+  .customer-workspace[data-has-aside="true"] .bk-header-steps { display: flex; flex: none; gap: 18px; margin: 0 0 0 auto; padding: 0; list-style: none; font-size: .88rem; color: var(--muted); }
+  .customer-workspace[data-has-aside="true"] .bk-header-steps li[data-state="done"] { color: var(--mint-deep); }
+  .customer-workspace[data-has-aside="true"] .bk-header-steps li[data-state="now"] { color: var(--grape-deep); font-weight: 600; }
+  .customer-workspace[data-has-aside="true"] .bk-shop-header { padding: 20px 24px; }
+  .customer-workspace[data-has-aside="true"] .bk-shop-header h1 { font-size: 1.6rem; }
+  .customer-workspace[data-has-aside="true"] .bk-shop-monogram { width: 64px; height: 64px; font-size: 1.6rem; }
+  /* the header carries the steps; the summary carries the way on */
+  .customer-workspace[data-has-aside="true"] .bk-progress-wrap { display: none; }
+  .customer-workspace[data-has-aside="true"] .bk-step1-drawer { display: none; }
+  .customer-workspace[data-has-aside="true"] .bk-shell:has(.bk-step1-drawer) { padding-bottom: 24px; }
+  /* times: morning, afternoon and evening side by side */
+  .customer-workspace[data-has-aside="true"] .bk-time-groups { grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+  .customer-workspace[data-has-aside="true"] .bk-time-group .bk-options-time { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.bk-aside-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.bk-aside-head .bk-text-button { min-height: 32px; font-size: .9rem; }
+.bk-aside-list dd[data-strong] { font-weight: 600; }
+@media (min-width: 1024px) {
+  /* the summary beside the form says what is booked: no second copy above the form */
+  .customer-workspace[data-has-aside="true"] .bk-confirm-summary { display: none; }
+}
+@media (min-width: 1024px) {
+  .customer-workspace[data-has-aside="true"] .bk-submit-bar[data-has-price] .bk-submit-total { justify-content: space-between; }
+}

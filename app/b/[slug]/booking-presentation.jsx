@@ -517,9 +517,9 @@ export function DepositBox({ deposit, status, deadline, uploadUrl, onUploaded })
         <figure className="bk-qr">
           <span className="bk-qr-brand" aria-hidden="true">PromptPay · พร้อมเพย์</span>
           <img src={deposit.qr} alt={`QR พร้อมเพย์ ยอด ${baht(deposit.due)}`} width="220" height="220" />
+          {/* the amount is above and the account below: one short line is enough */}
           <figcaption>
-            <strong>สแกนจ่ายด้วยแอปธนาคาร</strong>
-            <span>ยอด {baht(deposit.due)} ใส่ให้แล้ว{info.accountName ? ` · ${info.accountName}` : ""}</span>
+            <strong>สแกนด้วยแอปธนาคาร</strong>
           </figcaption>
           <a className="bk-secondary" href={deposit.qr} download="promptpay-qr.png">บันทึกรูป QR</a>
           <small className="bk-muted">ในแอป LINE: กดค้างที่รูปเพื่อบันทึก แล้วเลือกจากอัลบั้มในแอปธนาคาร</small>

@@ -111,3 +111,15 @@ test('overview (design AdminMobile): three numbers, the next customers, and "+" 
   assert.match(html, /class="ad-fab" aria-label="เพิ่มการจอง"/);
   assert.doesNotMatch(html, /ทางลัด|ทรัพยากร \/ บริการ/);
 });
+
+test('bookings month calendar: weekday heads, the month in as many weeks as it needs, the chosen day marked', () => {
+  const { BookingCalendar } = load('[slug]/shop-admin-client.jsx', '\nexport { BookingCalendar };');
+  // November 2026 starts on a Sunday and has 30 days: five weeks
+  const html = render(BookingCalendar, { slug: 'bloom-hair', day: '2026-11-10', onDay() {}, refresh: null });
+  assert.equal((html.match(/role="columnheader"/g) || []).length, 7);
+  assert.equal((html.match(/role="gridcell"/g) || []).length, 35);
+  assert.match(html, /aria-selected="true"[^>]*aria-label="วันอังคารที่ 10 พฤศจิกายน 2569"/);
+  assert.match(html, /data-testid="booking-calendar"/);
+  // February 2026 starts on a Sunday and has 28 days: four weeks
+  assert.equal((render(BookingCalendar, { slug: 'x', day: '2026-02-03', onDay() {} }).match(/role="gridcell"/g) || []).length, 28);
+});

@@ -507,6 +507,8 @@ function BookingsTab({ slug, catalog, initialDay, focusId = null, startAdding = 
       {link && <ManageLinkCard shop={catalog.shop} link={link} onClose={() => setLink(null)} />}
       <RentalTimeline slug={slug} catalog={catalog} day={day} onDay={setDay} refresh={list} />
       {docs && <DocumentsPanel slug={slug} booking={docs} onClose={() => { setDocs(null); load(); }} />}
+      <div className="ad-bookings-layout">
+      <BookingCalendar slug={slug} day={day} onDay={setDay} refresh={list} />
       <section className="ad-card">
         <div className="ad-row ad-wrap ad-between">
           <div className="ad-row ad-wrap">
@@ -627,6 +629,7 @@ function BookingsTab({ slug, catalog, initialDay, focusId = null, startAdding = 
           })}
         </ul>
       </section>
+      </div>
       {checkout && (
         <CheckoutForm
           key={checkout.id}
@@ -656,6 +659,94 @@ function BookingsTab({ slug, catalog, initialDay, focusId = null, startAdding = 
         />
       )}
     </div>
+  );
+}
+
+// The month at a glance (owner's ask): a dot on each day with bookings (orange when some still wait
+// for the shop), today ringed, the chosen day filled; tap a day and its list shows under the calendar.
+// Folds away to the day arrows, remembered on this device.
+const WEEKDAYS = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
+function BookingCalendar({ slug, day, onDay, refresh }) {
+  const [month, setMonth] = useState(day.slice(0, 7));
+  const [counts, setCounts] = useState({});
+  const [open, setOpenState] = useState(true);
+  useEffect(() => {
+    try { if (window.localStorage.getItem("kiwmee.dash.calendar") === "closed") setOpenState(false); } catch { /* private mode */ }
+  }, []);
+  const setOpen = (on) => {
+    setOpenState(on);
+    try { window.localStorage.setItem("kiwmee.dash.calendar", on ? "open" : "closed"); } catch { /* private mode */ }
+  };
+  // the month follows the chosen day (the arrows below, a date picked elsewhere)
+  useEffect(() => setMonth(day.slice(0, 7)), [day]);
+  const first = `${month}-01`;
+  const lead = new Date(`${first}T00:00:00Z`).getUTCDay();
+  const start = addDays(first, -lead);
+  // as many weeks as the month needs (five, sometimes four or six)
+  const monthDays = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).getUTCDate();
+  const length = Math.ceil((lead + monthDays) / 7) * 7;
+  useEffect(() => {
+    if (!open) return;
+    let current = true;
+    api("GET", shopPath(slug, `/bookings/days?from=${start}&days=${length}`))
+      .then((rows) => current && setCounts(Object.fromEntries((rows ?? []).map((r) => [r.date, r]))))
+      .catch(() => current && setCounts({}));
+    return () => { current = false; };
+  }, [slug, start, length, refresh, open]);
+  const shift = (n) => {
+    const d = new Date(`${first}T00:00:00Z`);
+    d.setUTCMonth(d.getUTCMonth() + n);
+    setMonth(d.toISOString().slice(0, 7));
+  };
+  const title = new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", month: "long", year: "numeric" }).format(new Date(`${first}T00:00:00Z`));
+  const now = today();
+  const cells = Array.from({ length }, (_, i) => addDays(start, i));
+  const total = cells.filter((d) => d.startsWith(month)).reduce((n, d) => n + (counts[d]?.count ?? 0), 0);
+  return (
+    <section className="ad-card ad-calendar" aria-label="ปฏิทินการจอง" data-testid="booking-calendar">
+      <div className="ad-calendar-head">
+        <button type="button" className="ad-secondary ad-icon-btn" onClick={() => shift(-1)} aria-label="เดือนก่อนหน้า" hidden={!open}>‹</button>
+        <div className="ad-calendar-title">
+          <strong>{title}</strong>
+          {open && <span className="ad-muted">{total} การจองในเดือนนี้</span>}
+        </div>
+        <button type="button" className="ad-secondary ad-icon-btn" onClick={() => shift(1)} aria-label="เดือนถัดไป" hidden={!open}>›</button>
+        <button type="button" className="ad-link" onClick={() => setOpen(!open)} aria-expanded={open}>{open ? "ย่อปฏิทิน" : "ดูปฏิทิน"}</button>
+      </div>
+      {open && (
+        <>
+          <div className="ad-calendar-grid" role="grid">
+            {WEEKDAYS.map((w) => <span key={w} className="ad-calendar-dow" role="columnheader">{w}</span>)}
+            {cells.map((d) => {
+              const c = counts[d];
+              return (
+                <button
+                  key={d}
+                  type="button"
+                  role="gridcell"
+                  className="ad-calendar-day"
+                  data-outside={!d.startsWith(month) || undefined}
+                  data-today={d === now || undefined}
+                  aria-selected={d === day}
+                  aria-label={`${longDate(d)}${c?.count ? ` · ${c.count} การจอง${c.waiting ? ` (รอยืนยัน ${c.waiting})` : ""}` : ""}`}
+                  onClick={() => onDay(d)}
+                >
+                  <span>{Number(d.slice(8))}</span>
+                  {c?.count > 0 && (
+                    <i className="ad-calendar-dot" data-waiting={c.waiting > 0 || undefined} aria-hidden="true">{c.count > 1 ? c.count : ""}</i>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <div className="ad-calendar-legend" aria-hidden="true">
+            <span><i className="ad-calendar-dot" /> มีการจอง</span>
+            <span><i className="ad-calendar-dot" data-waiting /> มีรอยืนยัน</span>
+            {day !== now && <button type="button" className="ad-link" onClick={() => onDay(now)}>ไปวันนี้</button>}
+          </div>
+        </>
+      )}
+    </section>
   );
 }
 

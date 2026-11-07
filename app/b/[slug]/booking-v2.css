@@ -222,6 +222,9 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .bk-done-head { display: grid; justify-items: center; gap: 6px; text-align: center; padding: 22px 16px; background: var(--surface); border-radius: 20px; box-shadow: var(--shadow); border: 1px solid var(--line-soft); }
 .bk-done-head h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1.55rem; color: var(--ink); }
 .bk-done-icon { display: grid; place-items: center; width: 68px; height: 68px; border-radius: 50%; background: var(--mint-tint); color: var(--mint-deep); box-shadow: 0 4px 16px rgba(61, 220, 151, 0.25); }
+.bk-done-eyebrow { color: var(--grape-deep); font-size: .76rem; font-weight: 700; letter-spacing: .02em; }
+.bk-done-head p { max-width: 38ch; margin: 0; line-height: 1.55; }
+.bk-done-head[data-state="held"] .bk-done-icon, .bk-done-head[data-state="pending"] .bk-done-icon { background: #fff3d8; color: #986300; box-shadow: 0 4px 16px rgba(152, 99, 0, .12); }
 
 /* digital pass ticket card */
 .bk-pass-card { position: relative; border-radius: 22px; border: 1px solid var(--line); box-shadow: 0 8px 30px rgba(106, 76, 255, 0.08); padding: 20px; overflow: hidden; }
@@ -229,6 +232,34 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .bk-pass-brand { display: flex; align-items: center; gap: 8px; }
 .bk-pass-badge { font-family: var(--font-display); font-size: .75rem; font-weight: 700; letter-spacing: .08em; padding: 3px 8px; border-radius: 6px; background: var(--ink); color: #fff; }
 .bk-pass-code { font-family: var(--font-display); font-size: 1.05rem; font-weight: 700; color: var(--grape-deep); letter-spacing: .05em; }
+.bk-done .bk-pass-header { align-items: center; margin: -20px -20px 0; padding: 16px 20px; border: 0; background: var(--grape); color: #fff; }
+.bk-done .bk-pass-brand { min-width: 0; }
+.bk-done .bk-pass-badge { overflow: hidden; padding: 0; background: none; color: #fff; font-size: .78rem; letter-spacing: .07em; text-overflow: ellipsis; white-space: nowrap; }
+.bk-done-status { flex: none; padding: 5px 10px; border-radius: 999px; background: rgba(255, 255, 255, .18); color: #fff; font-size: .72rem; font-weight: 700; }
+.bk-done-status[data-state="held"], .bk-done-status[data-state="pending"] { background: #fff3d8; color: #805300; }
+.bk-done-reference { display: grid; gap: 1px; padding: 16px 0 14px; }
+.bk-done-reference small, .bk-done-total small { color: var(--muted); font-size: .72rem; font-weight: 600; }
+.bk-done-reference strong { color: var(--grape-deep); font-family: var(--font-display); font-size: 1.32rem; font-weight: 700; letter-spacing: .015em; }
+.bk-done-schedule { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px; border-radius: 17px; background: var(--selected); }
+.bk-done-schedule .bk-when { min-width: 0; }
+.bk-done-schedule .bk-date-tile { background: var(--grape); border-radius: 13px; }
+.bk-done-schedule .bk-when > div strong { font-size: .92rem; }
+.bk-done-schedule .bk-when > div span { font-size: .8rem; line-height: 1.4; }
+.bk-done-total { display: grid; flex: none; justify-items: end; padding-left: 10px; border-left: 1px solid rgba(106, 76, 255, .16); }
+.bk-done-total strong { color: var(--grape-deep); font-family: var(--font-display); font-size: 1.12rem; white-space: nowrap; }
+.bk-done-summary { margin-top: 2px; }
+.bk-done-location { display: flex; align-items: center; gap: 11px; min-width: 0; margin-top: 4px; padding: 13px; border-radius: 16px; background: var(--bg); }
+.bk-done-location-icon { display: grid; place-items: center; width: 40px; height: 40px; flex: none; border-radius: 13px; background: var(--selected); color: var(--grape-deep); }
+.bk-done-location-copy { display: grid; gap: 3px; min-width: 0; flex: 1; }
+.bk-done-location-copy strong { overflow: hidden; font-size: .86rem; text-overflow: ellipsis; white-space: nowrap; }
+.bk-done-location-copy small { color: var(--muted); font-size: .74rem; line-height: 1.4; overflow-wrap: anywhere; }
+.bk-done-map-link { display: inline-flex; align-items: center; justify-content: center; gap: 4px; flex: none; padding: 8px 10px; border-radius: 11px; background: var(--selected); color: var(--grape-deep); font-size: .78rem; font-weight: 650; text-decoration: none; }
+.bk-done-map-link:empty { display: none; }
+@media (max-width: 380px) {
+  .bk-done-schedule { flex-wrap: wrap; }
+  .bk-done-total { width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 8px 0 0; border-top: 1px solid rgba(106, 76, 255, .16); border-left: 0; }
+  .bk-done .bk-pass-header { margin-inline: -14px; padding-inline: 14px; }
+}
 .bk-done-qr { display: grid; justify-items: center; padding: 10px 0 4px; }
 .bk-cal-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; }
 

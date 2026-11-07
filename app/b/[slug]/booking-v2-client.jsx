@@ -1079,6 +1079,14 @@ function CalendarIcon() {
   );
 }
 
+function LocationIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z" /><circle cx="12" cy="10" r="2.5" />
+    </svg>
+  );
+}
+
 function StripIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
@@ -1180,6 +1188,14 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
   const rows = items.filter((item) => item.step !== "date" && item.step !== "time");
   const managePath = booking.manageToken ? `/b/${shop.slug}/manage/${booking.manageToken}` : null;
   const held = booking.status === "held";
+  const pendingStatus = booking.status === "pending";
+  const statusLabel = held ? "รอชำระมัดจำ" : pendingStatus ? "รอร้านตรวจสอบ" : booking.status === "confirmed" ? "ยืนยันแล้ว" : "รอรับบริการ";
+  const successTitle = held ? "กันคิวไว้ให้แล้ว" : pendingStatus ? "ส่งสลิปแล้ว รอร้านยืนยัน" : "จองคิวสำเร็จเรียบร้อยแล้ว!";
+  const successCopy = held && booking.deposit
+    ? "ชำระมัดจำตามรายละเอียดด้านล่างเพื่อยืนยันคิว"
+    : pendingStatus
+      ? "ร้านกำลังตรวจสอบสลิป คุณดูสถานะการจองได้จากลิงก์ด้านล่าง"
+      : "บันทึกหมายเลขการจองและ QR นี้ไว้ใช้เมื่อมาถึงร้าน";
   // the ID / licence a rental asks for (design 11.7 E3), sent right here with the customer's consent
   const asked = shop.offerings.find((o) => o.id === selected.offeringId)?.requiredDocuments ?? [];
   const [documents, setDocuments] = useState(() =>
@@ -1230,12 +1246,15 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
 
   return (
     <section className="bk-done" data-testid="booking-done">
-      <div className="bk-done-head">
+      <div className="bk-done-head" data-state={held ? "held" : pendingStatus ? "pending" : "confirmed"} role="status" aria-live="polite">
         <span className="bk-done-icon" aria-hidden="true">
-          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7" /></svg>
+          {held || pendingStatus
+            ? <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+            : <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7" /></svg>}
         </span>
-        <h1>{held ? "กันคิวไว้ให้แล้ว" : booking.status === "pending" ? "ส่งสลิปแล้ว รอร้านยืนยัน" : "จองคิวสำเร็จเรียบร้อยแล้ว!"}</h1>
-        <p className="bk-muted">{held && booking.deposit ? "โอนมัดจำเพื่อยืนยันคิว" : "รายละเอียดการจองของคุณอยู่ด้านล่าง"}</p>
+        <small className="bk-done-eyebrow">สรุปการจอง · {shop.name}</small>
+        <h1>{successTitle}</h1>
+        <p className="bk-muted">{successCopy}</p>
       </div>
 
       {booking.deposit && ["held", "pending"].includes(booking.status) && managePath && (
@@ -1255,27 +1274,36 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
       <div className="bk-card bk-done-card bk-pass-card">
         <div className="bk-pass-header">
           <div className="bk-pass-brand">
-            <span className="bk-pass-badge">{shop.name} · BOOKING PASS</span>
-            {booking.id && <strong className="bk-pass-code">#{bookingCode(booking.id)}</strong>}
+            <span className="bk-pass-badge">KIWMEE BOOKING PASS</span>
           </div>
-          <span className="bk-status" data-status={booking.status}>
-            {held ? "กันคิวไว้แล้ว" : booking.status === "pending" ? "รอตรวจสลิป" : "รอรับบริการ"}
-          </span>
+          <span className="bk-done-status" data-state={held ? "held" : pendingStatus ? "pending" : "confirmed"}>{statusLabel}</span>
         </div>
 
-        {selected.date && (
-          <div className="bk-when">
-            <span className="bk-date-tile" aria-hidden="true">
-              <small>{dayPart({ month: "short" })}</small>
-              <strong>{dayPart({ day: "numeric" })}</strong>
-            </span>
-            <div>
-              <strong>{formatDate(selected.date, { long: true, shortMonth: true })}</strong>
-              <span>{when}</span>
-            </div>
+        {booking.id && (
+          <div className="bk-done-reference">
+            <small>หมายเลขการจอง</small>
+            <strong>#{bookingCode(booking.id)}</strong>
           </div>
         )}
-        <dl className="bk-summary">
+
+        {selected.date && (
+          <div className="bk-done-schedule">
+            <div className="bk-when">
+              <span className="bk-date-tile" aria-hidden="true">
+                <small>{dayPart({ month: "short" })}</small>
+                <strong>{dayPart({ day: "numeric" })}</strong>
+              </span>
+              <div>
+                <strong>{formatDate(selected.date, { long: true, shortMonth: true })}</strong>
+                <span>{when}</span>
+              </div>
+            </div>
+            {booking.price?.total > 0 && (
+              <div className="bk-done-total"><small>ราคารวม</small><strong>{money(booking.price.total)}</strong></div>
+            )}
+          </div>
+        )}
+        <dl className="bk-summary bk-done-summary">
           {rows.map((item) => (
             <div key={item.step}>
               <dt>{item.label}</dt>
@@ -1286,14 +1314,6 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
             <div>
               <dt>{givenWord}</dt>
               <dd>{assigned || "ร้านจัดให้"}</dd>
-            </div>
-          )}
-          {booking.price?.total > 0 && (
-            <div>
-              <dt>ราคา</dt>
-              <dd>
-                <strong>{money(booking.price.total)}</strong>
-              </dd>
             </div>
           )}
           {booking.points && (
@@ -1310,7 +1330,13 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
           </div>
         )}
         {held && booking.holdExpiresAt && !booking.deposit && <p className="bk-notice">กรุณาชำระเงินภายใน {timeFormat(booking.holdExpiresAt)} น.</p>}
-        <DirectionsButton href={shop.directions} />
+        {(shop.address || shop.directions) && (
+          <div className="bk-done-location">
+            <span className="bk-done-location-icon" aria-hidden="true"><LocationIcon /></span>
+            <span className="bk-done-location-copy"><strong>{shop.name}</strong>{shop.address && <small>{shop.address}</small>}</span>
+            <DirectionsButton href={shop.directions} className="bk-done-map-link" />
+          </div>
+        )}
       </div>
 
       <div className="bk-actions-grid">

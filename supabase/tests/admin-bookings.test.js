@@ -109,6 +109,31 @@ test("the front desk takes a phone booking at any minute and sees it on the day'
   });
 });
 
+test("the month view: how many bookings each day has and how many still wait, for this shop only", { skip }, async () => {
+  const before = (() => { const d = new Date(`${DAY}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); })();
+  await as(USERS.staffA, async () => {
+    const shop = await admin.memberShop(db, "bloom-hair");
+    await bookings.createBooking(db, shop, { offeringId: CUT, resourceId: NAN, date: DAY, time: "10:00", customer: { name: "หนึ่ง" } });
+    await bookings.createBooking(db, shop, { offeringId: CUT, resourceId: BEE, date: DAY, time: "10:00", customer: { name: "สอง" } });
+    const gone = await bookings.createBooking(db, shop, { offeringId: CUT, resourceId: NAN, date: DAY, time: "14:00", customer: { name: "ยกเลิก" } });
+    await bookings.cancelBooking(db, shop, gone.id, {});
+    // one still waits for the shop (set directly, as the database owner)
+    await db.query("reset role");
+    await db.query("update public.bookings set status = 'pending' where business_id = $1 and customer_name = 'สอง'", [SHOP_A]);
+    await admin.actAs(db, USERS.staffA);
+    const days = await bookings.bookingDays(db, shop, { from: before, days: 3 });
+    assert.equal(days.length, 3);
+    assert.deepEqual(days[0], { date: before, count: 0, waiting: 0 });
+    assert.deepEqual(days[1], { date: DAY, count: 2, waiting: 1 }, "the cancelled one does not count");
+    assert.equal((await bookings.bookingDays(db, shop, { from: DAY, days: 99 })).length, 42, "at most six weeks");
+    await refused(() => bookings.bookingDays(db, shop, { from: "9/11" }), (e) => e.status === 422);
+  });
+  await as(USERS.ownerB, async () => {
+    const other = await admin.memberShop(db, "gentleman-barber");
+    assert.ok((await bookings.bookingDays(db, other, { from: DAY, days: 1 })).every((d) => d.count === 0), "another shop sees none of bloom-hair's");
+  });
+});
+
 test("the shop adds equipment to a booking it takes itself", { skip }, async () => {
   await as(USERS.staffA, async () => {
     const shop = await admin.memberShop(db, "bloom-hair");

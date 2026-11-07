@@ -113,6 +113,29 @@ async function listBookings(client, shop, { from, days = 1 } = {}) {
   return queryBookings(client, shop, "b.start_at < $3 and b.end_at > $2", [new Date(fromMs).toISOString(), new Date(fromMs + n * DAY_MS).toISOString()]);
 }
 
+/**
+ * The month view on the bookings page: for each day from `from` (up to 42 days), how many bookings
+ * touch it and how many of those still wait for the shop (held/pending). Counts only — the day's
+ * list comes from listBookings. Runs as the member (RLS: their own shop only).
+ */
+async function bookingDays(client, shop, { from, days = 42 } = {}) {
+  const n = Math.min(Math.max(Number(days) || 1, 1), 42);
+  const { rows } = await client.query(
+    `select d::date::text as date,
+            count(b.id)::int as count,
+            count(b.id) filter (where b.status in ('held', 'pending'))::int as waiting
+       from generate_series($2::date, $2::date + ($3::int - 1), interval '1 day') d
+       left join public.bookings b
+         on b.business_id = $1
+        and b.status in ('held', 'pending', 'confirmed', 'checked_in', 'completed')
+        and b.start_at < ((d + interval '1 day')::timestamp at time zone $4)
+        and b.end_at > (d::timestamp at time zone $4)
+      group by d order by d`,
+    [shop.id, date(from), n, shop.timezone]
+  );
+  return rows;
+}
+
 const BOOKING_REF = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{8})$/;
 
 /**
@@ -413,4 +436,4 @@ async function getSlip(client, shop, id, n = 0) {
   return rows[0] ? { image: rows[0].image, createdAt: rows[0].created_at, total: rows[0].total } : null;
 }
 
-module.exports = { listBookings, findBooking, freeTimes, createBooking, rescheduleBooking, cancelBooking, setStatus, issueManageLink, confirmDeposit, getSlip, lineCard, notifyChange, REASON_TEXT };
+module.exports = { listBookings, bookingDays, findBooking, freeTimes, createBooking, rescheduleBooking, cancelBooking, setStatus, issueManageLink, confirmDeposit, getSlip, lineCard, notifyChange, REASON_TEXT };

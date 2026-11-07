@@ -9,7 +9,7 @@ const crypto = require("node:crypto");
 const { REASON_TEXT } = require("./reason-text");
 const { AppError, badRequest, notFound } = require("../errors");
 const { findShopWithCatalog } = require("./catalog-repository");
-const { getOptions, nextStep, reconcile, localToMs } = require("./options-engine");
+const { getOptions, nextStep, reconcile, localToMs, msToLocal } = require("./options-engine");
 const { issueToken } = require("./manage-booking");
 const { getSetting } = require("./platform-settings");
 const { bookingCard, manageLink, pushLine, sealLink } = require("./line-notify");
@@ -67,7 +67,23 @@ function priceFrom(prices, offeringId) {
   return { amount: cheapest.amount, unit: cheapest.unit, varies: new Set(own.map((p) => p.amount)).size > 1 };
 }
 
-async function shopInfo(db, slug) {
+// Today's opening hours in the shop's own time, for the page header: { open, close } or null (closed today)
+function todayHours(catalog, timezone, now = Date.now()) {
+  const date = msToLocal(now, timezone).date;
+  const day = new Date(`${date}T00:00:00Z`).getUTCDay();
+  if ((catalog.closures ?? []).some((c) => c.date === date && c.is_full_day)) return null;
+  const hours = catalog.hours ?? [];
+  // a shop with no hours saved yet is open 10–19 every day (as the options engine assumes)
+  const h = hours.length ? hours.find((x) => x.day_of_week === day) : { is_open: true, open_time: "10:00", close_time: "19:00" };
+  if (!h?.is_open) return null;
+  const open = String(h.open_time).slice(0, 5);
+  const close = String(h.close_time).slice(0, 5);
+  const time = msToLocal(now, timezone).time;
+  // before opening · open now · closed for the day
+  return { open, close, state: time < open ? "later" : time < close ? "open" : "closed" };
+}
+
+async function shopInfo(db, slug, { now = Date.now() } = {}) {
   const { shop, catalog } = await requireShopWithCatalog(db, slug);
   // Keep gallery reads out of the availability snapshot: media never affects booking rules.
   const { rows: [gallery] } = await db.query(
@@ -102,6 +118,8 @@ async function shopInfo(db, slug) {
     address: gallery.address ?? "",
     directions: directionsLink({ address: gallery.address, mapUrl: gallery.map_url }),
     documentRetentionDays: catalog.settings?.document_retention_days ?? 30,
+    // "เปิดวันนี้ 10:00–19:00" under the shop's name; null = closed today
+    today: todayHours(catalog, shop.timezone, now),
     flow: {
       entry: catalog.flow.entry,
       then: catalog.flow.then,

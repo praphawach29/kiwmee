@@ -338,6 +338,13 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     setPending({ step, value });
     return run({ selected: { ...selected, [KEY[step]]: value }, changed: step });
   };
+  // "จองซ้ำ": last time's service (and stylist, if the customer can still pick them); then the day
+  const rebook = (last) => {
+    const resourceId = last.resourceId && resources.has(last.resourceId) ? last.resourceId : undefined;
+    setPending({ step: "show", value: "rebook" });
+    setStepTrail(["offering"]);
+    return run({ selected: { offeringId: last.offeringId, ...(resourceId ? { resourceId } : {}) }, changed: resourceId ? "resource" : "offering" });
+  };
   const showStep = (step) => {
     setPending({ step: "show", value: step });
     return run({ selected, ask: step });
@@ -492,7 +499,8 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
           </button>
         )}
         {!atCustomer && summaryItems.length === 0 && (
-          <MemberWelcome liff={liff} welcome={welcome} slug={shop.slug} />
+          <MemberWelcome liff={liff} welcome={welcome} slug={shop.slug} busy={busy}
+            rebook={welcome?.last && offerings.has(welcome.last.offeringId) ? welcome.last : null} onRebook={rebook} />
         )}
         {/* the venue's details while the customer is still looking; out of the way once they start picking */}
         {!atCustomer && summaryItems.length === 0 && <ShopAbout shop={shop} />}
@@ -541,24 +549,6 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
 
         {ask && view.options && (
           <section className="bk-card" data-step={ask}>
-            {ask === "offering" && (
-              <>
-                <div className="bk-storefront-banner">
-                  <div className="bk-storefront-icon">🏪</div>
-                  <div className="bk-storefront-details">
-                    <div className="bk-storefront-row">
-                      <strong>{shop.name}</strong>
-                      <span className="bk-badge-live">● เปิดให้บริการ</span>
-                    </div>
-                    <small className="bk-muted">{shop.address || "พร้อมดูแลและให้บริการลูกค้าทุกท่าน"}</small>
-                  </div>
-                </div>
-                <div className="bk-tip-notice">
-                  <span>💡</span>
-                  <span><strong>เลือกตัวเลือกที่ต้องการ:</strong> ระบบแสดงเฉพาะคิวที่ร้านเปิดให้จอง</span>
-                </div>
-              </>
-            )}
             <div className="bk-step-head">
               <h2>{ask === "resource" ? `เลือก${resourceWord}` : ask === "time" ? "เลือกวันและเวลา" : (rental && RENTAL_TITLE[ask]) || STEP_TITLE[ask]}</h2>
               {ask === "time" && selected.date && (
@@ -938,7 +928,7 @@ function TimeTabs({ options, optionButton }) {
 // booking and the discount comes off at the desk. Rewards they cannot use yet say why.
 // The first thing a LINE member sees: their LINE picture and name, tier, points, and the next booking
 // still to come. Outside LINE (a browser, with the shop's LIFF app set up): one tap to sign in with LINE.
-function MemberWelcome({ liff, welcome, slug }) {
+function MemberWelcome({ liff, welcome, slug, rebook = null, onRebook, busy = false }) {
   if (!liff.idToken) {
     if (!liff.login) return null;
     return (
@@ -986,6 +976,16 @@ function MemberWelcome({ liff, welcome, slug }) {
             </a>
           )}
         </div>
+      )}
+      {rebook && (
+        <button type="button" className="bk-member-rebook" data-testid="member-rebook" disabled={busy} onClick={() => onRebook?.(rebook)}>
+          <span className="bk-member-rebook-icon" aria-hidden="true">↻</span>
+          <span className="bk-member-copy">
+            <strong>จองซ้ำ</strong>
+            <small>{rebook.offering}{rebook.resource ? ` · ${rebook.resource}` : ""}</small>
+          </span>
+          <span aria-hidden="true">›</span>
+        </button>
       )}
       <a className="bk-member-link" href={`/b/${slug}/me`}>บัตรสมาชิกและประวัติการจอง ›</a>
     </section>

@@ -170,6 +170,17 @@ export function ShopHeader({ shop, subtitle }) {
       <span className="bk-shop-monogram" aria-hidden="true">{shop.name?.[0]}</span>
       <div className="bk-shop-header-info">
         <h1>{shop.name}</h1>
+        {shop.today !== undefined && (
+          <p className="bk-shop-today" data-open={shop.today?.state === "open"}>
+            {!shop.today
+              ? "วันนี้ร้านปิด · จองล่วงหน้าได้"
+              : shop.today.state === "open"
+                ? `เปิดอยู่ · ถึง ${shop.today.close} น.`
+                : shop.today.state === "closed"
+                  ? `วันนี้ปิดแล้ว · จองล่วงหน้าได้`
+                  : `เปิดวันนี้ ${shop.today.open}–${shop.today.close} น.`}
+          </p>
+        )}
         <p className="bk-muted">
           {shop.address ? (
             <span className="bk-header-location">
@@ -215,8 +226,8 @@ export function BookingProgress({ phase, ask, resourceWord = "รายการ
   return (
     <div className="bk-progress-wrap">
       <div className="bk-progress-meta">
-        <span className="bk-step-badge">ขั้นตอนที่ {stepIndex + 1} จาก {totalSteps} · {stepTitle}</span>
-        <span className="bk-progress-pct">{percent}% เสร็จสิ้น</span>
+        <span className="bk-step-badge"><b>ขั้นที่ {stepIndex + 1}</b> จาก {totalSteps} · {stepTitle}</span>
+        <span className="bk-progress-pct">{PHASES[current + 1] ? `ต่อไป: ${PHASES[current + 1].label}` : "เสร็จแล้ว"}</span>
       </div>
       <ol className="bk-progress" aria-label="ภาพรวมการจอง">
         {PHASES.map((item, index) => (

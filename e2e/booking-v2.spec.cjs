@@ -38,6 +38,10 @@ test("salon: a cut, anyone, then the day and a time on one step", async ({ page 
   page.on("pageerror", (e) => errors.push(e.message));
   await start(page);
   await expect(page.getByRole("heading", { name: "เริ่มจองจาก" })).toHaveCount(0);
+  // the header says whether the shop is open today; a slim progress line says what comes next
+  await expect(page.locator(".bk-shop-today")).toHaveText(/เปิดวันนี้|เปิดอยู่|ปิดแล้ว|ร้านปิด/);
+  await expect(page.locator(".bk-progress-meta")).toContainText("ต่อไป: วันและเวลา");
+  await expect(page.locator(".bk-storefront-banner")).toHaveCount(0);
   await option(page, "offering", "ตัดผมหญิง").click();
 
   await expect(page.getByRole("heading", { name: "เลือกช่าง" })).toBeVisible();

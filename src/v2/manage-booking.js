@@ -115,7 +115,7 @@ async function findManaged(db, slug, token, now = new Date()) {
       addons: b.addons.map((a) => ({ name: a.name, quantity: a.quantity, total: Number(a.total) })),
       // a deposit to transfer (held), or a slip the shop has not looked at yet (pending)
       deposit: b.deposit_due !== null
-        ? { due: b.deposit_due, slips: b.slips, paymentInfo: ["held", "pending"].includes(b.status) ? b.payment_info : null, ...(qr ? { qr } : {}) }
+        ? { due: b.deposit_due, slips: b.slips, ...(b.price > 0 && b.deposit_due >= b.price ? { payFull: true } : {}), paymentInfo: ["held", "pending"].includes(b.status) ? b.payment_info : null, ...(qr ? { qr } : {}) }
         : null
     },
     cancel: policy(b.can_cancel),

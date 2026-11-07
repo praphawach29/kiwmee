@@ -111,7 +111,13 @@ async function shopInfo(db, slug) {
     // asked before booking; the transfer details come with the held booking
     deposit: (catalog.settings?.deposit_mode ?? "none") === "none"
       ? null
-      : { mode: catalog.settings.deposit_mode, value: catalog.settings.deposit_value, holdMinutes: catalog.settings.hold_minutes },
+      : {
+          mode: catalog.settings.deposit_mode,
+          value: catalog.settings.deposit_value,
+          holdMinutes: catalog.settings.hold_minutes,
+          // the customer may pick "pay in full" instead of the deposit (migration …003800)
+          allowFull: ["fixed", "percent"].includes(catalog.settings.deposit_mode) && catalog.settings.deposit_allow_full !== false
+        },
     selfService: {
       cancel: catalog.settings?.customer_can_cancel ?? true,
       reschedule: catalog.settings?.customer_can_reschedule ?? true,
@@ -234,13 +240,18 @@ async function book(
   const startAt = new Date(localToMs(selected.date, selected.time, shop.timezone)).toISOString();
   // a deposit to transfer (or a flow that ends in payment): the booking is held until the shop has it
   const hold = (catalog.flow.then || []).includes("payment") || (catalog.settings?.deposit_mode ?? "none") !== "none";
+  // the customer chose to transfer the whole price instead of the deposit
+  const payFull = body.payFull === true && ["fixed", "percent"].includes(catalog.settings?.deposit_mode) && catalog.settings?.deposit_allow_full !== false;
   // the customer's link to see, cancel or move this booking (/b/<slug>/manage/<token>)
   const link = issueToken();
   let result;
   try {
     const { rows } = await db.query(
-      `select x.booking, case when $12::uuid is null then null else public.loyalty_hold_for_booking((x.booking->>'id')::uuid, $12::uuid) end as points
-         from (select public.booking_attach_manage_token(public.create_booking($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, null, $11::jsonb), $10) as booking) x`,
+      // one statement: the booking, the points set aside, then (paying in full) the due raised to the price
+      `select x.booking, p.points,
+              case when $13 then public.booking_pay_full((x.booking->>'id')::uuid, coalesce((p.points->>'discount')::numeric, 0)) end as full_due
+         from (select public.booking_attach_manage_token(public.create_booking($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, null, $11::jsonb), $10) as booking) x
+         cross join lateral (select case when $12::uuid is null then null else public.loyalty_hold_for_booking((x.booking->>'id')::uuid, $12::uuid) end as points offset 0) p`,
       [
         shop.id,
         selected.offeringId,
@@ -253,7 +264,8 @@ async function book(
         line ? "liff" : "web",
         link.hash,
         JSON.stringify(selected.addons ?? {}),
-        rewardId
+        rewardId,
+        payFull
       ]
     );
     const b = rows[0].booking;
@@ -266,7 +278,11 @@ async function book(
       endAt: b.end_at,
       holdExpiresAt: b.hold_expires_at,
       deposit: b.deposit_due !== null && b.deposit_due !== undefined
-        ? { due: Number(b.deposit_due), paymentInfo: catalog.settings?.payment_info ?? {} }
+        ? {
+            due: Number(rows[0].full_due ?? b.deposit_due),
+            paymentInfo: catalog.settings?.payment_info ?? {},
+            ...(rows[0].full_due !== null && rows[0].full_due !== undefined ? { payFull: true } : {})
+          }
         : null,
       price: b.price,
       manageToken: link.token,

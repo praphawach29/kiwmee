@@ -3205,6 +3205,12 @@ function DepositSettings({ settings, setSetting }) {
           <label className="ad-field">ข้อความถึงลูกค้า (ไม่บังคับ)<input maxLength={200} placeholder="เช่น โอนแล้วแนบสลิปในหน้านี้" value={info.note ?? ""} onChange={(e) => setInfo("note", e.target.value)} /></label>
         </div>
       )}
+      {(mode === "fixed" || mode === "percent") && (
+        <label className="ad-check">
+          <input type="checkbox" checked={settings.depositAllowFull !== false} onChange={(e) => setSetting("depositAllowFull", e.target.checked)} />
+          ให้ลูกค้าเลือกจ่ายเต็มจำนวนตอนจองได้ (แทนมัดจำ · จ่ายครบแล้วไม่ต้องจ่ายเพิ่มที่ร้าน)
+        </label>
+      )}
       {mode !== "none" && (
         <label className="ad-check">
           <input type="checkbox" checked={settings.slipAutoConfirm === true} onChange={(e) => setSetting("slipAutoConfirm", e.target.checked)} />

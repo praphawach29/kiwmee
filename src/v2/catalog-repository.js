@@ -20,7 +20,7 @@ function catalogSql(id) {
     'settings', (select row_to_json(t) from (
         select min_lead_minutes, slot_interval_minutes, max_advance_days, hold_minutes,
                customer_can_cancel, customer_can_reschedule, customer_change_cutoff_hours,
-               deposit_mode, deposit_value::float8 as deposit_value, payment_info, document_retention_days
+               deposit_mode, deposit_value::float8 as deposit_value, payment_info, document_retention_days, deposit_allow_full
           from public.business_booking_settings where business_id = ${id}) t),
     'flows', ${list(`select entry, require, optional, "then", options from public.booking_flows where business_id = ${id} and category is null`)},
     'hours', ${list(`select day_of_week, is_open, open_time, close_time from public.business_hours where business_id = ${id}`)},

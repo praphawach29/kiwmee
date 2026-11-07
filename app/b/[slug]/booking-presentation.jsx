@@ -291,15 +291,16 @@ export function BookingReview({ items, onEdit, busy, price, id = "booking-review
 }
 
 // Stacked confirmation drawer matching Stitch Screen 3: status badge + price on top, full-width button below
-export function BookingSubmitBar({ formId, disabled, busy, price, deposit, label = "ราคารวม" }) {
+export function BookingSubmitBar({ formId, disabled, busy, price, deposit, payFull = false, label = "ราคารวม" }) {
   const isDeposit = typeof deposit === "number" && deposit > 0;
+  const what = payFull ? "จ่ายเต็ม" : "มัดจำ";
   return (
     <div className="bk-submit-bar" data-has-price={Boolean(price) || undefined}>
       {price && (
         <div className="bk-submit-total" aria-hidden="true">
           <div className="bk-submit-badge-row">
             <span className="bk-pulse-dot" aria-hidden="true" />
-            <span>{isDeposit ? `มัดจำ ฿${deposit.toLocaleString("th-TH")} · รับ QR หลังยืนยัน` : "ชำระเงินตามเงื่อนไขของร้าน"}</span>
+            <span>{isDeposit ? `${what} ฿${deposit.toLocaleString("th-TH")} · รับ QR หลังยืนยัน` : "ชำระเงินตามเงื่อนไขของร้าน"}</span>
           </div>
           <div className="bk-submit-price-row">
             <small>{label}</small>
@@ -322,7 +323,7 @@ export function BookingSubmitBar({ formId, disabled, busy, price, deposit, label
               <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
               <polyline points="22 4 12 14.01 9 11.01" />
             </svg>
-            <span>{isDeposit ? "ยืนยันและดู QR มัดจำ" : "ยืนยันการจองคิว"}</span>
+            <span>{isDeposit ? (payFull ? "ยืนยันและดู QR ชำระเงิน" : "ยืนยันและดู QR มัดจำ") : "ยืนยันการจองคิว"}</span>
           </span>
         )}
       </button>
@@ -474,7 +475,7 @@ export function DepositBox({ deposit, status, deadline, uploadUrl, onUploaded })
   return (
     <section className="bk-deposit" data-status={status} aria-labelledby="deposit-title">
       <div className="bk-deposit-head">
-        <h2 id="deposit-title">{waiting ? "โอนมัดจำเพื่อยืนยันคิว" : "ส่งสลิปแล้ว รอร้านตรวจ"}</h2>
+        <h2 id="deposit-title">{waiting ? (deposit.payFull ? "โอนชำระเต็มจำนวนเพื่อยืนยันคิว" : "โอนมัดจำเพื่อยืนยันคิว") : "ส่งสลิปแล้ว รอร้านตรวจ"}</h2>
         <strong className="bk-deposit-amount">{baht(deposit.due)}</strong>
       </div>
       {waiting && deadline && <p className="bk-deposit-deadline">กรุณาโอนและส่งสลิปภายใน <b>{deadline}</b> ไม่อย่างนั้นคิวจะถูกปล่อยให้คนอื่น</p>}

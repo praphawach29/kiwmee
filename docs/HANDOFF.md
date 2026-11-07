@@ -1,12 +1,33 @@
 # Kiwmee — สรุปสถานะสำหรับ session ถัดไป
 
-ปรับล่าสุด: 2 พ.ย. 2569 · อ่านคู่กับ `CLAUDE.md` (กติกาการทำงาน) และ `docs/SALES_READINESS_ROADMAP.md` (แผนสู่การขายจริง)
+ปรับล่าสุด: 7 พ.ย. 2569 (หลัง PR #115) · อ่านคู่กับ `CLAUDE.md` (กติกาการทำงาน) และ `docs/SALES_READINESS_ROADMAP.md` (แผนสู่การขายจริง)
 
 **Kiwmee** = ระบบจองคิวหลายร้านผ่านเว็บ/LINE ที่กำลังต่อยอดเป็น**ระบบสมาชิก + คะแนนสะสม** ในผลิตภัณฑ์เดียว
 Next.js 15 + Supabase · deploy บน Railway service `salon-booking-os-v1` → `https://kiwmee.up.railway.app` ทุกครั้งที่ merge เข้า `main`
 
 **GitHub Repo:** `https://github.com/praphawach29/kiwmee.git` (เดิม `salon-booking-os-v1`) · ชื่อ service บน Railway และโดเมนยังเป็นชื่อเดิม (`kiwmee.up.railway.app`) ·
 ถ้า Railway ไม่ deploy หลัง merge ให้เชื่อม repo ใหม่ที่ Railway → service → Settings → Source
+
+---
+
+## 0. สถานะล่าสุด (7 พ.ย. 2569)
+
+**บน production แล้วทั้งหมดถึง PR #115** · migration ล่าสุดที่รันบน Kiwmee: `20261025004000_offering_premium.sql` (ไฟล์ถัดไป `…004100_`)
+
+**ใช้งานได้ครบแล้ว**
+- หน้าจองลูกค้า (มือถือ + จอคอม) ตามดีไซน์ "Kiwmee ปรับหน้าตา" — https://claude.ai/code/artifact/d037cb80-b5a6-40ab-a4be-a156a9150238
+  (หน้า Main, DateTime, Confirm, Done, BookDesktop ทำแล้ว · **AdminMobile ยังไม่ได้เทียบ**)
+  - บริการแถวเดียว → ช่าง/วัน/เวลาหน้าเดียว ("ใครก็ได้" + วันแรกที่ว่างเลือกให้) → ยืนยัน (สรุปบนสุด, "ฝากถึงร้าน") → สำเร็จ (การ์ดเดียว, QR เช็กอิน, เพิ่มลงปฏิทิน/เส้นทาง)
+  - แถบล่างทุกขั้น (มือถือ) / กล่องสรุปด้านขวาพร้อมปุ่ม "ต่อไป" (จอคอม) · หัวร้าน "เปิดอยู่ · ถึง 20:00 น. · ที่อยู่"
+  - ป้าย "ยอดนิยม" นับจากการจองจริง 30 วัน (≥3 ครั้ง) · "พรีเมียม" ร้านติ๊กเองต่อบริการ
+- สมาชิก LINE บนหน้าจอง: การ์ดต้อนรับ (ชื่อ ระดับ คะแนน นัดถัดไป) · "จองซ้ำ" · ฟอร์มเติมชื่อ/เบอร์จากครั้งก่อน · ปุ่มเข้าสู่ระบบด้วย LINE
+  (ในเบราว์เซอร์ของแอป LINE ปุ่มนี้เปิดหน้าเดิมผ่าน `liff.line.me` — เจ้าของทดสอบในแอปจริงแล้วใช้ได้)
+- มัดจำ: fixed / percent / full + **ลูกค้าเลือกจ่ายเต็มได้** (ร้านปิดได้) · QR พร้อมเพย์ · ตรวจสลิป EasySlip (ใส่คีย์ใน `/super`) · ปิดบิลหักมัดจำ
+- ระบบสมาชิก/คะแนน/ระดับ/รางวัล (6a–6f ของ `docs/LOYALTY_DESIGN.md`) อยู่บน production แล้ว
+
+**การทดสอบ**: `npm test` 177 · `test:db` 167 · e2e หน้าจอง 16 ข้อ (CI รันทุก PR พร้อม LIFF จำลอง) — ดู §5
+
+**ที่เจ้าของควรทำ/ตรวจ**: ติ๊ก "พรีเมียม" ให้บริการที่ต้องการ (หลัง #110 ไม่มีบริการไหนเป็นพรีเมียม) · ตรวจ backup ของ Supabase (§4 ข้อ 3) · ใส่ชื่อนิติบุคคล/อีเมลใน `/privacy` `/terms` (§4 ข้อ 4)
 
 ---
 
@@ -115,6 +136,7 @@ Next.js 15 + Supabase · deploy บน Railway service `salon-booking-os-v1` →
 | #113 | **แถบล่างขั้นยืนยัน (เจ้าของขอ)**: เดิม "มัดจำ ฿1,800 · รับ QR หลังยืนยัน" (ป้ายขึ้นสองบรรทัด) + "ราคา รวม 3,600 บาท" → สองช่อง ป้ายบน/ยอดล่าง: ซ้าย "ราคารวม / 3,600 บาท" · ขวากล่องเขียว "มัดจำตอนนี้ / 1,800 บาท" (หรือ "จ่ายเต็มตอนนี้") · ไม่มีมัดจำ: "ชำระเงิน / ที่ร้าน" · เอา "รับ QR หลังยืนยัน" ออก (ปุ่มบอกแล้ว) · ไม่มี migration |
 | #114 | **หน้าจองบนจอคอม (ดีไซน์ BookDesktop)**: ≥1024px ที่มีกล่องสรุปด้านขวา — ขั้นตอน "✓ บริการ · 2 วันและเวลา · 3 ข้อมูลผู้จอง" อยู่ขวาของหัวร้าน (แทนแถบขั้นตอน) · กล่องสรุปใหม่ (`SummaryAside`): บริการ, ระยะเวลา, ช่าง, "วันเวลา" บรรทัดเดียว, รวม, ปุ่ม "ต่อไป: …" (แทนแถบล่าง) และ "แก้ไข" ตอนกรอกข้อมูล · ช่วงเช้า/บ่าย/เย็นเรียงข้างกัน 3 คอลัมน์ · ขั้นกรอกข้อมูลซ่อนการ์ดสรุปซ้ำ · มือถือไม่เปลี่ยน · e2e เดสก์ท็อป 1 ข้อ · ไม่มี migration |
 | #115 | **ข้อความใต้ QR พร้อมเพย์ (เจ้าของขอ)**: เหลือ "สแกนด้วยแอปธนาคาร" บรรทัดเดียว (เอา "ยอด … ใส่ให้แล้ว · ชื่อบัญชี" ออก — ยอดอยู่ด้านบน เลขบัญชี/ชื่อบัญชีอยู่ด้านล่าง) · ใช้ทั้งหน้าจองสำเร็จและลิงก์การจอง · render test · ไม่มี migration |
+| #116 | **บันทึกสถานะโปรเจกต์ (7 พ.ย. 2569)**: §0 สถานะล่าสุด (สิ่งที่อยู่บน production, การทดสอบ, สิ่งที่เจ้าของควรทำ) · §3 ขั้นต่อไปใหม่ (AdminMobile, add-on ในฟอร์มร้าน, แพ็กเกจ, แจ้งโควตา, Publish LINE Login) · §5 ตัวเลขเทสต์ + เคล็ดลับเครื่อง cloud · §6 ข้อความเริ่ม session · เอกสารอย่างเดียว |
 | #30 | **CI** (`.github/workflows/ci.yml`: unit, DB, build ทุก PR) · ปรับ roadmap ให้ตรงสถานะจริง |
 
 **Migration ล่าสุดที่รันบนโปรเจกต์ Kiwmee (เดิมชื่อ booking-v2, ref `ezubgqeqdipwfnmorqkj`) แล้ว: `20261025004000_offering_premium.sql`** (เจ้าของยืนยัน 7 พ.ย. 2569, PR #110)
@@ -169,19 +191,17 @@ Next.js 15 + Supabase · deploy บน Railway service `salon-booking-os-v1` →
 
 ## 3. ขั้นต่อไป
 
-**ลำดับหลักอยู่ใน `docs/SALES_READINESS_ROADMAP.md`** (Phase 0 → 5) · ตอนนี้อยู่ **Phase 0**: ~~หน้าเชิญพนักงาน~~ (#30) → ~~แจ้งร้านในแอดมิน + ประวัติการเลื่อน~~ (#32) · ~~หน้าจองลูกค้าโฉมใหม่~~ (#33) · ~~แอดมินบนมือถือโฉมใหม่~~ (#34) · ~~ลิงก์จัดการการจองจากร้าน~~ (#35)
-→ ตรวจ backup (เจ้าของ) → Phase 1 LINE
-· **ตัวเลือกเสริม (add-on) + การจองหลายวัน**: แบบระบบอยู่ใน `docs/FLEXIBLE_BOOKING_DESIGN.md` ข้อ 11 (PR #36) · ขั้น A (#37) + B/C (#38) เสร็จ: ลูกค้าจองพร้อมตัวเลือกเสริมได้ · มัดจำโอนเงิน (#39) เสร็จ → **สนามกีฬาใช้งานได้ครบตามแผน** · ถัดไป: ตัวเลือกเสริมในฟอร์มเพิ่มการจองของร้าน, ผูกแพ็กเกจ (D), หรือ Phase 1 LINE · ตัดสินแล้ว: ธุรกิจแรก = สนามกีฬา (เช่าอุปกรณ์) · มัดจำรุ่นแรก = โอนเงิน + แนบสลิป · ของนำออกไปใช้ (รถ กล้อง มือถือ) ทำทีหลังพร้อมเอกสาร + สมาชิก/คะแนน · ตารางด้านล่างคือขั้นของ LINE/สมาชิก (Phase 1–4) ตาม `docs/LOYALTY_DESIGN.md` §6
+**ลำดับหลักอยู่ใน `docs/SALES_READINESS_ROADMAP.md`** · ระบบจอง + สมาชิก (6a–6f) ทำครบแล้ว · ตัวเลือกที่คุยไว้ล่าสุด (เจ้าของเลือก):
 
-| ขั้น | งาน | รออะไร |
-|---|---|---|
-| 6d ✅ | บิล (PR #15) — มัดจำมีในตารางแล้วแต่ยังไม่มีหน้าจอ (ทำใน 6f) | — |
-| 6a | LIFF ล็อกอิน LINE ในหน้าจอง · การ์ดยืนยัน + เตือนนัด (ปุ่มเปิดลิงก์จัดการการจอง) | เจ้าของสร้าง LINE Login channel + LIFF app + Messaging API channel (provider เดียวกัน) |
-| 6b | หน้า "ของฉัน" `/me` ใน LIFF: นัดที่จะถึง + ประวัติ ข้ามร้าน | 6a |
-| 6c ✅ | แบรนด์/สาขา (PR #16) | — |
-| 6e | คะแนน: กติกา, ได้ตอนปิดบิล, ดึงคืนตอนคืนเงิน, หมดอายุ + เตือน, QR สมาชิก | 6b, 6c, 6d |
-| 6e+ | ระดับสมาชิก + บัตรตามระดับ + รางวัลแบบคูปอง | 6e |
-| 6f | ลูกค้าเลือกรางวัลตอนจอง (hold/redeem/release) · ย้ายระบบชำระเงิน/ตรวจสลิปของ v1 | 6e |
+| งาน | หมายเหตุ |
+|---|---|
+| แดชบอร์ดร้านบนมือถือตามดีไซน์ **AdminMobile** | อยู่ใน artifact เดียวกับหน้าจอง (ลิงก์ใน §0) · ยังไม่ได้เทียบ |
+| ตัวเลือกเสริมในฟอร์มเพิ่มการจองของร้าน | ร้านจองให้ลูกค้าเองยังเลือก add-on ไม่ได้ |
+| ผูกแพ็กเกจ (ขั้น D ของ `docs/FLEXIBLE_BOOKING_DESIGN.md`) | |
+| แจ้งเตือนเมื่อโควตาใกล้เต็ม (80%/100%) | เจ้าของยังไม่ต้องการบังคับ (§4 ข้อ 8) |
+| Publish LINE Login channel | channel สถานะ Developing ใช้ได้เฉพาะ admin/tester (§2 ตั้ง LIFF) |
+
+ประวัติขั้น 6a–6f: ✅ ทั้งหมด (6d #15, 6c #16, 6e/6e+/หมดอายุ/6f/ตรวจสลิป/รางวัลบริการฟรี/โลโก้+wallet #56–#68, 6f จ่ายเต็ม #101, สมาชิกบนหน้าจอง #102–#103)
 
 ---
 
@@ -212,7 +232,7 @@ D=/var/lib/postgresql/kiwmee-test
 mkdir -p $D && chown postgres $D && chmod 700 $D
 [ -f $D/PG_VERSION ] || su postgres -c "/usr/lib/postgresql/16/bin/initdb -D $D -U postgres --auth=trust -E UTF8"
 su postgres -c "/usr/lib/postgresql/16/bin/pg_ctl -D $D -o '-p 54329 -k /tmp' -l $D/log start"
-SUPABASE_TEST_DB_URL=postgres://postgres@127.0.0.1:54329/booking_test npm run test:db   # ล่าสุด 87/87
+SUPABASE_TEST_DB_URL=postgres://postgres@127.0.0.1:54329/booking_test npm run test:db   # ล่าสุด 167/167
 ```
 - อย่าเก็บ data dir ไว้ใน scratchpad (`/tmp/claude-0/...`) — สิทธิ์โฟลเดอร์ถูกรีเซ็ตแล้ว Postgres เปิดไม่ได้
 - เครื่องรีสตาร์ตแล้ว server หยุด ต้องสั่ง `pg_ctl … start` ใหม่
@@ -223,11 +243,14 @@ SUPABASE_TEST_DB_URL=postgres://postgres@127.0.0.1:54329/booking_test npm run te
 export NEXT_PUBLIC_LIFF_ID=1234567890-AbCdEfGh   # เหมือน CI: ส่วนสมาชิก LINE แสดง (เทสต์ใช้ LIFF SDK ปลอม ไม่ติดต่อ LINE จริง)
 npx next build && BOOKING_DB_URL=postgres://postgres@127.0.0.1:54329/booking_test BOOKING_BOOK_LIMIT=100 SUPABASE_URL=https://example.supabase.co SUPABASE_PUBLISHABLE_KEY=test LINE_REMINDERS=off npx next start -p 3100   # รันค้างไว้ (next dev พังที่ /dashboard — ดู §4)
 PILOT_BASE_URL=http://127.0.0.1:3100 PW_EXECUTABLE=$(ls -d /opt/pw-browsers/chromium-*/chrome-linux*/chrome | head -1) \
-  npx playwright test e2e/booking-v2.spec.cjs                                                                  # ล่าสุด 14/14 (ไม่มี LIFF ID: 12 ผ่าน 2 ข้าม)
+  npx playwright test e2e/booking-v2.spec.cjs                                                                  # ล่าสุด 16/16 (ไม่มี LIFF ID: 13 ผ่าน 3 ข้าม)
 ```
 - โหมด dev คอมไพล์ช้า: กดปุ่มก่อนหน้า hydrate จะไม่ตอบสนอง → ใช้ `waitForLoadState("networkidle")`
 - ห้าม format วันที่ด้วย `weekday: "short"` ในสิ่งที่ render ฝั่งเซิร์ฟเวอร์ (Node กับเบราว์เซอร์ให้ชื่อย่อต่างกัน → hydration mismatch) · หน้าจองใช้ตาราง `SHORT_DAYS` ของตัวเอง
 - เทสต์ e2e ซ้ำหลายรอบ คิวใน DB ทดสอบจะเต็ม → `npm run test:db` สร้าง DB ใหม่
+- เครื่อง cloud: Postgres ทดสอบมักหยุดเองระหว่างรอบ → เช็ก `psql -h 127.0.0.1 -p 54329 -U postgres -c 'select 1'` ก่อน ถ้าไม่ตอบ: `rm -f $D/postmaster.pid` แล้ว `pg_ctl … start` ใหม่
+- `node --test "app/b/[slug]/…"` ใช้ไม่ได้ (วงเล็บถูกตีเป็น glob) → รัน `node "app/b/[slug]/booking-presentation.test.cjs"` ตรง ๆ หรือ `npm test` ทั้งชุด
+- ดูหน้าจอสมาชิก LINE ในเครื่อง: เปิด server พร้อม `NEXT_PUBLIC_LIFF_ID` แล้วใน Playwright `route("https://static.line-scdn.net/**")` ตอบ `window.liff` ปลอม และ `route("**/me/welcome")` ตอบข้อมูลสมาชิก (ดูเทสต์ "LINE member" ใน `e2e/booking-v2.spec.cjs`)
 
 **แอดมิน `/dashboard`** ต้องใช้ Supabase Auth จริง ล็อกอินในเครื่อง cloud ไม่ได้ → ดูหน้าจอจริงได้โดยเปิด `next dev` แล้วใช้ Playwright
 `page.route("**/api/dashboard/shops/**")` ตอบด้วยฟังก์ชันจริงใน `src/v2/admin-*.js` ที่รันกับ DB ทดสอบในฐานะเจ้าของร้าน
@@ -244,5 +267,5 @@ PILOT_BASE_URL=http://127.0.0.1:3100 PW_EXECUTABLE=$(ls -d /opt/pw-browsers/chro
 
 ## 6. ข้อความเริ่ม session ใหม่ (คัดลอกไปใช้ได้)
 
-> อ่าน `CLAUDE.md` และ `docs/HANDOFF.md` แล้วเตรียมเครื่องตาม §5 (npm ci, npm test, เปิด Postgres แล้ว test:db, next build)
-> รายงานสั้น ๆ ว่ารันได้ไหม แล้วรอคำสั่ง · งานถัดไป: 6a LINE — ถามเจ้าของว่าสร้าง LINE Login channel + LIFF + Messaging API (provider เดียวกัน) แล้วหรือยัง
+> อ่าน `CLAUDE.md` และ `docs/HANDOFF.md` (เริ่มที่ §0 สถานะล่าสุด) แล้วเตรียมเครื่องตาม §5 (npm ci, npm test, เปิด Postgres แล้ว test:db, next build)
+> รายงานสั้น ๆ ว่ารันได้ไหม แล้วรอคำสั่ง · งานที่คุยค้างไว้: แดชบอร์ดร้านบนมือถือตามดีไซน์ AdminMobile (§3)

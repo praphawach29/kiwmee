@@ -1588,5 +1588,27 @@ a.bk-points-button { display: inline-flex; align-items: center; text-decoration:
 
 .bk-trust-lock { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: .78rem; color: var(--muted); padding: 6px 0 24px; }
 
+/* Clear step navigation and an anchored date make the time picker easy to revise. */
+.bk-flow-back { justify-self: start; display: inline-flex; align-items: center; gap: 7px; min-height: 42px; padding: 6px 12px 6px 8px; border: 1px solid var(--line-soft); border-radius: 999px; background: var(--surface); color: var(--grape-deep); font: inherit; font-weight: 650; cursor: pointer; }
+.bk-flow-back svg { flex: none; }
+.bk-flow-back small { margin-left: 2px; padding-left: 9px; border-left: 1px solid var(--line); color: var(--muted); font-size: .76rem; font-weight: 500; }
+.bk-flow-back:disabled { opacity: .55; cursor: wait; }
+.bk-time-date-card { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 13px 14px; border: 1px solid var(--line-soft); border-radius: 16px; background: linear-gradient(110deg, var(--selected), var(--surface)); }
+.bk-time-date-icon { display: grid; place-items: center; width: 40px; height: 40px; flex: none; border-radius: 13px; background: var(--surface); color: var(--grape-deep); box-shadow: 0 2px 8px rgba(27, 22, 64, .06); }
+.bk-time-date-icon svg { width: 19px; height: 19px; }
+.bk-time-date-copy { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.bk-time-date-copy small { color: var(--muted); font-size: .74rem; }
+.bk-time-date-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .92rem; }
+.bk-time-date-card button { flex: none; padding: 8px 10px; border: 0; border-radius: 10px; background: var(--surface); color: var(--grape-deep); font: inherit; font-size: .8rem; font-weight: 650; cursor: pointer; }
+.bk-time-date-card button:disabled { opacity: .55; }
+.bk-time-tabs { background: var(--selected); }
+.bk-time-tabs button[aria-selected="true"] { background: var(--grape); box-shadow: 0 4px 12px rgba(106, 76, 255, .2); }
+.bk-options-time .bk-option { min-height: 54px; border-radius: 15px; }
+@media (max-width: 380px) {
+  .bk-flow-back small { display: none; }
+  .bk-time-date-card { gap: 9px; padding: 11px; }
+  .bk-time-date-card button { padding-inline: 8px; }
+}
+
 
 

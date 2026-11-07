@@ -298,6 +298,12 @@ test('header shows today\'s hours, or that the shop is closed today', () => {
   assert.match(render(ShopHeader, { shop: { name: 'Bloom', today: { open: '10:00', close: '20:00', state: 'closed' } } }), /วันนี้ปิดแล้ว/);
   assert.match(render(ShopHeader, { shop: { name: 'Bloom', today: null } }), /วันนี้ร้านปิด/);
   assert.doesNotMatch(render(ShopHeader, { shop: { name: 'Bloom' } }), /เปิดวันนี้|วันนี้ร้านปิด/);
+  // one line: today, then where — no second line of 'online booking' text
+  const line = render(ShopHeader, { shop: { name: 'Bloom', today: { open: '10:00', close: '20:00', state: 'open' }, address: 'สยามสแควร์ ซอย 3' }, subtitle: 'จองคิวออนไลน์' });
+  assert.match(line, /<p class="bk-shop-line">.*เปิดอยู่ · ถึง 20:00 น\..*· สยามสแควร์ ซอย 3.*<\/p>/);
+  assert.equal((line.match(/<p/g) || []).length, 1);
+  assert.doesNotMatch(line, /จองคิวออนไลน์/);
+  assert.match(render(ShopHeader, { shop: { name: 'Bloom', today: { open: '10:00', close: '20:00', state: 'closed' }, address: 'สยาม' } }), /วันนี้ปิดแล้ว<\/span>/);
 });
 
 test('ยอดนิยม only on a service the shop really books most; no made-up badge from the price', () => {

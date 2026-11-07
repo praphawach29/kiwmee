@@ -170,26 +170,31 @@ export function ShopHeader({ shop, subtitle }) {
       <span className="bk-shop-monogram" aria-hidden="true">{shop.name?.[0]}</span>
       <div className="bk-shop-header-info">
         <h1>{shop.name}</h1>
-        {shop.today !== undefined && (
-          <p className="bk-shop-today" data-open={shop.today?.state === "open"}>
-            {!shop.today
-              ? "วันนี้ร้านปิด · จองล่วงหน้าได้"
-              : shop.today.state === "open"
-                ? `เปิดอยู่ · ถึง ${shop.today.close} น.`
-                : shop.today.state === "closed"
-                  ? `วันนี้ปิดแล้ว · จองล่วงหน้าได้`
-                  : `เปิดวันนี้ ${shop.today.open}–${shop.today.close} น.`}
+        {shop.today !== undefined ? (
+          // one line (design "Kiwmee ปรับหน้าตา"): open today or not, then where
+          <p className="bk-shop-line">
+            <span className="bk-shop-today" data-open={shop.today?.state === "open"}>
+              {!shop.today
+                ? `วันนี้ร้านปิด${shop.address ? "" : " · จองล่วงหน้าได้"}`
+                : shop.today.state === "open"
+                  ? `เปิดอยู่ · ถึง ${shop.today.close} น.`
+                  : shop.today.state === "closed"
+                    ? `วันนี้ปิดแล้ว${shop.address ? "" : " · จองล่วงหน้าได้"}`
+                    : `เปิดวันนี้ ${shop.today.open}–${shop.today.close} น.`}
+            </span>
+            {shop.address && <span className="bk-shop-place"> · {shop.address}</span>}
+          </p>
+        ) : (
+          <p className="bk-muted">
+            {shop.address ? (
+              <span className="bk-header-location">
+                <span className="bk-pin-icon" aria-hidden="true">📍</span> {shop.address}
+              </span>
+            ) : (
+              subtitle
+            )}
           </p>
         )}
-        <p className="bk-muted">
-          {shop.address ? (
-            <span className="bk-header-location">
-              <span className="bk-pin-icon" aria-hidden="true">📍</span> {shop.address}
-            </span>
-          ) : (
-            subtitle
-          )}
-        </p>
       </div>
     </header>
   );

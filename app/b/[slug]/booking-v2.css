@@ -1810,3 +1810,7 @@ a.bk-points-button { display: inline-flex; align-items: center; text-decoration:
 .bk-confirm-price strong { color: var(--ink); text-align: right; }
 .bk-confirm-policy { margin: 0 4px; color: var(--muted); font-size: .84rem; line-height: 1.6; }
 .bk-confirm-policy b { color: var(--ink); }
+/* the header's one line: open today or not · where (the full address on wider screens) */
+.bk-shop-line { margin: 0; font-size: .84rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bk-shop-line .bk-shop-today { margin: 0; font-size: inherit; }
+.bk-shop-place { color: var(--muted); }

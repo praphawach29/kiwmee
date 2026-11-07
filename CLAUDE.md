@@ -22,7 +22,7 @@ SUPABASE_TEST_DB_URL=postgres://postgres@127.0.0.1:54329/booking_test npm run te
 npx next build
 ```
 วิธีเปิด Postgres ทดสอบและ Playwright ในเครื่อง cloud: `docs/HANDOFF.md` §5
-GitHub Actions (`.github/workflows/ci.yml`) รันทั้งสามอย่างให้ทุก PR — **ต้องเขียวก่อน merge**
+GitHub Actions (`.github/workflows/ci.yml`) รันทั้งสามอย่าง + เทสต์หน้าจองในเบราว์เซอร์ (`e2e/booking-v2.spec.cjs`, job `e2e`) ให้ทุก PR — **ต้องเขียวก่อน merge** · แก้หน้าจองแล้วอัปเดตเทสต์นี้ด้วย
 
 ## โค้ดที่ควรรู้
 

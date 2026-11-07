@@ -55,7 +55,8 @@ async function myBookings(db, slug, body = {}, { now = new Date(), verifyLineTok
       upcoming,
       booking: {
         // what the check-in QR carries (the shop scans it at the desk; it opens nothing for anyone else)
-        checkin: upcoming ? b.id : null,
+        // only once the booking counts (a deposit still awaited: no QR yet)
+        checkin: upcoming && ["confirmed", "checked_in"].includes(status) ? b.id : null,
         status,
         date: start.date,
         start: start.time,

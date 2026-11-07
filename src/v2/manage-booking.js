@@ -98,7 +98,8 @@ async function findManaged(db, slug, token, now = new Date()) {
     shop: { slug: shop.slug, name: shop.name, timezone: shop.timezone, address: shop.address ?? "", directions: directionsLink({ address: shop.address, mapUrl: shop.map_url }) },
     booking: {
       // what the check-in QR carries (the shop scans it at the desk; it opens nothing for anyone else)
-      checkin: OPEN.includes(b.status) ? b.id : null,
+      // only once the booking counts (a deposit still awaited: no QR yet)
+      checkin: ["confirmed", "checked_in"].includes(b.status) ? b.id : null,
       status: b.status,
       date: start.date,
       start: start.time,

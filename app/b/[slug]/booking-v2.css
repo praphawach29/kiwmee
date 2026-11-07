@@ -1674,3 +1674,6 @@ a.bk-points-button { display: inline-flex; align-items: center; text-decoration:
 
 
 
+
+/* the check-in QR waits for the deposit */
+.bk-qr-wait { margin: 0; padding: 0.75rem; border: 1px dashed var(--line); border-radius: 14px; color: var(--muted); font-size: 0.85rem; text-align: center; }

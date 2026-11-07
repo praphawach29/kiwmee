@@ -419,6 +419,7 @@ export default function ManageBookingClient({ token, initial }) {
               <CheckinQr slug={shop.slug} id={booking.checkin} open={true} />
             </div>
           )}
+          {!booking.checkin && ["held", "pending"].includes(booking.status) && <p className="bk-qr-wait">QR เช็กอินจะแสดงเมื่อร้านยืนยันมัดจำแล้ว</p>}
 
           {!["cancelled", "no_show", "expired", "completed"].includes(booking.status) && (
             <DirectionsButton href={shop.directions} />

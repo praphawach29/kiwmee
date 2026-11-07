@@ -1364,7 +1364,9 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
             </div>
           )}
         </dl>
-        {booking.id && (
+        {/* the check-in QR once the booking counts: not while the deposit is still awaited */}
+        {booking.id && (held || pendingStatus) && <p className="bk-qr-wait">QR เช็กอินจะแสดงเมื่อร้านยืนยันมัดจำแล้ว</p>}
+        {booking.id && !held && !pendingStatus && (
           <div className="bk-done-qr">
             <CheckinQr slug={shop.slug} id={booking.id} open={true} />
             <small className="bk-muted" style={{ textAlign: "center", display: "block", marginTop: 4 }}>แสดง QR Code นี้ให้พนักงานเพื่อเช็คอินเมื่อถึงร้าน</small>

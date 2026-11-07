@@ -83,3 +83,15 @@ test('add-on group editor: pick rule, offerings to tick, and each add-on with pr
   assert.match(html, /ลูกค้าเห็นตัวเลือกเหล่านี้หลังเลือกเวลา/);
   assert.doesNotMatch(html, /ยังไม่มีไม้แบดที่เปิดอยู่/);
 });
+
+test('checkout after a confirmed deposit: the deposit is taken off what the desk still takes', () => {
+  const { CheckoutForm } = load('[slug]/shop-admin-client.jsx', '\nexport { CheckoutForm };');
+  const booking = { id: 'b1', price: 600, start: '10:00', end: '11:00', offering: { name: 'ทรีตเมนต์' }, resources: [], customer: { name: 'มาลี', fromLine: false }, bill: { id: 'x', status: 'open', total: 600, paid: 200 } };
+  const html = render(CheckoutForm, { slug: 's', booking, onClose() {}, onSaved() {} });
+  assert.match(html, /หักมัดจำที่รับแล้ว −200 บาท/);
+  assert.match(html, /รับเงิน 400 บาท และปิดบิล/);
+  assert.match(html, /value="400"/);
+  const fresh = render(CheckoutForm, { slug: 's', booking: { ...booking, bill: null }, onClose() {}, onSaved() {} });
+  assert.doesNotMatch(fresh, /หักมัดจำ/);
+  assert.match(fresh, /รับเงิน 600 บาท และปิดบิล/);
+});

@@ -280,6 +280,9 @@ test("deposit: the booking is held, the customer sees the account and sends a sl
 
     const done = page.getByTestId("booking-done");
     await expect(done).toContainText("กันคิวไว้ให้แล้ว");
+    // no check-in QR while the deposit is awaited
+    await expect(done.getByText("QR เช็กอินจะแสดงเมื่อร้านยืนยันมัดจำแล้ว")).toBeVisible();
+    await expect(done.locator(".bk-done-qr")).toHaveCount(0);
     await expect(done).toContainText("โอนมัดจำเพื่อยืนยันคิว");
     await expect(done).toContainText("123-4-56789-0");
     const slip = await sharp({ create: { width: 300, height: 500, channels: 3, background: "#e8f5e9" } }).png().toBuffer();
@@ -291,6 +294,7 @@ test("deposit: the booking is held, the customer sees the account and sends a sl
     await page.waitForLoadState("networkidle");
     await expect(page.getByTestId("manage-booking")).toContainText("รอร้านตรวจสลิป");
     await expect(page.getByText("ส่งสลิปแล้ว รอร้านตรวจ")).toBeVisible();
+    await expect(page.getByText("QR เช็กอินจะแสดงเมื่อร้านยืนยันมัดจำแล้ว")).toBeVisible();
     expect(errors).toEqual([]);
   } finally {
     await db.query(

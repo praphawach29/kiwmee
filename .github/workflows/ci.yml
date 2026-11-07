@@ -3,6 +3,8 @@
 #   db     npm run test:db against a throwaway Postgres 16 (scripts/db-test.sh rebuilds it
 #          from supabase/migrations + seed with supabase/tests/supabase-shim.sql)
 #   build  next build
+#   e2e    the customer booking page in a real browser (e2e/booking-v2.spec.cjs): the app runs
+#          against a throwaway Postgres built like the db job's, Chromium from Playwright
 # Nothing here touches Supabase or Railway; deploys still happen when main changes.
 name: CI
 
@@ -115,3 +117,65 @@ jobs:
           DRILL_DB_URL: postgres://postgres@localhost:5432/booking_restore
         run: bash scripts/backup-drill.sh
 
+  # The booking page as a customer uses it: service → stylist / court → day and time → details →
+  # booked, plus calendar, deposit + slip, add-ons, rentals, the booking link (move, cancel) and LINE's
+  # text zoom. The app runs against a throwaway database; nothing here touches Supabase, LINE or Railway.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      BOOKING_DB_URL: postgres://postgres@localhost:5432/booking_test
+      BOOKING_BOOK_LIMIT: "100"
+      SUPABASE_URL: https://example.supabase.co
+      SUPABASE_PUBLISHABLE_KEY: test
+      LINE_REMINDERS: "off"
+      NEXT_TELEMETRY_DISABLED: "1"
+      PILOT_BASE_URL: http://127.0.0.1:3100
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build the test database
+        run: |
+          createdb -h localhost -U postgres booking_test
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -q -d booking_test -f supabase/tests/supabase-shim.sql
+          for f in supabase/migrations/*.sql; do
+            psql -h localhost -U postgres -v ON_ERROR_STOP=1 -q -d booking_test -f "$f"
+          done
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -q -d booking_test -f supabase/seed.sql
+      - run: npx next build
+      - name: Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+      - name: Start the app
+        run: |
+          nohup npx next start -p 3100 > next.log 2>&1 &
+          for i in $(seq 60); do curl -sf -o /dev/null http://127.0.0.1:3100/ && exit 0; sleep 1; done
+          cat next.log; exit 1
+      - name: Booking page tests
+        run: |
+          export PW_EXECUTABLE="$(node -e "console.log(require('playwright-core').chromium.executablePath())")"
+          npx playwright test e2e/booking-v2.spec.cjs
+      - name: Keep the screenshots and server log of a failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failure
+          path: |
+            test-results/
+            next.log
+          retention-days: 7

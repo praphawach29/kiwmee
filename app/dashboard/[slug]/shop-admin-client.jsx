@@ -1423,24 +1423,26 @@ function MemberBox({ slug, bookingId = null, initialCode = null, onChange }) {
 }
 
 function CheckoutForm({ slug, booking, onClose, onSaved }) {
+  // what is already on the booking's open bill (the deposit the shop confirmed): it counts toward the total
+  const alreadyPaid = booking.bill?.status === "open" ? round2(booking.bill.paid) : 0;
+  const owing = (total, reward) => Math.max(round2(round2(total) - (reward ? Math.min(reward.discountBaht, round2(total)) : 0) - alreadyPaid), 0);
   const [subtotal, setSubtotal] = useState(String(booking.price ?? 0));
-  const [lines, setLines] = useState([{ method: "cash", amount: String(booking.price ?? 0) }]);
+  const [lines, setLines] = useState([{ method: "cash", amount: String(owing(booking.price ?? 0, null)) }]);
   const [note, setNote] = useState("");
   const [points, setPoints] = useState({ reward: null });
   const save = useSave();
   const discount = points.reward ? Math.min(points.reward.discountBaht, round2(subtotal)) : 0;
-  const due = round2(round2(subtotal) - discount);
+  const due = owing(subtotal, points.reward);
 
   function changeSubtotal(value) {
     setSubtotal(value);
     // one payment line follows the amount until the shop splits it
-    if (lines.length === 1) setLines([{ ...lines[0], amount: String(round2(round2(value) - (points.reward ? Math.min(points.reward.discountBaht, round2(value)) : 0))) }]);
+    if (lines.length === 1) setLines([{ ...lines[0], amount: String(owing(value, points.reward)) }]);
   }
 
   function changePoints(next) {
     setPoints(next);
-    const off = next.reward ? Math.min(next.reward.discountBaht, round2(subtotal)) : 0;
-    if (lines.length === 1) setLines([{ ...lines[0], amount: String(round2(round2(subtotal) - off)) }]);
+    if (lines.length === 1) setLines([{ ...lines[0], amount: String(owing(subtotal, next.reward)) }]);
   }
 
   async function submit(event) {
@@ -1468,6 +1470,7 @@ function CheckoutForm({ slug, booking, onClose, onSaved }) {
       </div>
       {booking.customer.fromLine && <MemberBox slug={slug} bookingId={booking.id} onChange={changePoints} />}
       {discount > 0 && <p className="ad-muted">ส่วนลดจากคะแนน −{money(discount)}</p>}
+      {alreadyPaid > 0 && <p className="ad-muted" data-testid="checkout-deposit">หักมัดจำที่รับแล้ว −{money(alreadyPaid)}</p>}
       <PaymentLines lines={lines} setLines={setLines} due={due} />
       <Status save={save} />
       <div className="ad-row">

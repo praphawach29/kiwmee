@@ -58,7 +58,10 @@ test("salon: a cut, anyone, then the day and a time on one step", async ({ page 
   const done = page.getByTestId("booking-done");
   await expect(done).toContainText("จองคิวสำเร็จ");
   await expect(done).toContainText("450 บาท");
-  await expect(done).toContainText(/ช่าง(แนน|บี)/);
+  // one stylist line: who the shop gave, not "anyone" as well
+  await expect(done.locator(".bk-done-summary dt", { hasText: "ช่าง" })).toHaveCount(1);
+  await expect(done.locator(".bk-done-summary")).toContainText(/ช่าง(แนน|บี)\s*ระบบเลือกให้/);
+  await expect(done.locator(".bk-done-summary")).not.toContainText("ช่างคนไหนก็ได้");
   expect(errors).toEqual([]);
 });
 
@@ -103,6 +106,9 @@ test("salon: colour with the colourist, then the day and time", async ({ page })
   await expect(done).toContainText("จองคิวสำเร็จ");
   await expect(done).toContainText("ช่างพลอย");
   await expect(done).toContainText("1,500 บาท");
+  // picked by name: shown once, without "the system picked"
+  await expect(done.locator(".bk-done-summary dt", { hasText: "ช่าง" })).toHaveCount(1);
+  await expect(done).not.toContainText("ระบบเลือกให้");
 });
 
 test("salon: going back to change the service drops a stylist who does not do it", async ({ page }) => {

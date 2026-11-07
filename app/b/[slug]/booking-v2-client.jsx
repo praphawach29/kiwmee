@@ -1221,7 +1221,9 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
   // what the shop gave: its own kind's word (a car is "รถ", not "ช่าง")
   const givenKind = booking.resources?.[0]?.kind;
   const givenWord = givenKind ? RESOURCE_WORD[givenKind] ?? givenKind : resourceWord;
-  const rows = items.filter((item) => item.step !== "date" && item.step !== "time");
+  // "anyone" was picked and the shop gave someone: one line with who it is, not "anyone" as well
+  const showAssigned = booking.resources?.length > 0 && selected.resourceId == null;
+  const rows = items.filter((item) => item.step !== "date" && item.step !== "time" && !(showAssigned && item.step === "resource"));
   const managePath = booking.manageToken ? `/b/${shop.slug}/manage/${booking.manageToken}` : null;
   const held = booking.status === "held";
   const pendingStatus = booking.status === "pending";
@@ -1346,10 +1348,13 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
               <dd>{item.value}</dd>
             </div>
           ))}
-          {booking.resources?.length > 0 && selected.resourceId == null && (
+          {showAssigned && (
             <div>
               <dt>{givenWord}</dt>
-              <dd>{assigned || "ร้านจัดให้"}</dd>
+              <dd>
+                {assigned || "ร้านจัดให้"}
+                {assigned && items.some((item) => item.step === "resource") && <><br /><small className="bk-muted">ระบบเลือกให้</small></>}
+              </dd>
             </div>
           )}
           {booking.points && (

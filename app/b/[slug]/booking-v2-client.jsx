@@ -271,6 +271,14 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     ? { ...estimate, label: "ราคาหลังใช้คะแนน", value: money(Math.max(estimate.amount - rewardOff(chosenReward), 0)), short: estimate.short ? money(Math.max(estimate.amount - rewardOff(chosenReward), 0)) : null }
     : estimate;
 
+  const depositAmount = useMemo(() => {
+    if (!shop.deposit || shop.deposit.mode === "none") return null;
+    const est = estimate?.amount;
+    if (shop.deposit.mode === "full") return est ?? null;
+    if (shop.deposit.mode === "percent") return est ? Math.round((est * shop.deposit.value) / 100) : null;
+    return typeof shop.deposit.value === "number" ? (est ? Math.min(shop.deposit.value, est) : shop.deposit.value) : null;
+  }, [shop.deposit, estimate]);
+
   // the tapped choice lights up at once; the server's answer follows
   const choose = (step, value) => {
     setPending({ step, value });
@@ -340,13 +348,12 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
   if (booking) {
     return (
       <CustomerFrame>
-        <main className={liffId ? "bk-shell bk-with-tabs" : "bk-shell"}>
+        <main className="bk-shell">
           <BookingProgress phase="complete" />
           <BookingDone shop={shop} booking={booking} items={summaryItems} selected={selected} resourceWord={resourceWord}
             onSlip={(view) => setBooking((b) => ({ ...b, status: view.booking.status, deposit: { ...b.deposit, slips: view.booking.deposit?.slips ?? 1 } }))} />
           <PoweredBy />
         </main>
-        {liffId && <CustomerTabs slug={shop.slug} active="book" />}
       </CustomerFrame>
     );
   }
@@ -380,7 +387,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
   const optionButton = (o) => {
     const button = (
       <button key={String(o.value)} {...optionProps(o)}>
-        <OptionBody ask={ask} option={o} offering={offerings.get(o.value)} resource={resources.get(o.value)} resourceWord={resourceWord} date={selected.date} />
+        <OptionBody ask={ask} option={o} offering={offerings.get(o.value)} resource={resources.get(o.value)} resourceWord={resourceWord} date={selected.date} shop={shop} />
         {!o.available && <small className="bk-reason">{REASON_TEXT[o.reason] ?? "ไม่ว่าง"}</small>}
       </button>
     );
@@ -566,7 +573,15 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
             </form>
           </>
         )}
-        {atCustomer && <BookingSubmitBar formId="booking-customer" disabled={busy || !liff.ready} busy={busy} price={shownPrice?.short} />}
+        {atCustomer && (
+          <BookingSubmitBar
+            formId="booking-customer"
+            disabled={busy || !liff.ready}
+            busy={busy}
+            price={shownPrice?.short}
+            deposit={depositAmount}
+          />
+        )}
         <PoweredBy />
       </main>
       {liffId && !atCustomer && <CustomerTabs slug={shop.slug} active="book" />}
@@ -978,13 +993,15 @@ function DateBody({ value, today }) {
 
 // Before booking: the shop asks for a deposit by transfer (the exact amount comes with the booking)
 function DepositNote({ deposit, estimate }) {
+  if (!deposit || deposit.mode === "none") return null;
   const total = estimate?.short ? estimate.amount : null;
   const amount =
     deposit.mode === "full" ? total : deposit.mode === "percent" ? (total !== null ? Math.round((total * deposit.value) / 100) : null) : total !== null ? Math.min(deposit.value, total) : deposit.value;
-  const what = amount !== null ? money(amount) : deposit.mode === "percent" ? `${deposit.value}% ของราคา` : "เต็มจำนวน";
+  if (!amount || amount <= 0) return null;
+  const what = money(amount);
   return (
     <p className="bk-notice">
-      ร้านนี้ขอมัดจำ <b>{what}</b> โดยโอนเงิน · หลังกดยืนยันจะได้เลขบัญชี แล้วโอนและแนบสลิปภายใน {formatMinutes(deposit.holdMinutes ?? 10)}
+      ร้านนี้ขอมัดจำ <b>{what}</b> โดยโอนเงินผ่าน PromptPay · หลังกดยืนยันจะได้รับ QR Code โอนเงิน แล้วโอนและแนบสลิปภายใน {formatMinutes(deposit.holdMinutes ?? 10)}
     </p>
   );
 }
@@ -993,7 +1010,8 @@ function SelfServiceNote({ shop }) {
   const { cancel, reschedule, cutoffHours } = shop.selfService ?? {};
   const can = cancel && reschedule ? "เลื่อนหรือยกเลิก" : cancel ? "ยกเลิก" : reschedule ? "เลื่อน" : null;
   if (!can) return null;
-  return <>{can}เองได้{cutoffHours > 0 ? `ถึง ${cutoffHours} ชม. ก่อนนัด` : ""} จากลิงก์ที่ได้หลังจอง ·</>;
+  const hours = cutoffHours || shop.cancellation_lead_hours || 2;
+  return <>{can}ฟรีล่วงหน้า{hours > 0 ? ` ${hours} ชม.` : ""} จากลิงก์ที่ได้รับหลังการจอง · </>;
 }
 
 // Wide screens: what has been picked so far, beside the step being answered.
@@ -1215,11 +1233,13 @@ function ManageLink({ shop, path }) {
   const [copied, setCopied] = useState(false);
   const { cancel, reschedule, cutoffHours } = shop.selfService ?? {};
   const can = cancel && reschedule ? "เลื่อนหรือยกเลิก" : cancel ? "ยกเลิก" : reschedule ? "เลื่อน" : null;
+  const hours = cutoffHours || shop.cancellation_lead_hours || 2;
 
   async function copy() {
     try {
       await navigator.clipboard.writeText(new URL(path, window.location.origin).toString());
       setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
     } catch {
       setCopied(false);
     }
@@ -1229,14 +1249,14 @@ function ManageLink({ shop, path }) {
     <div className="bk-link-box">
       <strong>{can ? `${can}นัดเองได้` : "ดูการจองนี้ได้ทุกเมื่อ"}</strong>
       <p>
-        {can && cutoffHours > 0 ? `ถึง ${cutoffHours} ชม. ก่อนนัด ` : ""}ผ่านลิงก์ของการจองนี้ · เก็บลิงก์ไว้ เพราะเป็นของคุณคนเดียว
+        {can && hours > 0 ? `ฟรีล่วงหน้าถึง ${hours} ชม. ก่อนนัด ` : ""}ผ่านลิงก์ของการจองนี้ · บันทึกเก็บไว้เพื่อจัดการคิวของคุณ
       </p>
       <div className="bk-link-actions">
         <a className="bk-primary" href={path} data-testid="manage-link">
           ดูการจองของฉัน
         </a>
         <button type="button" className="bk-secondary" onClick={copy}>
-          {copied ? "คัดลอกแล้ว" : "คัดลอกลิงก์"}
+          {copied ? "✓ คัดลอกแล้ว" : "คัดลอกลิงก์"}
         </button>
       </div>
     </div>
@@ -1252,9 +1272,10 @@ function PoweredBy() {
   );
 }
 
-function OptionBody({ ask, option, offering, resource, resourceWord, date }) {
+function OptionBody({ ask, option, offering, resource, resourceWord, date, shop }) {
   if (ask === "offering" && offering) {
     const length = offeringLength(offering);
+    const depVal = shop?.deposit?.mode === "fixed" ? shop.deposit.value : shop?.deposit?.mode === "percent" && offering.price?.amount ? Math.round((offering.price.amount * shop.deposit.value) / 100) : null;
     return (
       <>
         <OfferingThumbnail offering={offering} />
@@ -1268,7 +1289,7 @@ function OptionBody({ ask, option, offering, resource, resourceWord, date }) {
           )}
           <span className="bk-option-meta">
             <span className="bk-duration-tag">⏱ {length}</span>
-            <span className="bk-deposit-tag">🔒 มัดจำ ฿300</span>
+            {depVal > 0 && <span className="bk-deposit-tag">🔒 มัดจำ ฿{depVal.toLocaleString("th-TH")}</span>}
           </span>
         </span>
         <span className="bk-choice-mark" aria-hidden="true" />

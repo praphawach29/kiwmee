@@ -193,16 +193,16 @@ export function BookingProgress({ phase, ask }) {
 
   if (phase === "complete") {
     stepIndex = 3;
-    stepTitle = "จองสำเร็จ & จัดการคิว";
+    stepTitle = "จองสำเร็จ & ตั๋วคิว";
   } else if (phase === "customer") {
     stepIndex = 2;
-    stepTitle = "ข้อมูลผู้จอง & สรุปนัดหมาย";
+    stepTitle = "ข้อมูลผู้จอง & สรุปนัด";
   } else if (ask === "offering" || !ask) {
     stepIndex = 0;
     stepTitle = "เลือกบริการ";
   } else {
     stepIndex = 1;
-    stepTitle = "เลือกช่างและเวลานัดหมาย";
+    stepTitle = "เลือกช่างและเวลา";
   }
 
   const percent = Math.round(((stepIndex + 1) / totalSteps) * 100);
@@ -210,7 +210,7 @@ export function BookingProgress({ phase, ask }) {
   return (
     <div className="bk-progress-wrap">
       <div className="bk-progress-meta">
-        <span className="bk-step-badge">ขั้นตอน {stepIndex + 1} / {totalSteps} · {stepTitle}</span>
+        <span className="bk-step-badge">ขั้นตอนที่ {stepIndex + 1} จาก {totalSteps} · {stepTitle}</span>
         <span className="bk-progress-pct">{percent}% เสร็จสิ้น</span>
       </div>
       <ol className="bk-progress" aria-label="ภาพรวมการจอง">
@@ -265,17 +265,29 @@ export function BookingReview({ items, onEdit, busy, price, id = "booking-review
 }
 
 // The total on the left, the button on the right (like an app's checkout bar)
-export function BookingSubmitBar({ formId, disabled, busy, price, label = "ราคารวม" }) {
+export function BookingSubmitBar({ formId, disabled, busy, price, deposit, label = "ราคารวม" }) {
+  const isDeposit = typeof deposit === "number" && deposit > 0;
   return (
     <div className="bk-submit-bar" data-has-price={Boolean(price) || undefined}>
       {price && (
         <div className="bk-submit-total" aria-hidden="true">
-          <small>{label}</small>
+          <small>{isDeposit ? "ราคาสุทธิ (ชำระหน้าร้าน)" : label}</small>
           <strong>{price}</strong>
+          {isDeposit && (
+            <span style={{ fontSize: "0.78rem", color: "var(--grape-deep)", fontWeight: 700 }}>
+              มัดจำ ฿{deposit.toLocaleString("th-TH")}
+            </span>
+          )}
         </div>
       )}
-      <button type="submit" form={formId} className="bk-primary" disabled={disabled} aria-label={busy ? undefined : price ? `ยืนยันการจอง · ${price}` : undefined}>
-        {busy ? "กำลังยืนยัน…" : "ยืนยันการจอง"}
+      <button
+        type="submit"
+        form={formId}
+        className="bk-primary"
+        disabled={disabled}
+        aria-label={busy ? undefined : price ? `ยืนยันการจอง · ${price}` : undefined}
+      >
+        {busy ? "กำลังยืนยัน…" : isDeposit ? `ยืนยันและไปโอนมัดจำ (฿${deposit.toLocaleString("th-TH")})` : "ยืนยันการจองคิว"}
       </button>
     </div>
   );

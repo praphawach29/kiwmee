@@ -185,6 +185,11 @@ test('progress groups the server-driven choices rather than imposing a service/d
     assert.match(html, /ข้อมูลผู้จอง/);
     assert.match(html, /ยืนยัน/);
   }
+
+  const completed = render(BookingProgress, { phase: 'complete' });
+  assert.equal((completed.match(/data-done="true"/g) || []).length, 3);
+  assert.equal((completed.match(/aria-current="step"/g) || []).length, 1);
+  assert.match(completed, /data-done="true"><span aria-hidden="true">✓<\/span>/);
 });
 
 test('review renders only supplied selections and makes each selection editable', () => {

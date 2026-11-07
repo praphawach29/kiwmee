@@ -47,23 +47,23 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .bk-shop-monogram { display: grid; place-items: center; flex: none; width: 52px; height: 52px; border-radius: 16px; background: linear-gradient(135deg, var(--grape) 0%, var(--grape-night) 100%); color: #fff; font-family: var(--font-display); font-size: 24px; font-weight: 600; box-shadow: 0 4px 14px rgba(106, 76, 255, 0.28); }
 
 /* ---------- progress ---------- */
-.bk-progress-wrap { display: grid; gap: 8px; }
+.bk-progress-wrap { display: grid; gap: 8px; padding: 12px; background: var(--surface); border: 1px solid var(--line-soft); border-radius: 16px; box-shadow: 0 3px 16px rgba(27, 22, 64, .06); }
 .bk-progress-meta { display: flex; justify-content: space-between; align-items: center; padding: 0 2px; }
 .bk-step-badge { font-size: .78rem; font-weight: 700; color: var(--grape-deep); background: var(--selected); padding: 3px 10px; border-radius: 999px; }
 .bk-progress-pct { font-size: .78rem; font-weight: 600; color: var(--muted); }
 .bk-progress { list-style: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 0; padding: 0; }
 .bk-progress li { min-width: 0; display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: .8rem; }
-.bk-progress li > span { display: grid; place-items: center; width: 22px; height: 22px; flex: none; border-radius: 50%; font-size: .72rem; font-weight: 600; background: var(--selected); color: var(--grape-deep); }
+.bk-progress li > span { display: grid; place-items: center; width: 26px; height: 26px; flex: none; border: 2px solid transparent; border-radius: 50%; font-size: .76rem; font-weight: 700; background: var(--selected); color: var(--grape-deep); }
 .bk-progress li[aria-current="step"] { color: var(--grape-deep); font-weight: 600; }
 .bk-progress li[aria-current="step"] > span { background: var(--grape); color: #fff; box-shadow: 0 2px 8px rgba(106, 76, 255, 0.3); }
 .bk-progress li[data-done="true"] { color: var(--mint-deep); }
-.bk-progress li[data-done="true"] > span { background: var(--mint-tint); color: var(--mint-deep); }
+.bk-progress li[data-done="true"] > span { background: var(--mint-deep); color: #fff; border-color: var(--mint-deep); font-size: .9rem; }
 .bk-progress-bar { height: 6px; border-radius: 999px; background: var(--selected); overflow: hidden; }
 .bk-progress-bar > span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--grape) 0%, var(--mint) 100%); transition: width .3s cubic-bezier(0.16, 1, 0.3, 1); }
 @media (max-width: 560px) {
   .bk-progress { gap: 3px; }
-  .bk-progress li { display: grid; justify-items: center; gap: 4px; text-align: center; font-size: .68rem; line-height: 1.2; }
-  .bk-progress li > span { width: 24px; height: 24px; }
+  .bk-progress li { display: grid; justify-items: center; align-content: start; gap: 5px; min-height: 42px; text-align: center; font-size: .7rem; font-weight: 600; line-height: 1.25; }
+  .bk-progress li > span { width: 28px; height: 28px; }
   .bk-step-badge { font-size: .72rem; }
 }
 

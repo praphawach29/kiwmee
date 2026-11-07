@@ -171,6 +171,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
   const api = `/api/b/${shop.slug}`;
   const [selected, setSelected] = useState(() => initialView?.selected ?? {});
   const [view, setView] = useState(initialView); // { next, ask, options, reason }
+  const [dateOptions, setDateOptions] = useState(() => initialView?.ask === "date" ? initialView.options ?? [] : []);
   const [stepTrail, setStepTrail] = useState(() => initialView?.ask ? [initialView.ask] : []);
   const [pending, setPending] = useState(null); // { step, value } tapped, waiting for the server
   const [details, setDetails] = useState(null); // the offering option whose details are open
@@ -221,6 +222,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
         const data = await post(`${api}/step`, body);
         setSelected(data.selected);
         setView(data);
+        if (data.ask === "date") setDateOptions(data.options ?? []);
         setStepTrail((previous) => {
           let trail = previous;
           const current = body.ask ?? body.changed;
@@ -259,6 +261,21 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
 
   const next = view?.next;
   const ask = view?.ask;
+  const dateLookupSelection = useMemo(() => ({
+    offeringId: selected.offeringId,
+    resourceId: selected.resourceId,
+    durationMinutes: selected.durationMinutes,
+    partySize: selected.partySize,
+    addons: selected.addons
+  }), [selected.offeringId, selected.resourceId, selected.durationMinutes, selected.partySize, selected.addons]);
+  useEffect(() => {
+    if (ask !== "time") return;
+    let current = true;
+    post(`${api}/step`, { selected: dateLookupSelection, ask: "date" })
+      .then((data) => { if (current) setDateOptions(data.options ?? []); })
+      .catch(() => { if (current) setDateOptions([]); });
+    return () => { current = false; };
+  }, [api, ask, dateLookupSelection]);
   const atStart = next?.step === "start" && !ask;
   const atCustomer = next && !ask && !atStart;
 
@@ -399,6 +416,22 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
       onClick: () => choose(ask, o.value)
     };
   };
+  const dateOptionProps = (o) => {
+    const tapped = pending?.step === "date" && pending.value === o.value;
+    const chosen = pending?.step === "date" ? tapped : selected.date === o.value;
+    return {
+      type: "button",
+      className: "bk-option",
+      "data-testid": "option-date",
+      "data-value": String(o.value),
+      "data-selected": chosen,
+      "data-pending": tapped || undefined,
+      "data-unavailable": !o.available || undefined,
+      "aria-pressed": chosen,
+      disabled: busy || !o.available,
+      onClick: () => choose("date", o.value)
+    };
+  };
   const optionButton = (o) => {
     const tapped = pending?.step === ask && pending.value === o.value;
     const chosen = pending?.step === ask ? tapped : selected[KEY[ask]] === o.value;
@@ -501,7 +534,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
               </>
             )}
             <div className="bk-step-head">
-              <h2>{ask === "resource" ? `เลือก${resourceWord}` : (rental && RENTAL_TITLE[ask]) || STEP_TITLE[ask]}</h2>
+              <h2>{ask === "resource" ? `เลือก${resourceWord}` : ask === "time" ? "เลือกวันและเวลา" : (rental && RENTAL_TITLE[ask]) || STEP_TITLE[ask]}</h2>
               {ask === "time" && selected.date && (
                 <p className="bk-muted">
                   {rental ? "เลือกเวลาที่สะดวกรับ · คืนเวลาเดียวกัน" : "เลือกเวลาว่างของร้านในวันที่เลือก"}
@@ -510,11 +543,11 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
               )}
               {ask === "duration" && rental && <p className="bk-muted">เช่าเป็นรอบ 24 ชม. คืนเวลาเดียวกับที่รับ</p>}
             </div>
-            {ask === "time" && selected.date && (
+            {ask === "time" && selected.date && !dateOptions.length && (
               <div className="bk-time-date-card">
                 <span className="bk-time-date-icon" aria-hidden="true"><CalendarIcon /></span>
                 <span className="bk-time-date-copy"><small>วันที่เลือก</small><strong>{formatDate(selected.date, { long: true })}</strong></span>
-                {stepTrail.includes("date") && <button type="button" onClick={() => showStep("date")} disabled={busy}>เปลี่ยนวัน</button>}
+                <button type="button" onClick={() => showStep("date")} disabled={busy}>เปลี่ยนวัน</button>
               </div>
             )}
             {ask !== "addons" && (view.options.length === 0 || !view.options.some((o) => o.available)) ? (
@@ -534,7 +567,18 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
             ) : ask === "date" ? (
               <DateStrip options={view.options} today={todayIn(shop.timezone)} optionProps={optionProps} />
             ) : ask === "time" ? (
-              <TimeTabs key={selected.date} options={view.options} chosen={selected.time} optionButton={optionButton} />
+              <>
+                {selected.date && dateOptions.length > 0 && (
+                  <section className="bk-time-date-section" aria-labelledby="bk-time-date-title">
+                    <div className="bk-time-date-heading">
+                      <h3 id="bk-time-date-title">{rental ? "เลือกวันรับ" : "เลือกวันที่"}</h3>
+                      <span>{formatDate(selected.date, { long: true })}</span>
+                    </div>
+                    <DateStrip options={dateOptions} today={todayIn(shop.timezone)} optionProps={dateOptionProps} />
+                  </section>
+                )}
+                <TimeTabs options={view.options} optionButton={optionButton} />
+              </>
             ) : ask === "resource" && mapped ? (
               <VenueMap options={shownOptions} resources={resources} resourceWord={resourceWord} optionProps={optionProps} list={
                 <div className={`bk-options bk-options-${ask}`} data-photos={photoCards || undefined}>
@@ -840,33 +884,25 @@ function AddonsStep({ view, info, initial, busy, onDone }) {
   );
 }
 
-// All dates the server offers in one swipeable row, a week's worth on screen at a time.
-// Times as tabs (เช้า / บ่าย / เย็น), the way an app shows slots: one part of the day at a time,
-// starting with the part that holds the chosen time, or the first with a free one.
+// Dates and times follow Stitch's single-screen picker: one date strip, then every available
+// period with its start times. The server remains the source of date and slot availability.
 const PART_ICON = { morning: "☀️", afternoon: "⛅", evening: "🌙" };
-function TimeTabs({ options, chosen, optionButton }) {
+function TimeTabs({ options, optionButton }) {
   const parts = groupTimes(options);
-  const start = parts.find((p) => p.options.some((o) => o.value === chosen)) ?? parts.find((p) => p.options.some((o) => o.available)) ?? parts[0];
-  const [open, setOpen] = useState(start?.key);
-  const part = parts.find((p) => p.key === open) ?? parts[0];
-  if (!part) return null;
+  if (!parts.length) return null;
   return (
     <div className="bk-time-groups">
-      {parts.length > 1 && (
-        <div className="bk-time-tabs" role="tablist" aria-label="ช่วงเวลา">
-          {parts.map((p) => {
-            const free = p.options.filter((o) => o.available).length;
-            return (
-              <button key={p.key} type="button" role="tab" aria-selected={p.key === part.key} data-empty={free === 0 || undefined} onClick={() => setOpen(p.key)}>
-                <span aria-hidden="true">{PART_ICON[p.key]}</span>
-                {p.label.replace("ช่วง", "")}
-                <small>{free > 0 ? `ว่าง ${free}` : "เต็ม"}</small>
-              </button>
-            );
-          })}
-        </div>
-      )}
-      <div className="bk-options bk-options-time" role="tabpanel" aria-label={part.label}>{part.options.map(optionButton)}</div>
+      {parts.map((part) => (
+        <section className="bk-time-group" key={part.key} aria-labelledby={`bk-time-${part.key}`}>
+          <h3 className="bk-time-group-head" id={`bk-time-${part.key}`}>
+            <span><span aria-hidden="true">{PART_ICON[part.key]}</span> {part.label}</span>
+            <small>{`ว่าง ${part.options.filter((o) => o.available).length} เวลา`}</small>
+          </h3>
+          <div className="bk-options bk-options-time" role="group" aria-label={`เวลา${part.label}`}>
+            {part.options.map(optionButton)}
+          </div>
+        </section>
+      ))}
     </div>
   );
 }
@@ -1475,7 +1511,7 @@ function OptionBody({ ask, option, offering, resource, resourceWord, date, shop,
   }
   if (ask === "resource") return <ResourceChoice resource={resource} label={option.label} resourceWord={resourceWord} any={option.value === null} />;
   if (ask === "date") return <DateBody value={option.value} />;
-  if (ask === "time") return <strong>{option.value}</strong>;
+  if (ask === "time") return <><strong>{option.value}</strong><small className="bk-time-slot-available">คิวว่าง</small></>;
   if (ask === "duration") {
     const days = option.value >= 1440 && option.value % 1440 === 0;
     return (

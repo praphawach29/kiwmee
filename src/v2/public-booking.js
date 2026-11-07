@@ -176,7 +176,9 @@ async function shopInfo(db, slug, { now = Date.now() } = {}) {
       maxPartySize: o.max_party_size,
       price: priceFrom(catalog.prices, o.id),
       // "ยอดนิยม": among the most booked here in the last 30 days (real bookings, not a guess)
-      popular: popular.has(o.id)
+      popular: popular.has(o.id),
+      // "พรีเมียม ✨": ticked by the shop (migration …004000)
+      premium: o.premium === true
     })),
     resources: catalog.resources
       .filter((r) => pickable.has(r.id))

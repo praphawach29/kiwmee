@@ -5,7 +5,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { Client } = require("pg");
 const admin = require("../../src/v2/admin-catalog");
-const { step, book } = require("../../src/v2/public-booking");
+const { step, book, shopInfo } = require("../../src/v2/public-booking");
 
 const url = process.env.SUPABASE_TEST_DB_URL;
 const skip = !url && "set SUPABASE_TEST_DB_URL (scripts/db-test.sh)";
@@ -290,6 +290,20 @@ test("offerings: price rules, requirements, and checks", { skip }, async () => {
     assert.equal(o.name, "ตัดผมหญิง");
     assert.deepEqual(o.resourceIds, [NAN]);
     assert.deepEqual(o.prices.map((p) => [p.amount, p.daysOfWeek, p.priority]), [[450, null, 0], [550, [0, 6], 1]]);
+
+    // "พรีเมียม ✨" is the shop's choice: off by default, on when ticked, kept when a save leaves it out
+    assert.equal(o.premium, false);
+    const premium = async () => (await shopInfo(db, "bloom-hair")).offerings.find((x) => x.id === CUT).premium;
+    assert.equal(await premium(), false, "a 1,500-baht colour is not premium by price either");
+    assert.equal((await shopInfo(db, "bloom-hair")).offerings.some((x) => x.premium), false);
+    const again = { name: "ตัดผมหญิง", durationMinutes: 60, requirements: [{ kind: "staff", customerPicks: true }], resourceIds: [NAN], prices: [{ unit: "per_booking", amount: 450 }] };
+    await admin.saveOffering(db, shop, CUT, { ...again, premium: true });
+    assert.equal((await admin.getCatalog(db, shop)).offerings.find((x) => x.id === CUT).premium, true);
+    assert.equal(await premium(), true);
+    await admin.saveOffering(db, shop, CUT, again);
+    assert.equal(await premium(), true, "a save without it leaves it as it was");
+    await admin.saveOffering(db, shop, CUT, { ...again, premium: false });
+    assert.equal(await premium(), false);
 
     await refused(() => admin.saveOffering(db, shop, null, { name: "x", durationMode: "customer_choice", minMinutes: 60, maxMinutes: 30, stepMinutes: 30 }), (e) => e.status === 422);
     await refused(() => admin.saveOffering(db, shop, null, { name: "x", durationMinutes: 30, requirements: [{ kind: "staff" }, { kind: "staff" }] }), (e) => e.status === 422);

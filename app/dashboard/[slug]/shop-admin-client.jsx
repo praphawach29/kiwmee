@@ -2221,6 +2221,7 @@ function emptyOffering(catalog) {
     maxPartySize: 1,
     sortOrder: 0,
     active: true,
+    premium: false,
     requirements: [{ kind, customerPicks: true, unitsPerBooking: "one" }],
     resourceIds: resources.filter((r) => r.kind === kind).map((r) => r.id),
     prices: [{ unit: "per_booking", amount: "", daysOfWeek: null, start: null, end: null, priority: null }]
@@ -2482,6 +2483,7 @@ function OfferingEditor({ slug, catalog, initial, onSaved, onClose }) {
       bufferAfterMinutes: toInt(o.bufferAfterMinutes) ?? 0,
       maxPartySize: toInt(o.maxPartySize) ?? 1,
       sortOrder: toInt(o.sortOrder) ?? 0,
+      premium: o.premium === true,
       requirements: o.requirements.map((r) => ({ ...r, unitsPerBooking: toInt(o.maxPartySize) > 1 ? r.unitsPerBooking : "one" })),
       resourceIds: o.resourceIds.filter((id) => usable.some((r) => r.id === id)),
       prices: o.prices.map((p) => ({ ...p, amount: p.amount === "" ? null : Number(p.amount), start: p.start || null, end: p.end || null }))
@@ -2541,6 +2543,10 @@ function OfferingEditor({ slug, catalog, initial, onSaved, onClose }) {
         <label className="ad-field">จองได้สูงสุดกี่คนต่อครั้ง<input type="number" min={1} value={o.maxPartySize} onChange={(e) => set({ maxPartySize: e.target.value })} /></label>
         <label className="ad-field">ลำดับที่แสดง<input type="number" value={o.sortOrder} onChange={(e) => set({ sortOrder: e.target.value })} /></label>
       </div>
+      <label className="ad-check">
+        <input type="checkbox" checked={o.premium === true} onChange={(e) => set({ premium: e.target.checked })} />
+        แสดงป้าย "พรีเมียม ✨" บนหน้าจอง
+      </label>
 
       <div className="ad-field">
         ต้องใช้อะไร

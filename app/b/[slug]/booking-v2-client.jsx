@@ -1698,7 +1698,8 @@ function OptionBody({ ask, option, offering, resource, resourceWord, date, shop,
     const isSelected = Boolean(chosen || option?.["data-selected"]);
     // booked most here in the last 30 days (shopInfo counts real bookings)
     const isPopular = offering.popular === true;
-    const isPremium = offering.badge === "premium" || offering.name?.includes("พรีเมียม") || (offering.price?.amount && offering.price.amount >= 2000);
+    // the shop's own choice on its catalogue page, not a guess from the price
+    const isPremium = offering.premium === true;
 
     // one row (design "Kiwmee ปรับหน้าตา" · Main): picture · name, length, price · a tick when chosen
     return (

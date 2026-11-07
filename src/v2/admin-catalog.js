@@ -198,7 +198,7 @@ async function getCatalog(client, shop) {
     `select id, resource_id, date::text as date, is_full_day, start_time, end_time, reason from public.resource_time_off
         where business_id = $1 and date >= current_date - 1 order by date, start_time nulls first`,
     `select id, category, name, description, duration_mode, duration_minutes, min_minutes, max_minutes, step_minutes, min_days, max_days, required_documents,
-              buffer_after_minutes, max_party_size, sort_order, active, media
+              buffer_after_minutes, max_party_size, sort_order, active, media, premium
          from public.offerings where business_id = $1 order by active desc, sort_order, name`,
     "select offering_id, kind, customer_picks, units_per_booking from public.offering_requirements where business_id = $1 order by kind",
     "select offering_id, resource_id from public.offering_resources where business_id = $1",
@@ -305,6 +305,8 @@ async function getCatalog(client, shop) {
       maxPartySize: o.max_party_size,
       sortOrder: o.sort_order,
       active: o.active,
+      // "พรีเมียม ✨" on the booking page, the shop's own choice (migration …004000)
+      premium: o.premium === true,
       requirements: requirements
         .filter((q2) => q2.offering_id === o.id)
         .map((q2) => ({ kind: q2.kind, customerPicks: q2.customer_picks, unitsPerBooking: q2.units_per_booking })),
@@ -629,7 +631,9 @@ function offeringRow(input) {
     bufferAfterMinutes: int(input.bufferAfterMinutes ?? 0, "เวลาพักหลังจบ (นาที)", { min: 0, max: 480 }),
     maxPartySize: int(input.maxPartySize ?? 1, "จำนวนคนสูงสุดต่อการจอง", { min: 1, max: 1000 }),
     sortOrder: int(input.sortOrder ?? 0, "ลำดับ", { min: -1000, max: 1000 }),
-    active: input.active !== false
+    active: input.active !== false,
+    // not sent = left as it is
+    premium: typeof input.premium === "boolean" ? input.premium : null
   };
   if (durationMode === "fixed") {
     row.durationMinutes = int(input.durationMinutes, "ระยะเวลา (นาที)", { min: 5, max: 1440 });
@@ -675,7 +679,7 @@ async function saveOffering(client, shop, id, input = {}) {
   const o = offeringRow(input);
   const media = validateMedia(input.media);
   const values = [o.category, o.name, o.description, o.durationMode, o.durationMinutes, o.minMinutes, o.maxMinutes, o.stepMinutes,
-    o.bufferAfterMinutes, o.maxPartySize, o.sortOrder, o.active, media === undefined ? null : JSON.stringify(media), o.minDays, o.maxDays, o.requiredDocuments];
+    o.bufferAfterMinutes, o.maxPartySize, o.sortOrder, o.active, media === undefined ? null : JSON.stringify(media), o.minDays, o.maxDays, o.requiredDocuments, o.premium];
 
   let offeringId = id;
   if (id) {
@@ -684,7 +688,7 @@ async function saveOffering(client, shop, id, input = {}) {
       `update public.offerings set category = $3, name = $4, description = $5, duration_mode = $6, duration_minutes = $7,
               min_minutes = $8, max_minutes = $9, step_minutes = $10, buffer_after_minutes = $11, max_party_size = $12,
               sort_order = $13, active = $14, media = coalesce($15::jsonb, media), min_days = $16, max_days = $17,
-              required_documents = coalesce($18::text[], required_documents)
+              required_documents = coalesce($18::text[], required_documents), premium = coalesce($19::boolean, premium)
         where id = $1 and business_id = $2`,
       [id, shop.id, ...values]
     );
@@ -692,8 +696,8 @@ async function saveOffering(client, shop, id, input = {}) {
   } else {
     const { rows } = await client.query(
       `insert into public.offerings (business_id, category, name, description, duration_mode, duration_minutes, min_minutes, max_minutes,
-              step_minutes, buffer_after_minutes, max_party_size, sort_order, active, media, min_days, max_days, required_documents)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, coalesce($14::jsonb, '[]'::jsonb), $15, $16, coalesce($17::text[], '{}')) returning id`,
+              step_minutes, buffer_after_minutes, max_party_size, sort_order, active, media, min_days, max_days, required_documents, premium)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, coalesce($14::jsonb, '[]'::jsonb), $15, $16, coalesce($17::text[], '{}'), coalesce($18::boolean, false)) returning id`,
       [shop.id, ...values]
     );
     offeringId = rows[0].id;

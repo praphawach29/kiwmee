@@ -327,3 +327,28 @@ test("rental by the day: pick-up day, how many days, pick-up time; back the same
     await db.end();
   }
 });
+
+// LINE on Android enlarges every font by its own setting (WebView text zoom); app/b/text-zoom.mjs measures
+// it against a canvas and lowers the root font size to match. Here the canvas is made to read 1.3× narrower,
+// as it would against zoomed page text.
+test("inside LINE, the app's own text zoom is undone; in a browser the page is left alone", async ({ browser }) => {
+  const line = await browser.newContext({ viewport: { width: 390, height: 844 }, userAgent: "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126 Mobile Safari/537.36 Line/14.20.0" });
+  const zoomed = await line.newPage();
+  await zoomed.addInitScript(() => {
+    const measure = CanvasRenderingContext2D.prototype.measureText;
+    CanvasRenderingContext2D.prototype.measureText = function (text) {
+      const m = measure.call(this, text);
+      return { width: m.width / 1.3 };
+    };
+  });
+  await zoomed.goto("/b/bloom-hair");
+  const root = await zoomed.evaluate(() => [getComputedStyle(document.documentElement).fontSize, document.documentElement.dataset.textZoom]);
+  expect(Math.abs(parseFloat(root[0]) - 16 / 1.3)).toBeLessThan(0.01);
+  expect(root[1]).toBe("1.30");
+  await line.close();
+
+  const plain = await browser.newPage();
+  await plain.goto("/b/bloom-hair");
+  expect(await plain.evaluate(() => [getComputedStyle(document.documentElement).fontSize, document.documentElement.dataset.textZoom ?? null])).toEqual(["16px", null]);
+  await plain.close();
+});

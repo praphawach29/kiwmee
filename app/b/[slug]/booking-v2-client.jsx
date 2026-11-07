@@ -10,7 +10,7 @@ import CustomerFrame from "./customer-frame.jsx";
 import { useLiff } from "./use-liff.jsx";
 import { CheckinQr } from "./qr.jsx";
 import { bookingCode } from "../../../src/v2/scan-codes.js";
-import { BookingProgress, BookingReview, BookingSubmitBar, CustomerTabs, DepositBox, DirectionsButton, DocumentsBox, OfferingDetails, ShopAbout, ShopHeader, ShopHero, OfferingThumbnail, ResourceChoice, ResourceThumbnail, groupTimes, withMedia } from "./booking-presentation.jsx";
+import { BookingProgress, BookingReview, BookingSubmitBar, CustomerTabs, DepositBox, DocumentsBox, OfferingDetails, ShopAbout, ShopHeader, ShopHero, OfferingThumbnail, ResourceChoice, ResourceThumbnail, groupTimes, withMedia } from "./booking-presentation.jsx";
 
 const RESOURCE_WORD = { staff: "ช่าง", court: "สนาม", room: "ห้อง", equipment: "อุปกรณ์" };
 const STEP_TITLE = {
@@ -488,8 +488,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     return (
       <CustomerFrame>
         <main className="bk-shell">
-          <BookingProgress phase="complete" resourceWord={resourceWord} />
-          <BookingDone shop={shop} booking={booking} items={summaryItems} selected={selected} resourceWord={resourceWord}
+          <BookingDone shop={shop} booking={booking} items={summaryItems} selected={selected} resourceWord={resourceWord} customerName={customer.name}
             onSlip={(view) => setBooking((b) => ({ ...b, status: view.booking.status, deposit: { ...b.deposit, slips: view.booking.deposit?.slips ?? 1 } }))} />
           <PoweredBy />
         </main>
@@ -1433,7 +1432,7 @@ function icsText(value) {
 }
 const icsTime = (iso) => new Date(iso).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 
-function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
+function BookingDone({ shop, booking, items, selected, resourceWord, customerName = "", onSlip }) {
   const timeFormat = (iso) => new Intl.DateTimeFormat("th-TH", { timeZone: shop.timezone, hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
   const dayPart = (opts) => new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", ...opts }).format(new Date(`${selected.date}T00:00:00Z`));
   const dateOf = (iso) => new Intl.DateTimeFormat("en-CA", { timeZone: shop.timezone }).format(new Date(iso));
@@ -1455,12 +1454,14 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
   const held = booking.status === "held";
   const pendingStatus = booking.status === "pending";
   const statusLabel = held ? "รอชำระมัดจำ" : pendingStatus ? "รอร้านตรวจสอบ" : booking.status === "confirmed" ? "ยืนยันแล้ว" : "รอรับบริการ";
-  const successTitle = held ? "กันคิวไว้ให้แล้ว" : pendingStatus ? "ส่งสลิปแล้ว รอร้านยืนยัน" : "จองคิวสำเร็จเรียบร้อยแล้ว!";
+  const successTitle = held ? "กันคิวไว้ให้แล้ว" : pendingStatus ? "ส่งสลิปแล้ว รอร้านยืนยัน" : "จองคิวสำเร็จแล้ว";
   const successCopy = held && booking.deposit
     ? booking.deposit.payFull ? "ชำระเต็มจำนวนตามรายละเอียดด้านล่างเพื่อยืนยันคิว" : "ชำระมัดจำตามรายละเอียดด้านล่างเพื่อยืนยันคิว"
     : pendingStatus
       ? "ร้านกำลังตรวจสอบสลิป คุณดูสถานะการจองได้จากลิงก์ด้านล่าง"
-      : "บันทึกหมายเลขการจองและ QR นี้ไว้ใช้เมื่อมาถึงร้าน";
+      : customerName.trim()
+        ? `${shop.name} รอพบคุณ${customerName.trim().split(/\s+/)[0]}`
+        : `${shop.name} รอพบคุณ`;
   // the ID / licence a rental asks for (design 11.7 E3), sent right here with the customer's consent
   const asked = shop.offerings.find((o) => o.id === selected.offeringId)?.requiredDocuments ?? [];
   const [documents, setDocuments] = useState(() =>
@@ -1517,7 +1518,6 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
             ? <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
             : <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7" /></svg>}
         </span>
-        <small className="bk-done-eyebrow">สรุปการจอง · {shop.name}</small>
         <h1>{successTitle}</h1>
         <p className="bk-muted">{successCopy}</p>
       </div>
@@ -1536,21 +1536,13 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
         <DocumentsBox documents={documents} shopName={shop.name} uploadUrl={`/api/b/${shop.slug}/manage/${booking.manageToken}/document`} onUploaded={(view) => setDocuments(view.documents ?? documents)} />
       )}
 
-      <div className="bk-card bk-done-card bk-pass-card">
-        <div className="bk-pass-header">
-          <div className="bk-pass-brand">
-            <span className="bk-pass-badge">KIWMEE BOOKING PASS</span>
-          </div>
+      {/* the booking in one card (design "Kiwmee ปรับหน้าตา" · Done): when, what, who, how much, and the
+          two things people do next — put it in their calendar, find the way */}
+      <div className="bk-card bk-done-card">
+        <div className="bk-done-meta">
+          {booking.id && <span>รหัสการจอง <b>#{bookingCode(booking.id)}</b></span>}
           <span className="bk-done-status" data-state={held ? "held" : pendingStatus ? "pending" : "confirmed"}>{statusLabel}</span>
         </div>
-
-        {booking.id && (
-          <div className="bk-done-reference">
-            <small>หมายเลขการจอง</small>
-            <strong>#{bookingCode(booking.id)}</strong>
-          </div>
-        )}
-
         {selected.date && (
           <div className="bk-done-schedule">
             <div className="bk-when">
@@ -1564,7 +1556,7 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
               </div>
             </div>
             {booking.price?.total > 0 && (
-              <div className="bk-done-total"><small>ราคารวม</small><strong>{money(booking.price.total)}</strong></div>
+              <div className="bk-done-total"><small>{booking.deposit ? "ราคารวม" : "จ่ายที่ร้าน"}</small><strong>{money(booking.price.total)}</strong></div>
             )}
           </div>
         )}
@@ -1591,40 +1583,31 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
             </div>
           )}
         </dl>
-        {/* the check-in QR once the booking counts: not while the deposit is still awaited */}
-        {booking.id && (held || pendingStatus) && <p className="bk-qr-wait">QR เช็กอินจะแสดงเมื่อร้านยืนยันมัดจำแล้ว</p>}
-        {booking.id && !held && !pendingStatus && (
-          <div className="bk-done-qr">
-            <CheckinQr slug={shop.slug} id={booking.id} open={true} />
-            <small className="bk-muted" style={{ textAlign: "center", display: "block", marginTop: 4 }}>แสดง QR Code นี้ให้พนักงานเพื่อเช็คอินเมื่อถึงร้าน</small>
-          </div>
-        )}
         {held && booking.holdExpiresAt && !booking.deposit && <p className="bk-notice">กรุณาชำระเงินภายใน {timeFormat(booking.holdExpiresAt)} น.</p>}
-        {(shop.address || shop.directions) && (
-          <div className="bk-done-location">
-            <span className="bk-done-location-icon" aria-hidden="true"><LocationIcon /></span>
-            <span className="bk-done-location-copy"><strong>{shop.name}</strong>{shop.address && <small>{shop.address}</small>}</span>
-            <DirectionsButton href={shop.directions} className="bk-done-map-link" />
-          </div>
-        )}
+        {shop.address && <p className="bk-done-address"><LocationIcon /> <span>{shop.address}</span></p>}
+        <div className="bk-done-actions">
+          {booking.startAt && booking.endAt && (
+            <button type="button" className="bk-done-action" onClick={addToCalendar}>เพิ่มลงปฏิทิน</button>
+          )}
+          {shop.directions && (
+            <a className="bk-done-action" href={shop.directions} target="_blank" rel="noreferrer">ดูเส้นทาง</a>
+          )}
+          <button type="button" className="bk-done-action" onClick={shareBooking}>{shared ? "✓ คัดลอกแล้ว" : "ส่งให้เพื่อน"}</button>
+        </div>
       </div>
 
-      <div className="bk-actions-grid">
-        {booking.startAt && booking.endAt && (
-          <button type="button" className="bk-btn-primary-action bk-btn-calendar" onClick={addToCalendar}>
-            <span>📅 เพิ่มลงปฏิทิน</span>
-          </button>
-        )}
-        <button type="button" className="bk-btn-primary-action bk-btn-share" onClick={shareBooking}>
-          <span>{shared ? "✓ คัดลอกแล้ว" : "📤 แชร์เข้า LINE"}</span>
-        </button>
-      </div>
+      {/* the check-in QR once the booking counts: not while the deposit is still awaited */}
+      {booking.id && (held || pendingStatus) && <p className="bk-qr-wait">QR เช็กอินจะแสดงเมื่อร้านยืนยันมัดจำแล้ว</p>}
+      {booking.id && !held && !pendingStatus && (
+        <div className="bk-card bk-done-qr">
+          <strong className="bk-done-qr-title">QR เช็กอินเมื่อถึงร้าน</strong>
+          <CheckinQr slug={shop.slug} id={booking.id} open={true} />
+        </div>
+      )}
 
       {managePath && <ManageLink shop={shop} path={managePath} />}
 
-      <a className="bk-home-btn" href={`/b/${shop.slug}`}>
-        <span>🏠 กลับสู่หน้าหลัก / ดูบริการอื่นๆ</span>
-      </a>
+      <a className="bk-again" href={`/b/${shop.slug}`}>จองคิวอีกครั้ง</a>
 
     </section>
   );

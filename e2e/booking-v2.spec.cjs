@@ -90,6 +90,11 @@ test("salon: a cut, then anyone, the day and a time on one screen", async ({ pag
   await expect(done.locator(".bk-done-summary dt", { hasText: "ช่าง" })).toHaveCount(1);
   await expect(done.locator(".bk-done-summary")).toContainText(/ช่าง(แนน|บี)\s*ระบบเลือกให้/);
   await expect(done.locator(".bk-done-summary")).not.toContainText("ช่างคนไหนก็ได้");
+  // the design's done screen: who the shop waits for, the next things to do, the QR, book again
+  await expect(done).toContainText("รอพบคุณลูกค้าเลือกตัดผม");
+  await expect(done.getByRole("button", { name: "เพิ่มลงปฏิทิน" })).toBeVisible();
+  await expect(done.locator(".bk-done-qr")).toBeVisible();
+  await expect(done.getByRole("link", { name: "จองคิวอีกครั้ง" })).toHaveAttribute("href", "/b/bloom-hair");
   expect(errors).toEqual([]);
 });
 

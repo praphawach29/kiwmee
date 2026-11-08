@@ -10,6 +10,7 @@ import { api } from "../api.mjs";
 import OwnerMediaEditor from "../media-editor.jsx";
 import { isSafeMediaUrl, uploadMediaFile, MEDIA_ACCEPT } from "../media-upload.mjs";
 import MerchantSidebar from "../merchant-sidebar.jsx";
+import BillingPanel from "../billing-panel.jsx";
 import { MobileShopHeader, MobileTabBar } from "../merchant-mobile.jsx";
 import { shopNavigation, shopTabs, resolveShopTab } from "../merchant-navigation.mjs";
 import { bookingFlowDraft, bookingFlowFromDraft, catalogWarnings, kindWord, previewPaths, resourceWord } from "./flow-preview.mjs";
@@ -324,6 +325,9 @@ export default function ShopAdmin({ slug }) {
         {tab === "resources" && <ResourcesTab slug={slug} catalog={catalog} onSaved={reload} />}
         {tab === "hours" && <HoursTab slug={slug} catalog={catalog} onSaved={reload} />}
         {tab === "team" && <TeamTab slug={slug} />}
+        {tab === "billing" && (catalog.shop.brandOwner
+          ? <BillingPanel brandId={catalog.shop.brandId} />
+          : <section className="ad-card"><h2>แพ็กเกจและการชำระเงิน</h2><p className="ad-muted">แพ็กเกจและกระเป๋าเงินเป็นของแบรนด์ · เฉพาะเจ้าของแบรนด์จัดการได้</p></section>)}
       </ReadOnly.Provider>
         </main>
         <MobileTabBar

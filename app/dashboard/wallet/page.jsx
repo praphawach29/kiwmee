@@ -3,9 +3,9 @@ import "../dashboard.css";
 import "../../ui/ui.css";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "กระเป๋าเงิน" };
+export const metadata = { title: "แพ็กเกจและการชำระเงิน" };
 
-// /dashboard/wallet — ยอดเงิน เติมด้วยสลิป และซื้อแพ็กเกจ/แพ็กเสริม (migration …003700)
+// /dashboard/wallet — แพ็กเกจและการชำระเงินของแบรนด์ (app/dashboard/billing-panel.jsx)
 export default function WalletPage() {
   return <WalletClient />;
 }

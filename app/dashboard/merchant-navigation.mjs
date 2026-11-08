@@ -14,6 +14,11 @@ const SETTINGS = [
   { id: "team", label: "พนักงานและสิทธิ์", icon: "☺" },
 ];
 
+// Brand money lives with the owner: packages, wallet, top-ups (docs/BILLING_PLAN.md)
+const ACCOUNT = [
+  { id: "billing", label: "แพ็กเกจและการชำระเงิน", icon: "฿" },
+];
+
 export function shopTabs(role) {
   return shopNavigation(role).flatMap((group) => group.items).filter((item) => !item.href);
 }
@@ -36,5 +41,6 @@ export function shopNavigation(role) {
     { label: "ภาพรวม", items: [{ id: "shops", icon: "⌂", label: "ร้านทั้งหมด", href: "/dashboard" }] },
     ...(role === "owner" || role === "staff" ? [{ label: "จัดการประจำวัน", items: DAILY }] : []),
     ...(role === "owner" ? [{ label: "ตั้งค่าร้าน", collapsible: true, items: SETTINGS }] : []),
+    ...(role === "owner" ? [{ label: "บัญชี", items: ACCOUNT }] : []),
   ];
 }

@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api.mjs";
+import { quotePlan } from "../../src/v2/plans.js";
 
 const money = (n) => Number(n ?? 0).toLocaleString("th-TH", { maximumFractionDigits: 2 });
 const thDate = (value) => (value ? new Date(value).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" }) : "");
@@ -31,14 +32,6 @@ export function limitText(value, unit = "") {
   if (value === null || value === undefined) return "ไม่จำกัด";
   if (value === 0) return "—";
   return `${money(value)}${unit ? ` ${unit}` : ""}`;
-}
-
-/** The plan the shop holds and what buying `plan` would give: { until, switching } */
-export function purchaseOutcome(current, planId, now = new Date()) {
-  // a different plan replacing a free (complimentary) one starts today; otherwise days run on
-  const restart = current?.complimentary && current.effective !== planId;
-  const from = Math.max(now.getTime(), !restart && current?.valid_until ? new Date(current.valid_until).getTime() : 0);
-  return { until: new Date(from + 30 * DAY), switching: Boolean(current && current.effective !== planId && current.effective !== "free") };
 }
 
 /** A phone photo of a slip can be several MB: shrink it to a JPEG the server accepts (≤ ~1.4 MB) */
@@ -235,13 +228,22 @@ function TopupSheet({ brandId, wallet, initialAmount, onClose, onDone }) {
   );
 }
 
+const MODE_TEXT = {
+  new: "เริ่มใช้วันนี้",
+  after_free: "เริ่มต่อจากวันที่ใช้ฟรีหมด",
+  renew: "ต่อจากวันหมดอายุเดิม",
+  upgrade: "อัปเกรดทันที จ่ายเฉพาะส่วนต่างของวันที่เหลือ · วันหมดอายุเท่าเดิม",
+  switch: "เริ่มรอบรายปีวันนี้ หักมูลค่าวันที่เหลือของรอบเดิมแล้ว"
+};
+const cycleWord = (cycle) => (cycle === "year" ? "1 ปี" : "1 เดือน");
+
 function BuySheet({ brandId, wallet, item, onClose, onDone, onTopup }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(null);
   const after = wallet.balance - item.amount;
   const short = Math.max(0, item.amount - wallet.balance);
-  const outcome = item.plan ? purchaseOutcome(wallet.plan, item.plan) : null;
+  const quote = item.quote ?? null;
 
   async function buy() {
     setBusy(true);
@@ -264,21 +266,21 @@ function BuySheet({ brandId, wallet, item, onClose, onDone, onTopup }) {
           <span className="bl-result-icon" aria-hidden="true">✓</span>
           <h2>{done.label}</h2>
           <p>ตัดจากกระเป๋า {money(done.paid)} บาท · คงเหลือ {money(done.balance)} บาท</p>
-          {outcome && <p className="ad-muted">ใช้ได้ถึง {thDate(outcome.until)}</p>}
+          {done.plan && <p className="ad-muted">ใช้ได้ถึง {thDate(done.plan.validUntil)}</p>}
           <button type="button" className="ad-primary" onClick={onClose}>เสร็จแล้ว</button>
         </div>
       ) : (
         <div className="ad-card bl-confirm">
           <h2>{item.label}</h2>
           <dl className="bl-sum">
-            <div><dt>ราคา</dt><dd>{money(item.amount)} บาท</dd></div>
+            {quote && quote.amount !== item.full && <div><dt>ราคาเต็ม</dt><dd>{money(item.full)} บาท</dd></div>}
+            <div><dt>{quote && quote.amount !== item.full ? "จ่ายวันนี้" : "ราคา"}</dt><dd>{money(item.amount)} บาท</dd></div>
             <div><dt>ยอดในกระเป๋า</dt><dd>{money(wallet.balance)} บาท</dd></div>
             <div data-strong="true"><dt>คงเหลือหลังซื้อ</dt><dd>{short ? "—" : `${money(after)} บาท`}</dd></div>
           </dl>
-          {outcome && (
+          {quote && (
             <p className="ad-notice">
-              {outcome.switching ? `เปลี่ยนจากแพ็กเกจ${wallet.planName}เป็นแพ็กเกจนี้ทันที · ` : ""}ใช้ได้ถึง {thDate(outcome.until)}
-              {wallet.plan.auto_renew !== false ? " · ต่ออายุอัตโนมัติจากกระเป๋าเมื่อเหลือ 3 วัน" : ""}
+              {MODE_TEXT[quote.mode]} · ใช้ได้ถึง {thDate(quote.validUntil)} · ต่ออายุอัตโนมัติจากกระเป๋าเมื่อเหลือ 3 วัน (ปิดได้)
             </p>
           )}
           {error && <p className="ad-error" role="alert">{error}</p>}
@@ -288,7 +290,7 @@ function BuySheet({ brandId, wallet, item, onClose, onDone, onTopup }) {
               <button type="button" className="ad-primary" onClick={() => onTopup(Math.max(wallet.limits.min, Math.ceil(short)))}>เติมเงิน {money(Math.max(wallet.limits.min, Math.ceil(short)))} บาท</button>
             </>
           ) : (
-            <button type="button" className="ad-primary" disabled={busy} onClick={buy}>{busy ? "กำลังซื้อ…" : `ยืนยันซื้อ ${money(item.amount)} บาท`}</button>
+            <button type="button" className="ad-primary" disabled={busy} onClick={buy}>{busy ? "กำลังซื้อ…" : `ยืนยันจ่าย ${money(item.amount)} บาท`}</button>
           )}
         </div>
       )}
@@ -296,26 +298,100 @@ function BuySheet({ brandId, wallet, item, onClose, onDone, onTopup }) {
   );
 }
 
-/** A cheaper plan cannot replace a paid one that still has days left (B4 will schedule it for the next cycle) */
-export function downgradeBlocked(catalog, current, planId, validUntil, now = new Date()) {
-  const from = catalog.plans.find((p) => p.id === current);
-  const to = catalog.plans.find((p) => p.id === planId);
-  return Boolean(from && to && from.monthly > to.monthly && to.monthly > 0 && validUntil && new Date(validUntil) > now);
+/** What switching from one plan to another switches off (for "from the next renewal") */
+export function lostFeatures(catalog, fromId, toId) {
+  const from = catalog.plans.find((p) => p.id === fromId);
+  const to = catalog.plans.find((p) => p.id === toId);
+  if (!from || !to) return [];
+  const lost = catalog.featureRows.filter((row) => from.features[row.key] && !to.features[row.key]).map((row) => row.label);
+  for (const row of catalog.limitRows) {
+    const a = from.limits[row.key];
+    const b = to.limits[row.key];
+    if (b !== null && (a === null || a > b)) lost.push(b === 0 ? `${row.label}: ไม่มี` : `${row.label} เหลือ ${limitText(b, row.unit)}`);
+  }
+  return lost;
 }
 
-export function PlanCards({ catalog, current, validUntil = null, onPick }) {
+function ScheduleSheet({ brandId, wallet, target, onClose, onDone }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const { catalog } = wallet;
+  const from = wallet.plan.effective;
+  const toFree = target.plan === "free";
+  const lost = lostFeatures(catalog, from, target.plan);
+  async function save() {
+    setBusy(true);
+    setError("");
+    try {
+      await api("PUT", `/api/dashboard/brands/${brandId}/wallet/plan`, toFree ? { autoRenew: false, nextPlan: "free" } : { autoRenew: true, nextPlan: target.plan, nextCycle: target.cycle });
+      onDone();
+      onClose();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  const name = catalog.plans.find((p) => p.id === target.plan)?.name ?? target.plan;
+  return (
+    <Sheet title="เปลี่ยนแพ็กเกจรอบถัดไป" onClose={onClose}>
+      <div className="ad-card bl-confirm">
+        <h2>{toFree ? "ไม่ต่ออายุ · กลับเป็นแพ็กเกจฟรี" : `เปลี่ยนเป็นแพ็กเกจ${name} ${cycleWord(target.cycle)}`}</h2>
+        <p className="ad-notice">ใช้แพ็กเกจ{wallet.planName}ต่อได้ถึง {thDate(wallet.plan.valid_until)} · ไม่ตัดเงินวันนี้{toFree ? "" : ` · วันนั้นระบบจะตัด ${money(target.amount)} บาทจากกระเป๋า`}</p>
+        {lost.length > 0 && (
+          <div className="ad-field">
+            สิ่งที่จะถูกพักไว้ (ข้อมูลไม่หาย กลับมาใช้ได้เมื่ออัปเกรด)
+            <ul className="bl-lost">{lost.map((x) => <li key={x}>{x}</li>)}</ul>
+          </div>
+        )}
+        {error && <p className="ad-error" role="alert">{error}</p>}
+        <button type="button" className="ad-primary" disabled={busy} onClick={save}>{busy ? "กำลังบันทึก…" : "ยืนยัน"}</button>
+      </div>
+    </Sheet>
+  );
+}
+
+/** One plan card's button: what buying it today means (src/v2/plans.js quotePlan) */
+function planAction(wallet, p, cycle) {
+  const current = wallet.plan;
+  const paidRunning = current.effective !== "free" && !current.complimentary && current.valid_until && new Date(current.valid_until) > new Date();
+  if (p.monthly === 0) {
+    if (!paidRunning) return { kind: "note", text: current.effective === "free" ? "แพ็กเกจปัจจุบัน" : "กลับเป็นแพ็กเกจฟรีเองเมื่อแพ็กเกจหมดอายุ" };
+    if (current.next_plan === "free" || current.auto_renew === false) return { kind: "note", text: `กลับเป็นแพ็กเกจฟรี ${thDate(current.valid_until)}` };
+    return { kind: "schedule", label: "ไม่ต่ออายุ · กลับเป็นฟรีรอบหน้า", target: { plan: "free", cycle: "month", amount: 0 } };
+  }
+  const quote = quotePlan(current, p.id, cycle);
+  if (quote.mode === "schedule") {
+    const amount = cycle === "year" ? p.yearly : p.monthly;
+    if (current.next_plan === p.id && (current.next_cycle ?? current.cycle) === cycle) return { kind: "note", text: `เริ่มรอบถัดไป ${thDate(current.valid_until)}` };
+    return { kind: "schedule", label: `เปลี่ยนเป็นแพ็กเกจนี้รอบหน้า`, target: { plan: p.id, cycle, amount } };
+  }
+  const label = {
+    new: `เลือกแพ็กเกจ${p.name}`,
+    after_free: `ซื้อล่วงหน้า ${money(quote.amount)} บาท`,
+    renew: `ต่ออายุ ${cycleWord(cycle)}`,
+    upgrade: `อัปเกรด · จ่าย ${money(quote.amount)} บาท`,
+    switch: `เปลี่ยนเป็นรายปี · ${money(quote.amount)} บาท`
+  }[quote.mode];
+  return { kind: "buy", label, quote };
+}
+
+export function PlanCards({ wallet, cycle = "month", onPick, onSchedule }) {
+  const { catalog } = wallet;
+  const current = wallet.plan.effective;
   return (
     <div className="bl-plans">
       {catalog.plans.map((p) => {
         const isCurrent = current === p.id;
-        const blocked = downgradeBlocked(catalog, current, p.id, validUntil);
+        const action = planAction(wallet, p, cycle);
+        const price = cycle === "year" ? p.yearly : p.monthly;
         return (
           <article key={p.id} className="bl-plan" data-current={isCurrent} data-recommended={Boolean(p.recommended)}>
             {p.recommended && <span className="bl-plan-flag">แนะนำ</span>}
             <h3>{p.name}</h3>
             <p className="bl-plan-tag">{p.tagline}</p>
-            <p className="bl-plan-price"><b>{money(p.monthly)}</b> บาท/เดือน</p>
-            {p.yearly > 0 && <p className="bl-plan-year">รายปี {money(p.yearly)} บาท (ประหยัด 2 เดือน · เร็ว ๆ นี้)</p>}
+            <p className="bl-plan-price"><b>{money(price)}</b> บาท/{cycle === "year" ? "ปี" : "เดือน"}</p>
+            {p.yearly > 0 && <p className="bl-plan-year">{cycle === "year" ? `เฉลี่ย ${money(Math.round(p.yearly / 12))} บาท/เดือน · ประหยัด 2 เดือน` : `รายปี ${money(p.yearly)} บาท (ประหยัด 2 เดือน)`}</p>}
             <ul className="bl-plan-list">
               {catalog.limitRows.map((row) => (
                 <li key={row.key} data-off={p.limits[row.key] === 0}><span>{row.label}</span><b>{limitText(p.limits[row.key], row.unit)}</b></li>
@@ -324,13 +400,11 @@ export function PlanCards({ catalog, current, validUntil = null, onPick }) {
                 <li key={row.key} data-off={!p.features[row.key]}><span>{row.label}</span><b aria-label={p.features[row.key] ? "มี" : "ไม่มี"}>{p.features[row.key] ? "✓" : "—"}</b></li>
               ))}
             </ul>
-            {blocked ? (
-              <p className="bl-plan-note">เปลี่ยนเป็นแพ็กเกจนี้ได้เมื่อแพ็กเกจปัจจุบันหมดอายุ</p>
-            ) : p.monthly > 0 ? (
-              <button type="button" className={isCurrent ? "ad-secondary" : "ad-primary"} onClick={() => onPick(p)}>{isCurrent ? "ต่ออายุ 1 เดือน" : `เลือกแพ็กเกจ${p.name}`}</button>
-            ) : (
-              <p className="bl-plan-note">{isCurrent ? "แพ็กเกจปัจจุบัน" : "กลับเป็นแพ็กเกจฟรีเองเมื่อแพ็กเกจหมดอายุ"}</p>
+            {action.kind === "buy" && (
+              <button type="button" className={isCurrent ? "ad-secondary" : "ad-primary"} onClick={() => onPick(p, action.quote, cycle)}>{action.label}</button>
             )}
+            {action.kind === "schedule" && <button type="button" className="ad-secondary" onClick={() => onSchedule(action.target)}>{action.label}</button>}
+            {action.kind === "note" && <p className="bl-plan-note">{action.text}</p>}
           </article>
         );
       })}
@@ -343,6 +417,9 @@ export default function BillingPanel({ brandId }) {
   const [error, setError] = useState("");
   const [topup, setTopup] = useState(null); // amount to start with
   const [buying, setBuying] = useState(null);
+  const [scheduling, setScheduling] = useState(null);
+  const [cycle, setCycle] = useState("month");
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
     if (!brandId) return;
@@ -351,34 +428,80 @@ export default function BillingPanel({ brandId }) {
   useEffect(load, [load]);
   const closeTopup = useCallback(() => setTopup(null), []);
   const closeBuy = useCallback(() => setBuying(null), []);
+  const closeSchedule = useCallback(() => setScheduling(null), []);
 
   if (!brandId) return <p className="ad-error">ร้านนี้ยังไม่อยู่ในแบรนด์</p>;
   if (error && !wallet) return <section className="ad-card"><p className="ad-error" role="alert">{error}</p><p className="ad-muted">หน้านี้สำหรับเจ้าของแบรนด์เท่านั้น</p></section>;
   if (!wallet) return <p className="ad-muted">กำลังโหลด…</p>;
 
   const { catalog } = wallet;
-  const plan = catalog.plans.find((p) => p.id === wallet.plan.effective) ?? catalog.plans[0];
+  const state = wallet.plan;
+  const plan = catalog.plans.find((p) => p.id === state.effective) ?? catalog.plans[0];
   const paid = plan.monthly > 0;
-  const months = paid ? Math.floor(wallet.balance / plan.monthly) : 0;
+  const ownCycle = state.cycle === "year" ? "year" : "month";
+  const renewPlan = catalog.plans.find((p) => p.id === (state.next_plan && state.next_plan !== "free" ? state.next_plan : plan.id)) ?? plan;
+  const renewCycle = state.next_cycle ?? ownCycle;
+  const renewPrice = renewCycle === "year" ? renewPlan.yearly : renewPlan.monthly;
+  const months = paid && renewPrice ? Math.floor(wallet.balance / renewPrice) : 0;
   const daysLeft = wallet.planDaysLeft;
-  const soon = paid && daysLeft != null && daysLeft <= 7;
+  const inGrace = paid && daysLeft != null && daysLeft <= 0 && state.grace_until;
+  const willRenew = paid && !state.complimentary && state.auto_renew !== false && state.next_plan !== "free";
+  const soon = paid && !state.complimentary && daysLeft != null && daysLeft <= 7;
   const pending = wallet.topups.filter((t) => t.status === "pending");
   const quota = wallet.quota;
-  const pickPlan = (p) => setBuying({ sku: `plan:${p.id}`, label: `แพ็กเกจ${p.name} 1 เดือน`, amount: p.monthly, plan: p.id });
+  const shortBy = Math.max(0, Math.ceil(renewPrice - wallet.balance));
+  const pickPlan = (p, quote, c) => setBuying({ sku: c === "year" ? `plan:${p.id}:year` : `plan:${p.id}`, label: `แพ็กเกจ${p.name} ${cycleWord(c)}`, amount: quote.amount, full: c === "year" ? p.yearly : p.monthly, plan: p.id, quote });
 
+  async function setAutoRenew(on) {
+    setBusy(true);
+    try {
+      await api("PUT", `/api/dashboard/brands/${brandId}/wallet/plan`, on ? { autoRenew: true, nextPlan: state.next_plan === "free" ? null : state.next_plan } : { autoRenew: false });
+      load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function cancelScheduled() {
+    setBusy(true);
+    try {
+      await api("PUT", `/api/dashboard/brands/${brandId}/wallet/plan`, { autoRenew: true, nextPlan: null, nextCycle: null });
+      load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const scheduledName = state.next_plan && state.next_plan !== "free" ? catalog.plans.find((p) => p.id === state.next_plan)?.name : null;
   return (
     <div className="ad-stack bl-page">
-      {wallet.plan.complimentary && wallet.plan.valid_until && (
+      {error && <p className="ad-error" role="alert">{error}</p>}
+      {state.trial && state.complimentary && state.valid_until && daysLeft > 0 && (
         <p className="bl-alert" data-tone="gift">
-          🎁 ร้านของคุณใช้แพ็กเกจ{plan.name}ฟรีถึง {thDate(wallet.plan.valid_until)} · ไม่ตัดเงินจากกระเป๋า · หลังจากนั้นกลับเป็นแพ็กเกจฟรี ถ้ายังไม่ได้เลือกแพ็กเกจ
+          🎁 กำลังทดลองใช้แพ็กเกจ{plan.name}ฟรี เหลืออีก {daysLeft} วัน (ถึง {thDate(state.valid_until)})
+          <small>ไม่ตัดเงิน · ครบแล้วกลับเป็นแพ็กเกจฟรีเอง ข้อมูลอยู่ครบ · เลือกแพ็กเกจด้านล่างเพื่อใช้ต่อ วันใช้งานต่อจากวันทดลองหมด</small>
+        </p>
+      )}
+      {state.complimentary && !state.trial && state.valid_until && (
+        <p className="bl-alert" data-tone="gift">
+          🎁 ร้านของคุณใช้แพ็กเกจ{plan.name}ฟรีถึง {thDate(state.valid_until)} · ไม่ตัดเงินจากกระเป๋า · หลังจากนั้นกลับเป็นแพ็กเกจฟรี ถ้ายังไม่ได้เลือกแพ็กเกจ
           <small>ซื้อแพ็กเกจ{plan.name}ล่วงหน้าได้ วันใช้งานจะต่อจากวันที่ใช้ฟรีหมด</small>
         </p>
       )}
-      {soon && !wallet.plan.complimentary && (
-        <p className="bl-alert" data-tone={wallet.balance >= plan.monthly ? "info" : "warn"}>
-          {daysLeft <= 0 ? `แพ็กเกจ${plan.name}หมดอายุแล้ว` : `แพ็กเกจ${plan.name}จะหมดอายุในอีก ${daysLeft} วัน`}
-          {wallet.balance >= plan.monthly ? " · ระบบจะต่ออายุจากกระเป๋าให้อัตโนมัติ" : ` · เติมเงินอีก ${money(plan.monthly - wallet.balance)} บาทเพื่อต่ออายุอัตโนมัติ`}
-          {wallet.balance < plan.monthly && <button type="button" className="ad-link" onClick={() => setTopup(Math.max(wallet.limits.min, Math.ceil(plan.monthly - wallet.balance)))}>เติมเงิน</button>}
+      {inGrace && (
+        <p className="bl-alert" data-tone="warn">
+          แพ็กเกจ{plan.name}หมดอายุแล้ว · ใช้ต่อได้ถึง {thDate(state.grace_until)} (ช่วงผ่อนผัน) · เติมเงินอีก {money(shortBy)} บาท ระบบจะต่ออายุให้ภายในชั่วโมง
+          <button type="button" className="ad-link" onClick={() => setTopup(Math.max(wallet.limits.min, shortBy))}>เติมเงิน</button>
+        </p>
+      )}
+      {soon && !inGrace && willRenew && (
+        <p className="bl-alert" data-tone={wallet.balance >= renewPrice ? "info" : "warn"}>
+          {`แพ็กเกจ${plan.name}จะต่ออายุในอีก ${Math.max(daysLeft, 0)} วัน`}
+          {wallet.balance >= renewPrice ? " · ระบบจะตัดจากกระเป๋าให้อัตโนมัติ" : ` · เติมเงินอีก ${money(shortBy)} บาทเพื่อต่ออายุ`}
+          {wallet.balance < renewPrice && <button type="button" className="ad-link" onClick={() => setTopup(Math.max(wallet.limits.min, shortBy))}>เติมเงิน</button>}
         </p>
       )}
 
@@ -387,13 +510,26 @@ export default function BillingPanel({ brandId }) {
           <div className="bl-current-head">
             <div>
               <p className="ad-muted">แพ็กเกจปัจจุบัน</p>
-              <h2>{plan.name}</h2>
-              <p className="ad-muted">{paid ? (wallet.plan.valid_until ? `ใช้ได้ถึง ${thDate(wallet.plan.valid_until)}${daysLeft > 0 ? ` (อีก ${daysLeft} วัน)` : ""}` : "ไม่มีวันหมดอายุ") : "ใช้ได้ไม่มีค่าใช้จ่าย"}</p>
+              <h2>{plan.name}{paid && !state.complimentary ? <small className="bl-cycle"> · {ownCycle === "year" ? "รายปี" : "รายเดือน"}</small> : null}</h2>
+              <p className="ad-muted">{paid ? (state.valid_until ? `ใช้ได้ถึง ${thDate(state.valid_until)}${daysLeft > 0 ? ` (อีก ${daysLeft} วัน)` : ""}` : "ไม่มีวันหมดอายุ") : "ใช้ได้ไม่มีค่าใช้จ่าย"}</p>
             </div>
-            {paid && (wallet.plan.complimentary
-              ? <span className="ad-status" data-tone="info">ข้อเสนอเปิดตัว · ใช้ฟรี</span>
-              : <span className="ad-status" data-tone="ok">ต่ออายุอัตโนมัติจากกระเป๋า</span>)}
+            {paid && state.complimentary && <span className="ad-status" data-tone="info">{state.trial ? "ทดลองใช้ฟรี" : "ข้อเสนอเปิดตัว · ใช้ฟรี"}</span>}
+            {paid && !state.complimentary && (
+              <label className="ad-switch bl-autorenew">
+                <input type="checkbox" role="switch" checked={willRenew} disabled={busy} onChange={(e) => setAutoRenew(e.target.checked)} />
+                <span aria-hidden="true" />
+                ต่ออายุอัตโนมัติ
+              </label>
+            )}
           </div>
+          {paid && !state.complimentary && (scheduledName || state.next_plan === "free" || (state.next_cycle && state.next_cycle !== ownCycle)) && (
+            <p className="bl-scheduled">
+              {state.next_plan === "free" || state.auto_renew === false
+                ? `ไม่ต่ออายุ · กลับเป็นแพ็กเกจฟรี ${thDate(state.valid_until)}`
+                : `รอบถัดไป (${thDate(state.valid_until)}) เปลี่ยนเป็นแพ็กเกจ${scheduledName ?? plan.name} ${state.next_cycle === "year" ? "รายปี" : "รายเดือน"} · ${money(renewPrice)} บาท`}
+              <button type="button" className="ad-link" disabled={busy} onClick={cancelScheduled}>ยกเลิก</button>
+            </p>
+          )}
           <div className="bl-meters">
             <Meter label="การจองออนไลน์เดือนนี้" used={wallet.counts.bookings} limit={plan.limits.bookingsPerMonth} unit="ครั้ง" />
             <Meter label="ข้อความ LINE เดือนนี้" used={quota.used} limit={quota.total} />
@@ -407,16 +543,22 @@ export default function BillingPanel({ brandId }) {
         <section className="ad-card bl-wallet">
           <p className="ad-muted">ยอดในกระเป๋าเงิน</p>
           <p className="bl-balance">{money(wallet.balance)} <small>บาท</small></p>
-          <p className="ad-muted">{paid && wallet.plan.complimentary ? "ใช้ซื้อแพ็กเกจล่วงหน้าและแพ็กเสริม" : paid ? (months > 0 ? `พอต่อแพ็กเกจ${plan.name}ได้อีก ${months} เดือน` : `ยังไม่พอต่อแพ็กเกจ${plan.name} (${money(plan.monthly)} บาท)`) : "ใช้ซื้อแพ็กเกจและแพ็กเสริม"}</p>
-          <button type="button" className="ad-primary" onClick={() => setTopup(paid && wallet.balance < plan.monthly ? Math.max(wallet.limits.min, Math.ceil(plan.monthly - wallet.balance)) : 1000)}>เติมเงิน</button>
+          <p className="ad-muted">{state.complimentary || !paid ? "ใช้ซื้อแพ็กเกจและแพ็กเสริม" : willRenew ? (months > 0 ? `พอต่ออายุได้อีก ${months} รอบ` : `ยังไม่พอต่ออายุรอบหน้า (${money(renewPrice)} บาท)`) : "ไม่ได้ตั้งต่ออายุอัตโนมัติ"}</p>
+          <button type="button" className="ad-primary" onClick={() => setTopup(willRenew && shortBy > 0 ? Math.max(wallet.limits.min, shortBy) : 1000)}>เติมเงิน</button>
           {pending.length > 0 && <p className="bl-pending">⏳ สลิปรอตรวจ {pending.length} ใบ · รวม {money(pending.reduce((s, t) => s + t.amount, 0))} บาท</p>}
           <p className="bl-wallet-note">โอนผ่านพร้อมเพย์แล้วแนบสลิป · ตรวจอัตโนมัติ เงินเข้าทันที</p>
         </section>
       </div>
 
       <section className="ad-card">
-        <div className="ad-card-head"><h2>เลือกแพ็กเกจ</h2><p className="ad-muted">ทุกแพ็กเกจได้ {catalog.everyPlan.join(" · ")} · ราคายังไม่รวม VAT</p></div>
-        <PlanCards catalog={catalog} current={plan.id} validUntil={wallet.plan.valid_until} onPick={pickPlan} />
+        <div className="ad-card-head bl-plans-head">
+          <div><h2>เลือกแพ็กเกจ</h2><p className="ad-muted">ทุกแพ็กเกจได้ {catalog.everyPlan.join(" · ")} · ราคายังไม่รวม VAT</p></div>
+          <div className="bl-cycle-toggle" role="group" aria-label="รอบการจ่าย">
+            <button type="button" aria-pressed={cycle === "month"} onClick={() => setCycle("month")}>รายเดือน</button>
+            <button type="button" aria-pressed={cycle === "year"} onClick={() => setCycle("year")}>รายปี <small>ประหยัด 2 เดือน</small></button>
+          </div>
+        </div>
+        <PlanCards wallet={wallet} cycle={cycle} onPick={pickPlan} onSchedule={setScheduling} />
       </section>
 
       <section className="ad-card">
@@ -452,6 +594,7 @@ export default function BillingPanel({ brandId }) {
       </section>
 
       {topup && <TopupSheet brandId={brandId} wallet={wallet} initialAmount={topup} onClose={closeTopup} onDone={load} />}
+      {scheduling && <ScheduleSheet brandId={brandId} wallet={wallet} target={scheduling} onClose={closeSchedule} onDone={load} />}
       {buying && <BuySheet brandId={brandId} wallet={wallet} item={buying} onClose={closeBuy} onDone={load} onTopup={(amount) => { setBuying(null); setTopup(amount); }} />}
     </div>
   );

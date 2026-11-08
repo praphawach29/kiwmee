@@ -136,6 +136,7 @@ const programView = (p) =>
   p
     ? {
         active: p.active,
+        pausedByPlan: p.paused_by_plan === true,
         name: p.name,
         earnMode: p.earn_mode,
         earnPerBaht: p.earn_per_baht === null ? null : Number(p.earn_per_baht),

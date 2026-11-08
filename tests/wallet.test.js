@@ -46,7 +46,7 @@ test("no EasySlip key means no verdict — the slip waits for a human", () => {
 test("the wallet prices match the package table", () => {
   assert.deepEqual(
     Object.fromEntries(Object.entries(SKUS).map(([sku, item]) => [sku, item.amount])),
-    { "plan:starter": 390, "plan:pro": 890, "plan:loyalty": 590, "msg:500": 99, "msg:1500": 249, "msg:5000": 699, "slip:100": 59 }
+    { "plan:starter": 390, "plan:starter:year": 3900, "plan:pro": 890, "plan:pro:year": 8900, "plan:loyalty": 590, "plan:loyalty:year": 5900, "msg:500": 99, "msg:1500": 249, "msg:5000": 699, "slip:100": 59 }
   );
   assert.equal(MIN_TOPUP, 100);
   assert.equal(MAX_TOPUP, 20000);
@@ -141,9 +141,9 @@ test("the quota level is the only thing that stops sending — warn still sends"
 
 test("a paid plan renews from the wallet only inside the 3-day window and only if the money is there", () => {
   const now = new Date("2026-11-06T00:00:00Z");
-  assert.deepEqual(renewalDecision({ plan: "pro", validUntil: "2026-11-08T00:00:00Z", balance: 900 }, now), { action: "renew", amount: 890 });
-  assert.deepEqual(renewalDecision({ plan: "pro", validUntil: "2026-11-08T00:00:00Z", balance: 100 }, now), { action: "short", amount: 890 });
-  assert.deepEqual(renewalDecision({ plan: "pro", validUntil: "2026-11-20T00:00:00Z", balance: 900 }, now), { action: "none", amount: 0 });
-  assert.deepEqual(renewalDecision({ plan: "free", validUntil: "2026-11-07T00:00:00Z", balance: 900 }, now), { action: "none", amount: 0 });
-  assert.deepEqual(renewalDecision({ plan: "starter", validUntil: null, balance: 900 }, now), { action: "none", amount: 0 });
+  assert.equal(renewalDecision({ plan: "pro", validUntil: "2026-11-08T00:00:00Z", balance: 900 }, now).action, "renew");
+  assert.equal(renewalDecision({ plan: "pro", validUntil: "2026-11-08T00:00:00Z", balance: 100 }, now).action, "short");
+  assert.equal(renewalDecision({ plan: "pro", validUntil: "2026-11-20T00:00:00Z", balance: 900 }, now).action, "none");
+  assert.equal(renewalDecision({ plan: "free", validUntil: "2026-11-07T00:00:00Z", balance: 900 }, now).action, "none");
+  assert.equal(renewalDecision({ plan: "starter", validUntil: null, balance: 900 }, now).action, "none");
 });

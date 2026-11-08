@@ -1364,3 +1364,13 @@
 .ad-plan-lock[data-tone="full"] { border-style: solid; border-color: var(--danger, #C62828); background: #FDECEC; color: var(--danger, #C62828); }
 .bl-alert[data-tone="gift"] { display: grid; gap: 2px; background: #E3FAF0; color: #0F6B44; }
 .bl-alert small { font-weight: 400; }
+/* B4: cycle toggle, auto-renew, the change scheduled for the next renewal */
+.bl-plans-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.bl-cycle-toggle { display: inline-flex; padding: 4px; border-radius: 999px; background: var(--selected); gap: 4px; }
+.bl-cycle-toggle button { min-height: 38px; padding: 6px 14px; border: 0; border-radius: 999px; background: none; color: var(--grape-deep); font: inherit; font-weight: 600; cursor: pointer; }
+.bl-cycle-toggle button small { font-weight: 400; font-size: 11px; color: #138A55; }
+.bl-cycle-toggle button[aria-pressed="true"] { background: var(--surface); box-shadow: 0 1px 4px rgba(27, 22, 64, .12); }
+.bl-cycle { font-size: .9rem; color: var(--muted); font-weight: 400; }
+.bl-autorenew { font-size: 13px; }
+.bl-scheduled { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0; padding: 10px 12px; border-radius: 10px; background: #FFF4E5; color: #B54708; font-size: 13px; font-weight: 600; }
+.bl-lost { margin: 4px 0 0; padding-left: 20px; color: #B54708; font-size: 13px; }

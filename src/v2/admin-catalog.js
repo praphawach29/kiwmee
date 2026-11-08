@@ -196,19 +196,19 @@ async function getCatalog(client, shop) {
     "select day_of_week, is_open, open_time, close_time from public.business_hours where business_id = $1",
     `select id, date::text as date, is_full_day, start_time, end_time, reason from public.business_closures
         where business_id = $1 and date >= current_date - 1 order by date, start_time nulls first`,
-    "select id, kind, name, capacity, sort_order, active, media, layout_row, layout_col, layout_w, layout_h from public.resources where business_id = $1 order by active desc, sort_order, name",
+    "select id, kind, name, capacity, sort_order, active, paused_by_plan, media, layout_row, layout_col, layout_w, layout_h from public.resources where business_id = $1 order by active desc, sort_order, name",
     "select resource_id, day_of_week, is_working, start_time, end_time from public.resource_schedules where business_id = $1",
     `select id, resource_id, date::text as date, is_full_day, start_time, end_time, reason from public.resource_time_off
         where business_id = $1 and date >= current_date - 1 order by date, start_time nulls first`,
     `select id, category, name, description, duration_mode, duration_minutes, min_minutes, max_minutes, step_minutes, min_days, max_days, required_documents,
-              buffer_after_minutes, max_party_size, sort_order, active, media, premium
+              buffer_after_minutes, max_party_size, sort_order, active, paused_by_plan, media, premium
          from public.offerings where business_id = $1 order by active desc, sort_order, name`,
     "select offering_id, kind, customer_picks, units_per_booking from public.offering_requirements where business_id = $1 order by kind",
     "select offering_id, resource_id from public.offering_resources where business_id = $1",
     `select id, offering_id, unit, amount::float8 as amount, days_of_week, start_time, end_time, priority
          from public.price_rules where business_id = $1 order by priority, start_time nulls first, id`,
     "select entry, require, optional, \"then\", options from public.booking_flows where business_id = $1 and category is null",
-    "select id, name, min_select, max_select, sort_order, active from public.addon_groups where business_id = $1 order by active desc, sort_order, name",
+    "select id, name, min_select, max_select, sort_order, active, paused_by_plan from public.addon_groups where business_id = $1 order by active desc, sort_order, name",
     "select offering_id, group_id from public.offering_addon_groups where business_id = $1",
     `select id, group_id, name, description, media, price_unit, amount::float8 as amount, max_quantity, adds_minutes, uses_kind, sort_order, active
          from public.addons where business_id = $1 order by active desc, sort_order, name`
@@ -292,6 +292,7 @@ async function getCatalog(client, shop) {
       capacity: r.capacity,
       sortOrder: r.sort_order,
       active: r.active,
+      pausedByPlan: r.paused_by_plan === true,
       media: r.media,
       layout: layoutOf(r), // แผนผัง (migration …002900): { row, col, w, h } or null
       // no row for a day = works the shop's hours that day
@@ -330,6 +331,7 @@ async function getCatalog(client, shop) {
       maxPartySize: o.max_party_size,
       sortOrder: o.sort_order,
       active: o.active,
+      pausedByPlan: o.paused_by_plan === true,
       // "พรีเมียม ✨" on the booking page, the shop's own choice (migration …004000)
       premium: o.premium === true,
       requirements: requirements
@@ -356,6 +358,7 @@ async function getCatalog(client, shop) {
       maxSelect: g.max_select,
       sortOrder: g.sort_order,
       active: g.active,
+      pausedByPlan: g.paused_by_plan === true,
       offeringIds: groupLinks.filter((l) => l.group_id === g.id).map((l) => l.offering_id),
       addons: addons
         .filter((a) => a.group_id === g.id)

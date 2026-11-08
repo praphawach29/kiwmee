@@ -13,7 +13,7 @@ const { getBookingPool } = require("./db");
 const { getSetting, requirePlatformAdmin, requirePlatformAdminId } = require("./platform-settings");
 const { readSlip, receiverMatch } = require("./slip-check");
 const { promptPayQr } = require("./promptpay");
-const { buildSkus, planCatalog, planById, PLAN_PRICES, PLAN_MESSAGES } = require("./plans");
+const { buildSkus, planCatalog, planById, quotePlan, renewalDecision, PERIOD_DAYS, RENEW_WITHIN_DAYS, PLAN_PRICES, PLAN_MESSAGES } = require("./plans");
 
 const DAY = 24 * 3600 * 1000;
 const MIN_TOPUP = 100;
@@ -103,7 +103,8 @@ async function billingInfo(client) {
 async function planOf(client, brandId) {
   const { rows: [row] } = await client.query(
     `select p.plan, p.valid_until, (p.valid_until is not null and p.valid_until < now()) as expired,
-            public.brand_plan(p.brand_id) as effective, coalesce(p.complimentary, false) as complimentary
+            public.brand_plan(p.brand_id) as effective, coalesce(p.complimentary, false) as complimentary,
+            p.cycle, p.auto_renew, p.next_plan, p.next_cycle, p.trial, p.grace_until
        from public.brand_plans p where p.brand_id = $1`,
     [brandId]
   );
@@ -289,101 +290,113 @@ async function topupQr(brandId, userId, amount) {
   });
 }
 
-const RENEW_WITHIN_DAYS = 3;
-
 /**
- * Should this brand's plan renew now? { action: "none" | "renew" | "short", amount }.
- * A paid plan renews when it runs out within 3 days and the wallet covers it; with too little
- * money it is left alone (the shop sees "close to expiry" in the dashboard).
- */
-function renewalDecision({ plan, validUntil, balance }, now = new Date()) {
-  const price = PLAN_PRICES[plan] ?? 0;
-  if (!price) return { action: "none", amount: 0 };
-  if (!validUntil) return { action: "none", amount: 0 };
-  const left = new Date(validUntil).getTime() - now.getTime();
-  if (left <= 0 || left > RENEW_WITHIN_DAYS * DAY) return { action: "none", amount: 0 };
-  if ((Number(balance) || 0) < price) return { action: "short", amount: price };
-  return { action: "renew", amount: price };
-}
-
-/**
- * Renew every paid plan that is about to run out, from the brand's wallet. Runs on the server's
- * clock (instrumentation) — safe to call often: extending 30 days moves it out of the window.
+ * Renew every paid plan that is due, from the brand's wallet (src/v2/plans.js renewalDecision):
+ * within 3 days of its end, or in its 7 grace days. A wallet that cannot pay when the end passes
+ * starts the grace days; then the plan is free (and plan_sync pauses what it no longer includes).
+ * Runs every hour (src/v2/line-reminders.js) — safe to call often.
  */
 async function renewDuePlans(now = new Date()) {
   return ownerTx(async (client) => {
     const { rows } = await client.query(
-      `select p.brand_id, p.plan, p.valid_until, coalesce(a.balance, 0)::float8 as balance
+      `select p.brand_id, p.plan, p.cycle, p.valid_until as "validUntil", p.grace_until as "graceUntil",
+              p.auto_renew as "autoRenew", p.next_plan as "nextPlan", p.next_cycle as "nextCycle",
+              coalesce(p.complimentary, false) as complimentary, coalesce(a.balance, 0)::float8 as balance
          from public.brand_plans p
          left join public.wallet_accounts a on a.brand_id = p.brand_id
         where p.plan <> 'free' and p.valid_until is not null and not coalesce(p.complimentary, false)
-          and p.valid_until <= now() + interval '${RENEW_WITHIN_DAYS} days'`
+          and p.valid_until <= now() + interval '${RENEW_WITHIN_DAYS} days'
+          and (p.grace_until is null or p.grace_until > now())`
     );
-    let renewed = 0;
-    let short = 0;
+    const counts = { checked: rows.length, renewed: 0, short: 0, grace: 0, ended: 0 };
     for (const row of rows) {
       const decision = renewalDecision(row, now);
       if (decision.action === "short") {
-        short += 1;
-        console.warn(`[wallet] renewal skipped (wallet ${row.balance} < ${decision.amount}) for brand ${row.brand_id}`);
+        counts.short += 1;
+        continue;
+      }
+      if (decision.action === "grace") {
+        counts.grace += 1;
+        await client.query("update public.brand_plans set grace_until = $2 where brand_id = $1 and grace_until is null", [row.brand_id, decision.graceUntil]);
+        console.warn(`[wallet] brand ${row.brand_id}: plan ended, wallet ${row.balance} < ${decision.amount} — 7 grace days`);
+        continue;
+      }
+      if (decision.action === "end") {
+        counts.ended += 1;
         continue;
       }
       if (decision.action !== "renew") continue;
+      const sku = decision.cycle === "year" ? `plan:${decision.plan}:year` : `plan:${decision.plan}`;
       const { rows: [order] } = await client.query(
         "insert into public.wallet_orders (brand_id, sku, amount) values ($1, $2, $3) returning id",
-        [row.brand_id, `plan:${row.plan}`, decision.amount]
+        [row.brand_id, sku, decision.amount]
       );
       await client.query("select public.wallet_charge($1, $2, 'purchase', $3, $4)", [
         row.brand_id,
         decision.amount,
         order.id,
-        `ต่ออายุแพ็กเกจ ${row.plan} อัตโนมัติ`
+        `ต่ออายุแพ็กเกจ${planById(decision.plan).name} ${decision.cycle === "year" ? "1 ปี" : "1 เดือน"} อัตโนมัติ`
       ]);
+      // the next period runs on from the end (grace days already used are part of it)
       await client.query(
-        "update public.brand_plans set plan = $2, valid_until = greatest(valid_until, now()) + interval '30 days' where brand_id = $1",
-        [row.brand_id, row.plan]
+        `update public.brand_plans
+            set plan = $2, cycle = $3, valid_until = valid_until + make_interval(days => $4),
+                next_plan = null, next_cycle = null, grace_until = null, trial = false
+          where brand_id = $1`,
+        [row.brand_id, decision.plan, decision.cycle, PERIOD_DAYS[decision.cycle]]
       );
-      await client.query("select public.usage_add($1, 0, 0, $2, 0)", [row.brand_id, PLAN_MESSAGES[row.plan] ?? 0]);
-      renewed += 1;
+      await client.query("select public.usage_add($1, 0, 0, $2, 0)", [row.brand_id, PLAN_MESSAGES[decision.plan] ?? 0]);
+      counts.renewed += 1;
     }
-    return { checked: rows.length, renewed, short };
+    // what each brand has switched on follows its plan (pause / resume), every hour
+    const { rows: [synced] } = await client.query("select public.plan_sync_all() as changed");
+    counts.synced = synced?.changed ?? 0;
+    return counts;
   });
 }
 
-/** Would buying `planId` now cut short a dearer plan that is still paid for? */
-function downgradeLosesDays(current, planId, now = new Date()) {
-  // a plan Kiwmee gave for free (the launch offer) may be replaced by any paid plan
-  if (!current || current.effective === "free" || !current.valid_until || current.complimentary) return false;
-  if (new Date(current.valid_until) <= now) return false;
-  return (PLAN_PRICES[planId] ?? 0) < (PLAN_PRICES[current.effective] ?? 0);
+/**
+ * The plan part of a purchase, from the brand's current plan (src/v2/plans.js quotePlan): what it
+ * costs today and until when. A cheaper plan or a shorter cycle is not bought: it is scheduled
+ * with setPlanOptions() for the next renewal, so a shop never loses days it paid for.
+ */
+async function planQuote(client, brandId, item, now = new Date()) {
+  const current = await planOf(client, brandId);
+  const quote = quotePlan(current, item.plan, item.cycle ?? "month", now);
+  if (quote.mode === "schedule") {
+    throw new AppError("INVALID", "แพ็กเกจที่ถูกกว่าหรือรอบที่สั้นกว่าเริ่มได้รอบถัดไป — ตั้งเปลี่ยนรอบหน้าแทน", 422, { reason: "SCHEDULE_INSTEAD" });
+  }
+  return { current, quote };
 }
 
-/** Buy a package month or an add-on pack from the balance. */
+const PLAN_MODE_TEXT = { new: "", after_free: " (ต่อจากช่วงใช้ฟรี)", renew: " (ต่ออายุ)", upgrade: " (อัปเกรด จ่ายส่วนต่าง)", switch: " (เปลี่ยนเป็นรายปี หักส่วนที่เหลือ)" };
+
+/** Buy a plan period or an add-on pack from the balance. */
 async function buy(brandId, userId, sku) {
   const item = SKUS[sku];
   if (!item) throw badRequest("ไม่พบสินค้านี้");
 
   return ownerTx(async (client) => {
     await assertOwner(client, brandId, userId);
+    let amount = item.amount;
+    let label = item.label;
+    let plan = null;
     if (item.apply === "plan") {
-      // A cheaper plan would replace a dearer one that still has paid days left: refuse until the
-      // next-cycle downgrade exists (docs/BILLING_PLAN.md 5.3), so a shop never loses days it paid for
-      const current = await planOf(client, brandId);
-      if (downgradeLosesDays(current, item.plan)) {
-        throw new AppError("INVALID", "เปลี่ยนเป็นแพ็กเกจที่ถูกกว่าได้เมื่อแพ็กเกจปัจจุบันหมดอายุ", 422, { reason: "DOWNGRADE_MID_CYCLE" });
-      }
+      plan = await planQuote(client, brandId, item);
+      amount = plan.quote.amount;
+      label = `${item.label}${PLAN_MODE_TEXT[plan.quote.mode] ?? ""}`;
     }
     const { rows: [order] } = await client.query(
       "insert into public.wallet_orders (brand_id, sku, amount, created_by) values ($1, $2, $3, $4) returning id",
-      [brandId, sku, item.amount, userId]
+      [brandId, sku, amount, userId]
     );
     let charged;
     try {
       const { rows: [row] } = await client.query("select public.wallet_charge($1, $2, 'purchase', $3, $4) as result", [
         brandId,
-        item.amount,
+        amount,
         order.id,
-        item.label
+        label
       ]);
       charged = Number(row.result.balance);
     } catch (error) {
@@ -396,15 +409,14 @@ async function buy(brandId, userId, sku) {
     if (item.apply === "plan") {
       await client.query(
         `update public.brand_plans
-            set plan = $2,
-                -- days run on from the current end; a different plan replacing a free (complimentary) one starts now
-                valid_until = case when complimentary and plan <> $2 then now() else greatest(coalesce(valid_until, now()), now()) end + interval '30 days',
-                complimentary = false
+            set plan = $2, cycle = $3, valid_until = $4, complimentary = false, trial = false,
+                grace_until = null, next_plan = null, next_cycle = null, auto_renew = true
           where brand_id = $1`,
-        [brandId, item.plan]
+        [brandId, item.plan, plan.quote.cycle, plan.quote.validUntil]
       );
       // the month's message allowance follows the plan (the counter keeps what was granted)
       await client.query("select public.usage_add($1, 0, 0, $2, 0)", [brandId, PLAN_MESSAGES[item.plan] ?? 0]);
+      await client.query("select public.plan_sync($1)", [brandId]);
     }
     if (item.apply === "messages") {
       await client.query("select public.usage_add($1, 0, 0, 0, $2)", [brandId, item.count]);
@@ -414,7 +426,36 @@ async function buy(brandId, userId, sku) {
         where brand_id = $1 and period = date_trunc('month', (now() at time zone 'Asia/Bangkok'))::date`,
       [brandId]
     );
-    return { sku, label: item.label, paid: item.amount, balance: charged, orderId: order.id, usage: usage ?? null };
+    return {
+      sku, label, paid: amount, balance: charged, orderId: order.id, usage: usage ?? null,
+      plan: plan ? { mode: plan.quote.mode, validUntil: plan.quote.validUntil, cycle: plan.quote.cycle } : null
+    };
+  });
+}
+
+/**
+ * The owner's choices for what happens at the end of the period: { autoRenew, nextPlan, nextCycle }.
+ * nextPlan = a plan to switch to at the next renewal (cheaper, or a different cycle), null = keep the
+ * current one, "free" = do not renew. Nothing is charged here.
+ */
+async function setPlanOptions(brandId, userId, input = {}) {
+  return ownerTx(async (client) => {
+    await assertOwner(client, brandId, userId);
+    const current = await planOf(client, brandId);
+    if (current.effective === "free" || current.complimentary) {
+      throw new AppError("INVALID", "ตั้งค่าการต่ออายุได้เมื่อมีแพ็กเกจที่จ่ายเงินอยู่", 422, { reason: "NO_PAID_PLAN" });
+    }
+    const ids = ["free", "starter", "pro", "loyalty"];
+    const nextPlan = input.nextPlan === undefined ? current.next_plan ?? null : input.nextPlan;
+    const nextCycle = input.nextCycle === undefined ? current.next_cycle ?? null : input.nextCycle;
+    if (nextPlan !== null && !ids.includes(nextPlan)) throw badRequest("แพ็กเกจไม่ถูกต้อง");
+    if (nextCycle !== null && !["month", "year"].includes(nextCycle)) throw badRequest("รอบไม่ถูกต้อง");
+    const autoRenew = input.autoRenew === undefined ? current.auto_renew !== false : input.autoRenew === true;
+    await client.query(
+      "update public.brand_plans set auto_renew = $2, next_plan = $3, next_cycle = $4 where brand_id = $1",
+      [brandId, autoRenew && nextPlan !== "free", nextPlan === current.plan && (nextCycle ?? current.cycle) === current.cycle ? null : nextPlan, nextCycle]
+    );
+    return planOf(client, brandId);
   });
 }
 
@@ -536,4 +577,4 @@ async function reviewTopup(adminUserId, topupId, action) {
   });
 }
 
-module.exports = { ownerTx, topupQr, brandCounts, downgradeLosesDays, SKUS, PLAN_MESSAGES, PLAN_PRICES, renewalDecision, renewDuePlans, quotaOf, messageAllowed, allowanceForBusiness, walletOf, submitTopup, buy, judgeTopup, recordMessages, recordSlipCheck, meterMessage, listTopups, reviewTopup, MIN_TOPUP, MAX_TOPUP };
+module.exports = { ownerTx, topupQr, brandCounts, setPlanOptions, SKUS, PLAN_MESSAGES, PLAN_PRICES, renewalDecision, renewDuePlans, quotaOf, messageAllowed, allowanceForBusiness, walletOf, submitTopup, buy, judgeTopup, recordMessages, recordSlipCheck, meterMessage, listTopups, reviewTopup, MIN_TOPUP, MAX_TOPUP };

@@ -1093,7 +1093,9 @@ function LoyaltyTab({ slug, catalog }) {
           ระบบสมาชิกและคะแนนใช้ได้ในแพ็กเกจ{UPGRADE_FOR.loyalty} ·{" "}
           {data.program.active
             ? `โปรแกรมที่เปิดไว้แล้วยังทำงานต่อ แต่ถ้าปิดจะเปิดใหม่ในแพ็กเกจ${catalog.plan.name}ไม่ได้`
-            : `แพ็กเกจ${catalog.plan.name}ตั้งค่าไว้ก่อนได้ แต่เปิดใช้ไม่ได้`}
+            : data.program.pausedByPlan
+              ? `โปรแกรมพักไว้ตามแพ็กเกจ · สมาชิกและคะแนนอยู่ครบ กลับมาทำงานเองเมื่ออัปเกรด`
+              : `แพ็กเกจ${catalog.plan.name}ตั้งค่าไว้ก่อนได้ แต่เปิดใช้ไม่ได้`}
         </PlanLock>
       )}
       {/* the programme at a glance: the card members see, whether it is on, the rule, and the numbers */}
@@ -2603,7 +2605,7 @@ function OfferingsTab({ slug, catalog, onSaved }) {
                     <span className="ad-tile-tags">
                       <span className="ad-tag">{priceSummary(o)}</span>
                       {o.premium && <span className="ad-tag" data-tone="premium">พรีเมียม</span>}
-                      {!o.active && <span className="ad-tag" data-tone="off">ปิดอยู่</span>}
+                      {!o.active && <span className="ad-tag" data-tone="off">{o.pausedByPlan ? "🔒 พักตามแพ็กเกจ" : "ปิดอยู่"}</span>}
                     </span>
                   </span>
                 </button>
@@ -2623,7 +2625,7 @@ function OfferingsTab({ slug, catalog, onSaved }) {
             {groups.map((g) => (
               <li key={g.id}>
                 <button className="ad-list-item" data-active={group?.id === g.id} data-off={!g.active} onClick={() => openGroup(g)}>
-                  <strong>{g.name}{!g.active && " (ปิดอยู่)"}</strong>
+                  <strong>{g.name}{!g.active && (g.pausedByPlan ? " (🔒 พักตามแพ็กเกจ)" : " (ปิดอยู่)")}</strong>
                   <span className="ad-muted">
                     {g.addons.filter((a) => a.active).map((a) => a.name).join(", ") || "ไม่มีตัวเลือกที่เปิดอยู่"} · {pickRule(g)} · ใช้กับ {g.offeringIds.length} บริการ
                   </span>
@@ -3088,7 +3090,7 @@ function ResourcesTab({ slug, catalog, onSaved }) {
                   <span className="ad-muted">{RESOURCE_KINDS[r.kind] ?? r.kind}{r.capacity > 1 ? ` · ${r.capacity} ที่` : ""}</span>
                   <span className="ad-tile-tags">
                     <span className="ad-tag">ทำ {r.offeringIds.length} บริการ</span>
-                    {!r.active && <span className="ad-tag" data-tone="off">ปิดอยู่</span>}
+                    {!r.active && <span className="ad-tag" data-tone="off">{r.pausedByPlan ? "🔒 พักตามแพ็กเกจ" : "ปิดอยู่"}</span>}
                   </span>
                 </span>
               </button>

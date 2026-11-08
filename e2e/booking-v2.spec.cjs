@@ -569,8 +569,16 @@ test("desktop: steps in the header, the summary beside the page leads on, and ed
   await expect(aside).toContainText("ระยะเวลา");
   await expect(aside).toContainText("450 บาท");
   await expect(page.getByTestId("pick-bar")).toBeHidden();
-  // morning, afternoon and evening side by side
+  // morning, afternoon and evening side by side — on the next open day, which still has all three
+  // (late in the afternoon today may have evening times only)
+  await idle(page);
+  const nextDay = enabled(page, "date").nth(1);
+  const nextValue = await nextDay.getAttribute("data-value");
+  await nextDay.click();
+  await expect(page.locator(`[data-testid="option-date"][data-value="${nextValue}"]`).first()).toHaveAttribute("data-selected", "true");
+  await idle(page);
   const groups = page.locator(".bk-time-group");
+  await expect(groups.nth(1)).toBeVisible();
   const [first, second] = [await groups.nth(0).boundingBox(), await groups.nth(1).boundingBox()];
   expect(Math.abs(first.y - second.y)).toBeLessThan(4);
   expect(second.x).toBeGreaterThan(first.x + 100);

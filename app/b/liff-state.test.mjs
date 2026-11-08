@@ -14,6 +14,10 @@ test("a LIFF link opens the shop's booking page or a booking's own link", () => 
   assert.equal(liffTarget("/bloom-hair/review"), "/b/bloom-hair/review");
   assert.equal(liffTarget("/bloom-hair/review/KM1234"), "/b/bloom-hair/review/KM1234");
   assert.equal(liffTarget("/bloom-hair/line-preview"), "/b/bloom-hair/line-preview");
+  // a shop owner linking LINE for Kiwmee's notices (B8)
+  assert.equal(liffTarget("/owner-line/AbCdEfGhIjKlMnOpQrStUv_-"), "/b/owner-line/AbCdEfGhIjKlMnOpQrStUv_-");
+  assert.equal(liffTarget("/owner-line/short"), null);
+  assert.equal(liffTarget("/owner-line/AbCdEfGhIjKlMnOpQrStUv_-/x"), null);
 });
 
 test("anything else goes home, never to another site", () => {

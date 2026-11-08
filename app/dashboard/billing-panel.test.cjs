@@ -79,3 +79,16 @@ test('the panel waits for the wallet and says when the shop has no brand', () =>
   assert.match(render(BillingPanel, { brandId: 'b1' }), /กำลังโหลด/);
   assert.match(render(BillingPanel, { brandId: null }), /ยังไม่อยู่ในแบรนด์/);
 });
+
+test('LINE notices (B8): a button to link when not linked; who gets them, a test message and unlink when linked', () => {
+  const { LineNotices } = load();
+  const off = render(LineNotices, { initial: { linked: false, lineName: null, linkedAt: null } });
+  assert.match(off, /แจ้งเตือนทาง LINE/);
+  assert.match(off, /7\/3\/1 วัน/);
+  assert.match(off, />เชื่อม LINE</);
+  const on = render(LineNotices, { initial: { linked: true, lineName: 'พี่เจ้าของ', linkedAt: '2026-11-08T05:00:00Z' } });
+  assert.match(on, /ส่งแจ้งเตือนไปที่ LINE “พี่เจ้าของ”/);
+  assert.match(on, />ส่งข้อความทดสอบ</);
+  assert.match(on, />เลิกเชื่อม</);
+  assert.doesNotMatch(on, />เชื่อม LINE</);
+});

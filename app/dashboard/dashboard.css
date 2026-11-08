@@ -1374,3 +1374,18 @@
 .bl-autorenew { font-size: 13px; }
 .bl-scheduled { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0; padding: 10px 12px; border-radius: 10px; background: #FFF4E5; color: #B54708; font-size: 13px; font-weight: 600; }
 .bl-lost { margin: 4px 0 0; padding-left: 20px; color: #B54708; font-size: 13px; }
+/* B8: owner notices in LINE */
+.bl-line { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 14px; align-items: center; }
+.bl-line-icon { grid-row: span 2; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 14px; background: var(--selected); font-size: 22px; }
+.bl-line-text h2 { margin: 0 0 2px; font-size: 1.05rem; }
+.bl-line-text p { margin: 0; }
+.bl-line-note { color: #0F6B44; font-weight: 600; font-size: 13px; margin-top: 4px !important; }
+.bl-line-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.bl-line-button { background: #06C755; border-color: #06C755; }
+.bl-line-sheet { display: grid; justify-items: center; gap: 12px; text-align: center; }
+.bl-line-sheet p { margin: 0; }
+.bl-line-sheet img { border: 1px solid var(--line, #E8E4F8); border-radius: 16px; padding: 8px; background: #fff; }
+@media (min-width: 700px) {
+  .bl-line { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .bl-line-icon { grid-row: auto; }
+}

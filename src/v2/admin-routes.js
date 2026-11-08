@@ -52,4 +52,13 @@ function superRoute(action, { read = false } = {}) {
     });
 }
 
-module.exports = { shopRoute, brandRoute, superRoute };
+/** Signed in, nothing else in the URL: action(body, user) runs on the server's own connection itself. */
+function userRoute(action) {
+  return (request) =>
+    adminRoute(request, async (user) => {
+      const input = await boundedJson(request);
+      return json((await action(input ?? {}, user)) ?? { ok: true });
+    });
+}
+
+module.exports = { shopRoute, brandRoute, superRoute, userRoute };

@@ -4,7 +4,7 @@
 // อ่านข้ามทุกแบรนด์ จึงใช้ connection ของเซิร์ฟเวอร์หลังยืนยันว่าเป็น platform admin เท่านั้น
 
 const { ownerTx, PLAN_PRICES } = require("./wallet");
-const { requirePlatformAdmin } = require("./platform-settings");
+const { requirePlatformAdminId } = require("./platform-settings");
 
 const PLAN_NAMES = { free: "ฟรี", starter: "เริ่มต้น", pro: "โปร", loyalty: "สมาชิก" };
 
@@ -30,9 +30,9 @@ const MONTH_START = `(date_trunc('month', (now() at time zone 'Asia/Bangkok')) a
 
 const money = (value) => Number(value ?? 0);
 
-async function revenueReport() {
+async function revenueReport(userId) {
   return ownerTx(async (client) => {
-    await requirePlatformAdmin(client);
+    await requirePlatformAdminId(client, userId);
 
     const { rows: plans } = await client.query(
       `select b.id, b.name, p.plan, p.valid_until

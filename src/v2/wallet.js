@@ -10,7 +10,7 @@
 
 const { AppError, badRequest, forbidden, notFound } = require("../errors");
 const { getBookingPool } = require("./db");
-const { getSetting, requirePlatformAdmin } = require("./platform-settings");
+const { getSetting, requirePlatformAdmin, requirePlatformAdminId } = require("./platform-settings");
 const { readSlip, receiverMatch } = require("./slip-check");
 
 const DAY = 24 * 3600 * 1000;
@@ -437,9 +437,9 @@ async function meterMessage(db, businessId, count = 1) {
  * Reads across brands, so it runs on the server's own connection after proving the caller is a
  * platform admin — the wallet tables' RLS only shows a brand's own rows.
  */
-async function listTopups({ limit = 40 } = {}) {
+async function listTopups(userId, { limit = 40 } = {}) {
   return ownerTx(async (client) => {
-    await requirePlatformAdmin(client);
+    await requirePlatformAdminId(client, userId);
     const { rows } = await client.query(
       `select t.id, t.amount::float8 as amount, t.status, t.check_status, t.check_reasons,
               t.credit_amount::float8 as credit_amount, t.trans_ref, t.receiver_text,
@@ -458,7 +458,7 @@ async function listTopups({ limit = 40 } = {}) {
 async function reviewTopup(adminUserId, topupId, action) {
   if (action !== "approve" && action !== "reject") throw badRequest("คำสั่งไม่ถูกต้อง");
   return ownerTx(async (client) => {
-    await requirePlatformAdmin(client);
+    await requirePlatformAdminId(client, adminUserId);
     const { rows: [topup] } = await client.query("select * from public.wallet_topups where id = $1 for update", [topupId]);
     if (!topup) throw notFound("ไม่พบรายการเติมเงินนี้");
 

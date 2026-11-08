@@ -181,6 +181,21 @@
 }
 
 
+/* activity feed */
+.super-activity { display: flex; flex-direction: column; gap: 0; }
+.super-act-row { display: flex; gap: 10px; align-items: center; padding: 9px 0; border-top: 1px solid #e6e3f0; }
+.super-act-row:first-child { border-top: 0; }
+.super-act-shop { font-weight: 500; font-size: 13px; display: block; color: #1d1b2e; }
+.super-act-time { margin-left: auto; white-space: nowrap; color: #9a97ad; font-size: 12px; flex: none; }
+.super-link-inline { background: none; border: 0; padding: 0; color: #6A4CFF; cursor: pointer; font: inherit; font-size: 12px; text-decoration: underline; text-underline-offset: 2px; }
+
+/* KPI as button */
+.super-kpi-btn { background: #fff; border: 1px solid #e6e3f0; border-radius: 14px; padding: 14px 16px; text-align: left; cursor: pointer; font-family: inherit; }
+.super-kpi-btn:hover { border-color: #6A4CFF; background: #f9f8ff; }
+.super-kpi-btn small { color: #6b6880; }
+.super-kpi-btn strong { display: block; font-family: Mitr, Anuphan, sans-serif; font-size: 26px; font-weight: 500; margin-top: 2px; color: #1d1b2e; }
+.super-kpi-btn em { font-style: normal; font-size: 12px; color: #6b6880; }
+
 /* มือถือ: ตารางแคตตาล็อกกลายเป็นการ์ด (ใช้ data-label เป็นชื่อฟิลด์) + ปุ่ม/ช่องกรอกแตะง่าย */
 .super-field input,
 .super-field select {

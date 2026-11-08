@@ -42,3 +42,19 @@ test('media editor disables gallery additions at eight and during an existing sa
     assert.match(html, /type="file"[^>]*disabled=""/);
   }
 });
+
+test('media editor leads with "add from device": big picker tile, main-photo badge, reorder, link entry as the fallback', () => {
+  const Editor = loadEditor();
+  const html = renderToStaticMarkup(React.createElement(Editor, { slug: 'shop', label: 'ภาพร้าน', value: [{ url: 'https://cdn.example/a.png', alt: '' }, { url: 'https://cdn.example/b.png', alt: '' }], onChange() {} }));
+  const id = html.match(/<input id="([^"]+)" class="ad-media-file" type="file"/)[1];
+  assert.match(html, new RegExp(`<label class="ad-media-add" for="${id}" data-disabled="false">`));
+  assert.match(html, /เพิ่มรูปจากเครื่อง/);
+  assert.equal((html.match(/ภาพหลัก<\/span>/g) || []).length, 1);
+  assert.equal((html.match(/ตั้งเป็นภาพหลัก/g) || []).length, 1);
+  // saved photos keep their link tucked away; adding a link stays possible
+  assert.match(html, /<details class="ad-media-url"><summary>ลิงก์ภาพ<\/summary>/);
+  assert.match(html, /\+ เพิ่ม URL ภาพ/);
+  // at eight photos the picker tile disappears and the file input is disabled
+  const full = renderToStaticMarkup(React.createElement(Editor, { slug: 'shop', label: 'ภาพร้าน', value: Array.from({ length: 8 }, () => ({ url: 'https://cdn.example/a.png', alt: '' })), onChange() {} }));
+  assert.doesNotMatch(full, /ad-media-add"/);
+});

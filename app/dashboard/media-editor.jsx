@@ -55,9 +55,7 @@ export default function MediaEditor({ slug, value = [], onChange, label, disable
     previews.current.delete(rowId);
     setRows((current) => current.filter((row) => row.id !== rowId));
   };
-  const selectFiles = (event) => {
-    const files = Array.from(event.target.files || []);
-    event.target.value = '';
+  const addFiles = (files) => {
     if (disabled || uploader.current?.busy || !files.length) return;
     const next = files.map((file) => {
       const rowId = `${id}-${++sequence.current}`;
@@ -71,17 +69,65 @@ export default function MediaEditor({ slug, value = [], onChange, label, disable
     setRows((current) => [...current, ...next]);
     void uploader.current?.start(next);
   };
+  const selectFiles = (event) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = '';
+    addFiles(files);
+  };
+  // drop photos anywhere on the box
+  const [dragging, setDragging] = useState(false);
+  const canAdd = !disabled && !pending && value.length < MAX_MEDIA && !!slug;
+  const onDragOver = (event) => {
+    if (!canAdd || !Array.from(event.dataTransfer?.types || []).includes('Files')) return;
+    event.preventDefault();
+    setDragging(true);
+  };
+  const onDrop = (event) => {
+    if (!canAdd) return;
+    event.preventDefault();
+    setDragging(false);
+    addFiles(Array.from(event.dataTransfer?.files || []));
+  };
+  const move = (index, to) => {
+    const list = [...latest.current.value];
+    const [item] = list.splice(index, 1);
+    list.splice(to, 0, item);
+    change(list);
+  };
   const update = (index, patch) => change(latest.current.value.map((item, i) => i === index ? { ...item, ...patch } : item));
 
-  return <fieldset className="ad-media-editor" ref={root}>
+  return <fieldset className="ad-media-editor" ref={root} data-dragging={dragging} onDragOver={onDragOver} onDragLeave={() => setDragging(false)} onDrop={onDrop}>
     <legend>{label} ({value.length}/{MAX_MEDIA})</legend>
-    <p id={`${id}-help`} className="ad-muted">เลือกได้หลายไฟล์ JPEG, PNG หรือ WebP ไฟล์ละไม่เกิน 5 MB · รวมสูงสุด 8 ภาพ · ภาพแรกเป็นภาพหลัก หรือใส่ URL แบบ HTTPS / เส้นทาง /demo-media/</p>
-    <p id={`${id}-public`} className="ad-media-disclosure">ไฟล์ที่อัปโหลดเป็นสาธารณะทันที แม้ยังไม่กดบันทึก · ห้ามอัปโหลดข้อมูลส่วนตัวลูกค้า ภาพสลิป หรือเอกสารอ่อนไหว</p>
-    <label className="ad-field" htmlFor={`${id}-files`}>เลือกภาพจากเครื่อง
-      <input id={`${id}-files`} type="file" multiple accept={MEDIA_ACCEPT} disabled={disabled || pending || value.length >= MAX_MEDIA || !slug} aria-describedby={`${id}-help ${id}-public`} onChange={selectFiles} />
-    </label>
+    <p id={`${id}-help`} className="ad-muted">เลือกจากเครื่องได้ทีละหลายรูป (JPEG, PNG, WebP ไม่เกินรูปละ 5 MB) หรือลากรูปมาวางที่กรอบนี้ · สูงสุด {MAX_MEDIA} รูป · รูปแรกเป็นภาพหลัก</p>
+    <div className="ad-media-grid">
+      {value.map((item, index) => {
+        const safe = isSafeMediaUrl(item.url);
+        return <div className="ad-media-row" key={index} data-main={index === 0}>
+          <div className="ad-media-thumb">
+            {safe ? <MediaPreview key={item.url} src={item.url} alt={item.alt} /> : <span className="ad-muted">{item.url ? 'ลิงก์ภาพไม่ถูกต้อง' : 'วางลิงก์ภาพด้านล่าง'}</span>}
+            {index === 0 && <span className="ad-media-badge">ภาพหลัก</span>}
+          </div>
+          {item.url.startsWith('/demo-media/') && <p className="ad-muted ad-media-demo">ภาพประกอบ ไม่ใช่สถานที่จริง</p>}
+          <details className="ad-media-url" ref={(el) => { if (el && !el.dataset.ready) { el.dataset.ready = "1"; if (!safe) el.open = true; } }}>
+            <summary>ลิงก์ภาพ</summary>
+            <label className="ad-field">URL ภาพที่ {index + 1}<input required type="text" inputMode="url" maxLength={2048} placeholder="https://…" disabled={disabled || pending} value={item.url} ref={(input) => input?.setCustomValidity(isSafeMediaUrl(item.url) ? '' : 'ใช้ลิงก์ HTTPS หรือเส้นทาง /demo-media/ เท่านั้น')} onChange={(event) => update(index, { url: event.target.value })} /></label>
+          </details>
+          <label className="ad-field ad-media-alt">คำอธิบายภาพ (ไม่บังคับ)<input value={item.alt ?? ''} disabled={disabled} maxLength={200} placeholder="เช่น หน้าร้าน, สนาม 1" onChange={(event) => update(index, { alt: event.target.value })} /></label>
+          <div className="ad-media-actions">
+            {index > 0 && <button type="button" className="ad-link" disabled={disabled || pending} onClick={() => move(index, 0)}>ตั้งเป็นภาพหลัก</button>}
+            <button type="button" className="ad-link ad-media-remove" disabled={disabled || pending} aria-label={`ลบภาพที่ ${index + 1}`} onClick={() => change(latest.current.value.filter((_, i) => i !== index))}>ลบภาพ</button>
+          </div>
+        </div>;
+      })}
+      {value.length < MAX_MEDIA && <label className="ad-media-add" htmlFor={`${id}-files`} data-disabled={!canAdd}>
+        <span className="ad-media-add-icon" aria-hidden="true">＋</span>
+        <strong>{pending ? 'กำลังอัปโหลด…' : 'เพิ่มรูปจากเครื่อง'}</strong>
+        <small>แตะเพื่อเลือกรูป หรือลากมาวาง</small>
+      </label>}
+    </div>
+    <input id={`${id}-files`} className="ad-media-file" type="file" multiple accept={MEDIA_ACCEPT} disabled={disabled || pending || value.length >= MAX_MEDIA || !slug} aria-label="เลือกภาพจากเครื่อง" aria-describedby={`${id}-help ${id}-public`} onChange={selectFiles} />
     <input ref={validity} className="ad-media-validity" type="text" value="" onChange={() => {}} tabIndex={-1} aria-label="สถานะการอัปโหลดภาพ" />
-    <div role="status" aria-live="polite">{pending ? 'กำลังอัปโหลดภาพ กรุณารอจนเสร็จก่อนบันทึก (ไม่แสดงเปอร์เซ็นต์)' : rows.some((row) => row.status === 'success') ? 'อัปโหลดเสร็จแล้ว ภาพที่สำเร็จอยู่ในรายการด้านล่าง รอกดบันทึก' : ''}</div>
+    <div role="status" aria-live="polite" className="ad-media-status">{pending ? 'กำลังอัปโหลดภาพ กรุณารอจนเสร็จก่อนบันทึก' : rows.some((row) => row.status === 'success') ? 'อัปโหลดเสร็จแล้ว · กดบันทึกเพื่อให้ลูกค้าเห็น' : ''}</div>
     {rows.length > 0 && <ul className="ad-media-uploads" aria-label="รายการอัปโหลด" aria-busy={pending}>
       {rows.map((row) => <li key={row.id} className="ad-media-upload">
         {row.preview && <MediaPreview key={row.preview} src={row.preview} alt={`ตัวอย่าง ${row.file.name}`} />}
@@ -98,15 +144,11 @@ export default function MediaEditor({ slug, value = [], onChange, label, disable
         </div>
       </li>)}
     </ul>}
-    {value.length === 0 && <p className="ad-muted">ยังไม่มีภาพ · ลูกค้าจะเห็นพื้นภาพแบรนด์แทน</p>}
-    {value.map((item, index) => <div className="ad-media-row" key={index}>
-      {isSafeMediaUrl(item.url) && <MediaPreview key={item.url} src={item.url} alt={item.alt} />}
-      <label className="ad-field">URL ภาพที่ {index + 1}<input required type="text" inputMode="url" maxLength={2048} placeholder="https://…" disabled={disabled || pending} value={item.url} ref={(input) => input?.setCustomValidity(isSafeMediaUrl(item.url) ? '' : 'ใช้ลิงก์ HTTPS หรือเส้นทาง /demo-media/ เท่านั้น')} onChange={(event) => update(index, { url: event.target.value })} /></label>
-      <label className="ad-field">คำอธิบายภาพ (alt) ที่ {index + 1}<input value={item.alt ?? ''} disabled={disabled} maxLength={200} placeholder="อธิบายสิ่งที่เห็นในภาพ" onChange={(event) => update(index, { alt: event.target.value })} /></label>
-      {item.url.startsWith('/demo-media/') && <p className="ad-muted">ILLUSTRATION · ภาพประกอบ ไม่ใช่ภาพสถานที่จริง</p>}
-      <button type="button" className="ad-link" disabled={disabled || pending} aria-label={`ลบภาพที่ ${index + 1}`} onClick={() => change(latest.current.value.filter((_, i) => i !== index))}>ลบภาพ</button>
-    </div>)}
-    <button type="button" className="ad-secondary" disabled={disabled || pending || value.length >= MAX_MEDIA} onClick={() => { if (!uploader.current?.busy && !disabled && latest.current.value.length < MAX_MEDIA) change([...latest.current.value, { url: '', alt: '' }]); }}>+ เพิ่ม URL ภาพ</button>
-    <p className="ad-muted">ภาพจะเปลี่ยนในหน้าลูกค้าหลังจากกดบันทึกด้านล่างเท่านั้น · ลบภาพออกจากรายการไม่ได้ลบไฟล์สาธารณะที่อัปโหลดไปแล้ว</p>
+    {value.length === 0 && rows.length === 0 && <p className="ad-muted">ยังไม่มีภาพ · ลูกค้าจะเห็นพื้นภาพแบรนด์แทน</p>}
+    <div className="ad-media-foot">
+      <span className="ad-muted">มีรูปอยู่บนเว็บแล้ว? ใช้ลิงก์ HTTPS ได้</span>
+      <button type="button" className="ad-link" disabled={disabled || pending || value.length >= MAX_MEDIA} onClick={() => { if (!uploader.current?.busy && !disabled && latest.current.value.length < MAX_MEDIA) change([...latest.current.value, { url: '', alt: '' }]); }}>+ เพิ่ม URL ภาพ</button>
+    </div>
+    <p id={`${id}-public`} className="ad-media-disclosure">รูปที่อัปโหลดเป็นสาธารณะทันที แม้ยังไม่กดบันทึก · ห้ามอัปโหลดข้อมูลส่วนตัวลูกค้า ภาพสลิป หรือเอกสารอ่อนไหว · รูปจะเปลี่ยนในหน้าลูกค้าหลังกดบันทึกเท่านั้น</p>
   </fieldset>;
 }

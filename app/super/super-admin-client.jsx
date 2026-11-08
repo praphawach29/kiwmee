@@ -47,6 +47,7 @@ export default function SuperAdmin() {
   const [user, setUser] = useState(undefined);
   const [data, setData] = useState(null);
   const [catalog, setCatalog] = useState(null);
+  const [stats, setStats] = useState(null);
   const [brandFilter, setBrandFilter] = useState("");
   const [error, setError] = useState("");
   const [page, setPage] = useState("dash");
@@ -83,13 +84,20 @@ export default function SuperAdmin() {
     }
   }, []);
 
+  const loadStats = useCallback(async () => {
+    try { setStats(await api("GET", "/api/super/stats")); }
+    catch { /* non-critical — dashboard still works without it */ }
+  }, []);
+
   useEffect(() => {
     (async () => {
       const session = await api("GET", "/api/dashboard/session").catch(() => ({ user: null }));
       setUser(session.user ?? null);
-      if (session.user && await load()) await loadCatalog();
+      if (session.user && await load()) {
+        await Promise.all([loadCatalog(), loadStats()]);
+      }
     })();
-  }, [load, loadCatalog]);
+  }, [load, loadCatalog, loadStats]);
 
   useEffect(() => {
     if (!drawer) return;
@@ -203,7 +211,7 @@ export default function SuperAdmin() {
         </nav>
         <div className="super-content">
           <h1 className="super-page-title">{pageTitle(page)}</h1>
-          {page === "dash" && <Dashboard data={data} catalog={catalog} go={go} />}
+          {page === "dash" && <Dashboard data={data} catalog={catalog} stats={stats} go={go} />}
           {page === "line" && <LineSection data={data} error={error} load={load} />}
           {page === "billing" && <BillingSection data={data} error={error} load={load} />}
           {page === "topups" && <TopupsSection />}
@@ -222,28 +230,78 @@ function pageTitle(p) {
   return map[p] || p;
 }
 
-function Dashboard({ data, catalog, go }) {
+const KIND_ICON = { created: "✚", rescheduled: "⟳", cancelled: "✕", status: "●" };
+const KIND_COLOR = { created: "ok", rescheduled: "info", cancelled: "warn", status: "info" };
+
+function timeAgo(iso) {
+  const diff = Math.floor((Date.now() - new Date(iso)) / 1000);
+  if (diff < 60) return "เมื่อกี้";
+  if (diff < 3600) return `${Math.floor(diff / 60)} นาทีที่แล้ว`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} ชั่วโมงที่แล้ว`;
+  return new Date(iso).toLocaleDateString("th-TH");
+}
+
+function Dashboard({ data, catalog, stats, go }) {
   const missing = data?.settings?.filter((setting) => !configured(setting)) || [];
   const secret = data?.settings?.find((setting) => setting.key === "line.messaging_channel_secret");
   const token = data?.settings?.find((setting) => setting.key === "line.messaging_access_token");
   const count = (key) => catalog && !catalog.error && Array.isArray(catalog[key]) ? catalog[key].length : "—";
+  const stat = (key) => stats ? (stats[key] ?? 0).toLocaleString("th-TH") : "…";
   return <>
     {missing.length > 0 && <div className="super-todo"><span>⚠ ยังไม่ได้ตั้งค่า LINE: {missing.map((setting) => setting.label).join(", ")}</span><button className="super-btn" onClick={() => go("line")}>ไปตั้งค่า</button></div>}
     {catalog?.error && <p className="ad-error" role="alert">โหลดข้อมูลแบรนด์และร้านไม่ได้: {catalog.error}</p>}
     <div className="super-kpis">
       <div className="super-kpi"><small>แบรนด์</small><strong>{count("brands")}</strong><em>{catalog ? "จากรายการแบรนด์" : "กำลังโหลด…"}</em></div>
       <div className="super-kpi"><small>ร้านและสาขา</small><strong>{count("shops")}</strong><em>{catalog ? "จากรายการร้าน" : "กำลังโหลด…"}</em></div>
-      <div className="super-kpi"><small>การจองวันนี้</small><strong>—</strong><em>ยังไม่มีข้อมูลสรุป</em></div>
-      <div className="super-kpi"><small>ลูกค้าที่ผูก LINE</small><strong>—</strong><em>ยังไม่มีข้อมูลสรุป</em></div>
+      <button className="super-kpi super-kpi-btn" onClick={() => go("topups")}>
+        <small>การจองวันนี้</small>
+        <strong>{stat("bookingsToday")}</strong>
+        <em>นัดหมายที่ยืนยันแล้ว</em>
+      </button>
+      <div className="super-kpi">
+        <small>ลูกค้าที่ผูก LINE</small>
+        <strong>{stat("lineCustomers")}</strong>
+        <em>ทั้งระบบ</em>
+      </div>
     </div>
     <div className="super-two">
-      <section className="super-card"><h3>สถานะการตั้งค่า</h3><p className="super-sub">การตั้งค่าไม่ใช่ผลตรวจสุขภาพหรือการเชื่อมต่อ</p>
+      <section className="super-card">
+        <h3>สถานะการตั้งค่า</h3>
+        <p className="super-sub">การตั้งค่าไม่ใช่ผลตรวจสุขภาพหรือการเชื่อมต่อ</p>
         <div className="super-li"><span className="super-ico info" aria-hidden="true">?</span><div className="super-t">ฐานข้อมูล Kiwmee<small>สถานะจริงดูที่ /api/health</small></div></div>
         <div className="super-li"><span className="super-ico info" aria-hidden="true">i</span><div className="super-t">Channel access token<small>{token ? SOURCE[token.source] : "ไม่ทราบสถานะ"} · ยังไม่ยืนยันกับ LINE</small></div></div>
         <div className="super-li"><span className={"super-ico " + (configured(secret) ? "info" : "warn")} aria-hidden="true">i</span><div className="super-t">Channel secret<small>{secret ? SOURCE[secret.source] : "ไม่ทราบสถานะ"}</small></div></div>
         <div className="super-li"><span className={"super-ico " + (data?.encryptionReady ? "ok" : "warn")} aria-hidden="true">i</span><div className="super-t">กุญแจเข้ารหัส<small>{data?.encryptionReady ? "ตั้งไว้ที่เซิร์ฟเวอร์แล้ว" : "ยังไม่ได้ตั้ง"}</small></div></div>
+        {stats?.pendingTopups > 0 && (
+          <div className="super-li">
+            <span className="super-ico warn" aria-hidden="true">฿</span>
+            <div className="super-t">สลิปรอตรวจ
+              <small>{stats.pendingTopups} ใบ · <button className="super-link-inline" onClick={() => go("topups")}>ดูและอนุมัติ</button></small>
+            </div>
+          </div>
+        )}
       </section>
-      <section className="super-card"><h3>กิจกรรมล่าสุด</h3><p className="super-sub">ยังไม่มีข้อมูลประวัติกิจกรรมในหน้านี้</p><p className="super-muted">ไม่สามารถสรุปว่าใครเปลี่ยนค่าอะไรจากค่าตั้งปัจจุบันได้</p></section>
+      <section className="super-card">
+        <h3>กิจกรรมล่าสุด</h3>
+        {!stats ? (
+          <p className="super-muted">กำลังโหลด…</p>
+        ) : stats.activity?.length === 0 ? (
+          <p className="super-muted">ยังไม่มีกิจกรรม</p>
+        ) : (
+          <div className="super-activity">
+            {stats.activity.map((e) => (
+              <div key={e.id} className="super-act-row">
+                <span className={"super-ico " + KIND_COLOR[e.kind]} aria-hidden="true">{KIND_ICON[e.kind] ?? "●"}</span>
+                <div className="super-t">
+                  <span className="super-act-shop">{e.businessName}</span>
+                  <small>{e.kindLabel} · {e.actorLabel}</small>
+                </div>
+                <time className="super-act-time" dateTime={e.createdAt}>{timeAgo(e.createdAt)}</time>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   </>;
 }

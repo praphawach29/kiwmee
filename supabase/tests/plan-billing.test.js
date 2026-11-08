@@ -198,3 +198,43 @@ test("buying a plan, scheduling a cheaper one, and the hourly renewal run their 
     await require("../../src/v2/db").getBookingPool().end().catch(() => {});
   }
 });
+
+test("points do not run out while the plan has paused the programme: their expiry moves on by the pause", { skip }, async () => {
+  await inTx(async () => {
+    await db.query("insert into auth.users (id, email) values ($1, $2)", [NEW_OWNER.id, NEW_OWNER.email]);
+    const shop = await newShop(NEW_OWNER, "pause-points"); // the Pro trial: points may be on
+    await db.query("insert into public.loyalty_programs (brand_id, active, earn_per_baht, expire_months) values ($1, true, 100, 12)", [shop.brand_id]);
+    const member = "U" + "a".repeat(32);
+    const lot = async (expires) =>
+      (await db.query(
+        `insert into public.loyalty_ledger (brand_id, line_user_id, business_id, kind, points, expires_at, created_at)
+         values ($1, $2, $3, 'adjust', 100, ${expires}, now() - interval '300 days') returning id`,
+        [shop.brand_id, member, shop.id]
+      )).rows[0].id;
+    const soon = await lot("now() + interval '5 days'"); // would run out during the pause
+    const later = await lot("now() + interval '60 days'");
+    const gone = await lot("now() - interval '20 days'"); // ran out before the pause
+
+    // the trial ends: the programme is paused; pretend that was 10 days ago
+    await db.query("update public.brand_plans set valid_until = now() - interval '1 minute' where brand_id = $1", [shop.brand_id]);
+    await db.query("select public.plan_sync($1)", [shop.brand_id]);
+    const p = (await db.query("select active, paused_by_plan, paused_at from public.loyalty_programs where brand_id = $1", [shop.brand_id])).rows[0];
+    assert.deepEqual([p.active, p.paused_by_plan, Boolean(p.paused_at)], [false, true, true]);
+    await db.query("update public.loyalty_programs set paused_at = now() - interval '10 days' where brand_id = $1", [shop.brand_id]);
+    const before = Object.fromEntries((await db.query("select id, expires_at from public.loyalty_ledger where brand_id = $1", [shop.brand_id])).rows.map((r) => [r.id, new Date(r.expires_at)]));
+
+    // the shop buys a plan with points again: the programme resumes and the clock moves on 10 days
+    await db.query("update public.brand_plans set plan = 'pro', complimentary = false, trial = false, valid_until = now() + interval '30 days' where brand_id = $1", [shop.brand_id]);
+    await db.query("select public.plan_sync($1)", [shop.brand_id]);
+    const after = Object.fromEntries((await db.query("select id, expires_at from public.loyalty_ledger where brand_id = $1", [shop.brand_id])).rows.map((r) => [r.id, new Date(r.expires_at)]));
+    const days = (id) => Math.round((after[id] - before[id]) / 864e5);
+    assert.deepEqual([days(soon), days(later), days(gone)], [10, 10, 0]);
+    const log = (await db.query("select lots_moved from public.loyalty_pauses where brand_id = $1", [shop.brand_id])).rows;
+    assert.deepEqual(log, [{ lots_moved: 2 }]);
+    const q = (await db.query("select active, paused_by_plan, paused_at from public.loyalty_programs where brand_id = $1", [shop.brand_id])).rows[0];
+    assert.deepEqual([q.active, q.paused_by_plan, q.paused_at], [true, false, null]);
+    // the member's balance counts the moved points again
+    const balance = (await db.query("select balance from public.loyalty_balance($1, $2)", [shop.brand_id, member])).rows[0].balance;
+    assert.equal(balance, 200);
+  });
+});

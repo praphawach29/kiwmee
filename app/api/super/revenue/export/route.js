@@ -3,8 +3,8 @@ const { revenueReport, revenueCsv } = require("../../../../../src/v2/platform-re
 
 // ดาวน์โหลดรายงานรายได้เป็น CSV (เปิดใน Excel ได้ มี BOM ภาษาไทย)
 async function GET(request) {
-  return adminRoute(request, async () => {
-    const report = await revenueReport();
+  return adminRoute(request, async (user) => {
+    const report = await revenueReport(user.id);
     const csv = revenueCsv(report);
     return new Response(csv, {
       status: 200,

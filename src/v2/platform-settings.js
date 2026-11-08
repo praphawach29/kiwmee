@@ -155,6 +155,12 @@ async function requirePlatformAdmin(client) {
   if (!(await isPlatformAdmin(client))) throw forbidden(NOT_ADMIN);
 }
 
+/** ownerTx connections have no JWT, so auth.uid() is NULL. Use this instead when userId is known. */
+async function requirePlatformAdminId(client, userId) {
+  const { rows } = await client.query("select 1 from public.platform_admins where user_id = $1", [userId]);
+  if (!rows.length) throw forbidden(NOT_ADMIN);
+}
+
 /** What /super shows: every known setting, whether it is set and from where. Secrets are never included. */
 async function listSettings(client, { env = process.env } = {}) {
   await requirePlatformAdmin(client);
@@ -228,6 +234,7 @@ module.exports = {
   clearSetting,
   isPlatformAdmin,
   requirePlatformAdmin,
+  requirePlatformAdminId,
   testMessagingToken,
   encrypt,
   decrypt,

@@ -3,7 +3,7 @@
 // อ่านข้ามทุกแบรนด์ ต้องเป็น platform admin เท่านั้น
 
 const { ownerTx } = require("./wallet");
-const { requirePlatformAdmin } = require("./platform-settings");
+const { requirePlatformAdminId } = require("./platform-settings");
 
 const TODAY_START = `(date_trunc('day', now() at time zone 'Asia/Bangkok') at time zone 'Asia/Bangkok')`;
 const TODAY_END = `(${TODAY_START} + '1 day'::interval)`;
@@ -13,9 +13,9 @@ const ACTIVE_STATUSES = `('confirmed','pending','checked_in','completed')`;
 const KIND_LABEL = { created: "จองใหม่", rescheduled: "เลื่อนนัด", cancelled: "ยกเลิก", status: "เปลี่ยนสถานะ" };
 const ACTOR_LABEL = { customer: "ลูกค้า", shop: "ร้าน", system: "ระบบ" };
 
-async function platformStats() {
+async function platformStats(userId) {
   return ownerTx(async (client) => {
-    await requirePlatformAdmin(client);
+    await requirePlatformAdminId(client, userId);
 
     const { rows: [counts] } = await client.query(`
       select

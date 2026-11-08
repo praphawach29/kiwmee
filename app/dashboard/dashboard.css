@@ -1023,3 +1023,63 @@
   .ad-bookings-layout { grid-template-columns: 360px minmax(0, 1fr); }
   .ad-calendar { position: sticky; top: 16px; }
 }
+
+/* Members and points (owner's ask: lighter, buttons their own size) */
+.ad-loyalty { gap: 16px; }
+/* inside this tab no button stretches across the card */
+.ad-loyalty .ad-card > button, .ad-loyalty .ad-fieldset > button, .ad-loyalty form > button { justify-self: start; }
+.ad-small-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 36px; padding: 0 14px; font-size: .85rem; cursor: pointer; }
+.ad-loy-hero { grid-template-columns: 1fr; gap: 18px; }
+.ad-loy-card { display: grid; gap: 10px; justify-items: stretch; max-width: 360px; }
+.ad-loy-logo { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.ad-loy-logo .ad-muted { font-size: .78rem; }
+.ad-loy-logo .ad-error, .ad-loy-logo .ad-ok { flex-basis: 100%; margin: 0; }
+.ad-loy-summary { display: grid; gap: 10px; align-content: start; min-width: 0; }
+.ad-loy-summary h2 { margin: 2px 0 0; font-size: 1.35rem; }
+.ad-loy-rule { margin: 0; font-size: 1rem; font-weight: 600; color: var(--grape-deep); }
+.ad-loy-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.ad-loy-stats div { padding: 10px 12px; border-radius: 12px; background: var(--bg); }
+.ad-loy-stats dt { font-size: .76rem; color: var(--muted); }
+.ad-loy-stats dd { margin: 0; font-size: 1.35rem; font-weight: 600; }
+.ad-loy-note { font-size: .8rem; }
+.ad-loy-section h2 { margin: 0; }
+.ad-loy-rule-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.ad-loy-sentence { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--bg); font-weight: 500; }
+.ad-loy-sentence input { width: 88px; min-height: 40px; text-align: center; }
+.ad-loy-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; }
+.ad-loy-actions > :first-child:not(button) { margin-right: auto; }
+.ad-loy-actions .ad-primary { min-height: 42px; padding: 0 20px; }
+/* an on/off switch for the programme */
+.ad-switch { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; cursor: pointer; justify-self: start; }
+.ad-switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.ad-switch span { position: relative; width: 44px; height: 26px; border-radius: 13px; background: var(--line); transition: background .15s; flex: none; }
+.ad-switch span::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .2); transition: transform .15s; }
+.ad-switch input:checked + span { background: var(--mint-deep, #0b7a50); }
+.ad-switch input:checked + span::after { transform: translateX(18px); }
+.ad-switch input:focus-visible + span { outline: 3px solid var(--grape); outline-offset: 2px; }
+/* rewards as coupons */
+.ad-rewards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.ad-reward { position: relative; display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px dashed var(--line); border-radius: 14px; background: var(--surface); min-width: 0; }
+.ad-reward[data-off] { opacity: .55; }
+.ad-reward-icon { display: grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: 12px; background: var(--selected); color: var(--grape-deep); font-size: 1.1rem; font-weight: 700; }
+.ad-reward-body { display: grid; gap: 2px; flex: 1; min-width: 0; justify-items: start; }
+.ad-reward-body strong { overflow-wrap: anywhere; }
+.ad-reward-body .ad-muted { font-size: .82rem; }
+.ad-reward-cost { display: grid; justify-items: end; flex: none; line-height: 1.1; }
+.ad-reward-cost b { font-size: 1.1rem; color: var(--grape-deep); }
+.ad-reward-cost small { font-size: .7rem; color: var(--muted); }
+.ad-reward-toggle { margin-top: 2px; font-size: .78rem; }
+.ad-loy-new-reward { display: grid; gap: 12px; padding: 14px; border-radius: 14px; background: var(--bg); }
+/* members as rows */
+.ad-loy-members { list-style: none; margin: 0; padding: 0; display: grid; }
+.ad-loy-member { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line-soft, #eeeaf8); min-width: 0; }
+.ad-loy-member:last-child { border-bottom: 0; }
+.ad-loy-member-avatar { display: grid; place-items: center; flex: none; width: 38px; height: 38px; border-radius: 50%; background: var(--selected); color: var(--grape-deep); font-weight: 600; }
+.ad-loy-member-body { display: grid; flex: 1; min-width: 0; }
+.ad-loy-member-body .ad-muted { font-size: .8rem; }
+.ad-loy-member-points { display: grid; justify-items: end; line-height: 1.1; }
+.ad-loy-member-points b { font-size: 1.05rem; }
+.ad-loy-member-points small { font-size: .7rem; color: var(--muted); }
+@media (min-width: 760px) {
+  .ad-loy-hero { grid-template-columns: 340px minmax(0, 1fr); align-items: start; }
+}

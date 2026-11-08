@@ -883,6 +883,7 @@ function LoyaltyTab({ slug, catalog }) {
   const [error, setError] = useState("");
   const [program, setProgram] = useState(null);
   const [reward, setReward] = useState({ name: "", kind: "discount", offeringId: "", pointsCost: "", discountBaht: "", minTierRank: 0 });
+  const [addingReward, setAddingReward] = useState(false);
   const save = useSave();
   const base = shopPath(slug, "/loyalty");
 
@@ -922,7 +923,10 @@ function LoyaltyTab({ slug, catalog }) {
       discountBaht: free ? (reward.discountBaht === "" ? null : Number(reward.discountBaht)) : Number(reward.discountBaht),
       minTierRank: Number(reward.minTierRank) || 0
     };
-    if (await save.run(async () => setData(await api("POST", `${base}/rewards`, body)), "เพิ่มรางวัลแล้ว")) setReward({ name: "", kind: "discount", offeringId: "", pointsCost: "", discountBaht: "", minTierRank: 0 });
+    if (await save.run(async () => setData(await api("POST", `${base}/rewards`, body)), "เพิ่มรางวัลแล้ว")) {
+      setReward({ name: "", kind: "discount", offeringId: "", pointsCost: "", discountBaht: "", minTierRank: 0 });
+      setAddingReward(false);
+    }
   }
 
   async function toggleReward(r) {
@@ -938,18 +942,46 @@ function LoyaltyTab({ slug, catalog }) {
     await save.run(async () => setData(await api("POST", `${base}/adjust`, { lineUserId: m.lineUserId, points, note })), "ปรับคะแนนแล้ว");
   }
 
+  const savedRule = data.program;
+  const activeRewards = data.rewards.filter((r) => r.active).length;
+  const tierName = (rank) => data.tiers.find((t) => t.rank === rank)?.name ?? `ระดับ ${rank + 1}`;
   return (
-    <div className="ad-stack">
-      <form className="ad-card" onSubmit={saveProgram}>
-        <div className="ad-row ad-between ad-wrap">
-          <h2>กติกาคะแนนสะสม</h2>
-          <span className="ad-status" data-tone={program.active ? "ok" : "off"}>{program.active ? "เปิดใช้อยู่" : "ปิดอยู่"}</span>
+    <div className="ad-stack ad-loyalty">
+      {/* the programme at a glance: the card members see, whether it is on, the rule, and the numbers */}
+      <section className="ad-card ad-loy-hero" aria-label="ภาพรวมบัตรสมาชิก">
+        <div className="ad-loy-card">
+          <MemberCardFace programName={savedRule.name} balance={1250} logoUrl={data.brand?.logoUrl ?? null}
+            tierName={data.tiers[0]?.name} theme={data.tiers[0]?.cardTheme} rule={earnRule(savedRule)} />
+          <LogoButtons data={data} edit={edit} slug={slug} onSaved={setData} />
         </div>
-        <p className="ad-muted">ลูกค้าที่จองผ่าน LINE หรือแสดงรหัสสมาชิกตอนจ่าย ได้คะแนนเมื่อปิดบิล (จากยอดที่จ่ายจริง ปัดเศษทิ้ง) · ใช้ได้ทุกสาขาของแบรนด์ · คืนเงินแล้วคะแนนถูกหักคืนตามสัดส่วน</p>
-        {!edit && <p className="ad-notice">เฉพาะเจ้าของแบรนด์แก้กติกาและรางวัลได้</p>}
+        <div className="ad-loy-summary">
+          <div className="ad-row ad-between ad-wrap">
+            <div>
+              <p className="ad-muted">{data.brand?.name ? `แบรนด์ ${data.brand.name}` : "โปรแกรมสมาชิก"}</p>
+              <h2>{savedRule.name}</h2>
+            </div>
+            <span className="ad-status" data-tone={savedRule.active ? "ok" : "off"}>{savedRule.active ? "เปิดใช้อยู่" : "ปิดอยู่"}</span>
+          </div>
+          <p className="ad-loy-rule">{earnRule(savedRule)}{savedRule.expireMonths ? ` · หมดอายุใน ${savedRule.expireMonths} เดือน` : " · ไม่หมดอายุ"}</p>
+          <dl className="ad-loy-stats">
+            <div><dt>สมาชิกล่าสุด</dt><dd>{data.members.length.toLocaleString("th-TH")}</dd></div>
+            <div><dt>รางวัลที่เปิด</dt><dd>{activeRewards}</dd></div>
+            <div><dt>ระดับ</dt><dd>{data.tiers.length || "—"}</dd></div>
+          </dl>
+          <p className="ad-muted ad-loy-note">ลูกค้าที่จองผ่าน LINE หรือแสดงรหัสสมาชิกตอนจ่ายได้คะแนนเมื่อปิดบิล (จากยอดที่จ่ายจริง ปัดเศษทิ้ง) · ใช้ได้ทุกสาขาของแบรนด์ · คืนเงินแล้วหักคะแนนคืนตามสัดส่วน</p>
+          {!edit && <p className="ad-notice">เฉพาะเจ้าของแบรนด์แก้กติกา รางวัล และโลโก้ได้</p>}
+        </div>
+      </section>
+
+      <form className="ad-card ad-loy-section" onSubmit={saveProgram}>
+        <h2>กติกาคะแนน</h2>
         <fieldset disabled={!edit || save.busy} className="ad-fieldset">
-          <label className="ad-check"><input type="checkbox" checked={program.active} onChange={(e) => setP({ active: e.target.checked })} />เปิดระบบสะสมคะแนน</label>
-          <div className="ad-grid">
+          <label className="ad-switch">
+            <input type="checkbox" role="switch" checked={program.active} onChange={(e) => setP({ active: e.target.checked })} />
+            <span aria-hidden="true" />
+            เปิดระบบสะสมคะแนน
+          </label>
+          <div className="ad-loy-rule-form">
             <label className="ad-field">ชื่อโปรแกรม<input maxLength={60} value={program.name} onChange={(e) => setP({ name: e.target.value })} /></label>
             <label className="ad-field">
               ได้คะแนนจาก
@@ -958,87 +990,114 @@ function LoyaltyTab({ slug, catalog }) {
                 <option value="per_visit">จำนวนครั้งที่มา (บัตรสะสมแต้ม)</option>
               </select>
             </label>
-            {program.earnMode === "per_baht" && (
-              <label className="ad-field">ทุกกี่บาท<input type="number" min={1} step="0.01" required value={program.earnPerBaht ?? ""} onChange={(e) => setP({ earnPerBaht: e.target.value })} /></label>
-            )}
-            <label className="ad-field">{program.earnMode === "per_baht" ? "ได้กี่คะแนน" : "มา 1 ครั้งได้กี่คะแนน"}<input type="number" min={1} required value={program.earnPoints ?? ""} onChange={(e) => setP({ earnPoints: e.target.value })} /></label>
-            <label className="ad-field">หมดอายุหลังได้ (เดือน)<input type="number" placeholder="ว่าง = ไม่หมดอายุ" min={1} max={120} value={program.expireMonths ?? ""} onChange={(e) => setP({ expireMonths: e.target.value })} /></label>
           </div>
-          <Status save={save} />
-          {edit && <button className="ad-primary">บันทึกกติกา</button>}
+          <div className="ad-loy-sentence">
+            {program.earnMode === "per_baht" ? (
+              <>
+                <span>ทุก</span>
+                <input type="number" min={1} step="0.01" required aria-label="ทุกกี่บาท" value={program.earnPerBaht ?? ""} onChange={(e) => setP({ earnPerBaht: e.target.value })} />
+                <span>บาท ได้</span>
+              </>
+            ) : <span>มา 1 ครั้ง ได้</span>}
+            <input type="number" min={1} required aria-label={program.earnMode === "per_baht" ? "ได้กี่คะแนน" : "มา 1 ครั้งได้กี่คะแนน"} value={program.earnPoints ?? ""} onChange={(e) => setP({ earnPoints: e.target.value })} />
+            <span>คะแนน · หมดอายุหลังได้</span>
+            <input type="number" min={1} max={120} placeholder="—" aria-label="หมดอายุหลังได้ (เดือน)" value={program.expireMonths ?? ""} onChange={(e) => setP({ expireMonths: e.target.value })} />
+            <span>เดือน</span>
+          </div>
+          <p className="ad-muted">เว้นช่องเดือนว่าง = คะแนนไม่หมดอายุ</p>
+          <div className="ad-loy-actions">
+            <Status save={save} />
+            {edit && <button className="ad-primary">บันทึกกติกา</button>}
+          </div>
         </fieldset>
       </form>
-
-      <LogoCard data={data} edit={edit} slug={slug} onSaved={setData} programName={program.name} />
 
       <TiersCard key={JSON.stringify(data.tiers) + data.program.qualifyMonths} data={data} edit={edit} programName={program.name} rule={program}
         onSave={(body) => save.run(async () => setData(await api("PUT", `${base}/tiers`, body)), "บันทึกระดับสมาชิกแล้ว")} busy={save.busy} />
 
-      <section className="ad-card">
-        <h2>รางวัลที่แลกได้</h2>
-        <p className="ad-muted">พนักงานเลือกใช้ตอนปิดบิล · 1 บิลใช้ได้ 1 รางวัล · ลูกค้าเห็นรายการนี้ในหน้า LINE</p>
-        {data.rewards.length === 0 && <p className="ad-empty">ยังไม่มีรางวัล</p>}
-        <ul className="ad-list">
+      <section className="ad-card ad-loy-section">
+        <div className="ad-row ad-between ad-wrap">
+          <div>
+            <h2>รางวัลที่แลกได้</h2>
+            <p className="ad-muted">พนักงานเลือกใช้ตอนปิดบิล · 1 บิลใช้ได้ 1 รางวัล · ลูกค้าเห็นรายการนี้ในหน้า LINE</p>
+          </div>
+          {edit && !addingReward && <button type="button" className="ad-secondary" onClick={() => setAddingReward(true)}>+ เพิ่มรางวัล</button>}
+        </div>
+        {data.rewards.length === 0 && !addingReward && <p className="ad-empty">ยังไม่มีรางวัล</p>}
+        <ul className="ad-rewards">
           {data.rewards.map((r) => (
-            <li key={r.id} className="ad-row ad-between ad-wrap" data-off={!r.active || undefined}>
-              <span>
-                <strong>{r.name}</strong> <span className="ad-muted">· ใช้ {r.pointsCost.toLocaleString("th-TH")} คะแนน · {r.kind === "free_offering" ? `ฟรี ${r.offeringName ?? "(บริการถูกลบ)"}${r.discountBaht ? ` (สูงสุด ${money(r.discountBaht)})` : ""}` : `ลด ${money(r.discountBaht)}`}</span>
-                {r.minTierRank > 0 && <span className="ad-status" data-tone="info">เฉพาะ {data.tiers.find((t) => t.rank === r.minTierRank)?.name ?? `ระดับ ${r.minTierRank + 1}`} ขึ้นไป</span>}
+            <li key={r.id} className="ad-reward" data-off={!r.active || undefined}>
+              <span className="ad-reward-icon" aria-hidden="true">{r.kind === "free_offering" ? "🎁" : "฿"}</span>
+              <span className="ad-reward-body">
+                <strong>{r.name}</strong>
+                <span className="ad-muted">{r.kind === "free_offering" ? `ฟรี ${r.offeringName ?? "(บริการถูกลบ)"}${r.discountBaht ? ` · สูงสุด ${money(r.discountBaht)}` : ""}` : `ลด ${money(r.discountBaht)}`}</span>
+                {r.minTierRank > 0 && <span className="ad-status" data-tone="info">เฉพาะ {tierName(r.minTierRank)} ขึ้นไป</span>}
               </span>
-              {edit && <button type="button" className="ad-link" disabled={save.busy} onClick={() => toggleReward(r)}>{r.active ? "ปิด" : "เปิดใหม่"}</button>}
+              <span className="ad-reward-cost">
+                <b>{r.pointsCost.toLocaleString("th-TH")}</b><small>คะแนน</small>
+                {edit && <button type="button" className="ad-link ad-reward-toggle" disabled={save.busy} onClick={() => toggleReward(r)}>{r.active ? "ปิด" : "เปิดใหม่"}</button>}
+              </span>
             </li>
           ))}
         </ul>
-        {edit && (
-          <form className="ad-grid" onSubmit={addReward}>
-            <label className="ad-field">
-              แบบรางวัล
-              <select value={reward.kind} onChange={(e) => setReward({ ...reward, kind: e.target.value, discountBaht: "" })}>
-                <option value="discount">ส่วนลดเป็นเงิน</option>
-                <option value="free_offering">รับบริการฟรี</option>
-              </select>
-            </label>
-            {reward.kind === "free_offering" && (
+        {edit && addingReward && (
+          <form className="ad-loy-new-reward" onSubmit={addReward}>
+            <div className="ad-grid">
               <label className="ad-field">
-                บริการที่ให้ฟรี
-                <select required value={reward.offeringId} onChange={(e) => {
-                  const o = catalog.offerings.find((x) => x.id === e.target.value);
-                  setReward({ ...reward, offeringId: e.target.value, name: reward.name || (o ? `${o.name} ฟรี 1 ครั้ง` : "") });
-                }}>
-                  <option value="">เลือกบริการ</option>
-                  {catalog.offerings.filter((o) => o.active !== false).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                แบบรางวัล
+                <select value={reward.kind} onChange={(e) => setReward({ ...reward, kind: e.target.value, discountBaht: "" })}>
+                  <option value="discount">ส่วนลดเป็นเงิน</option>
+                  <option value="free_offering">รับบริการฟรี</option>
                 </select>
               </label>
-            )}
-            <label className="ad-field">ชื่อรางวัล<input required maxLength={80} placeholder={reward.kind === "free_offering" ? "เช่น ตัดผมฟรี 1 ครั้ง" : "เช่น ส่วนลด 100 บาท"} value={reward.name} onChange={(e) => setReward({ ...reward, name: e.target.value })} /></label>
-            <label className="ad-field">ใช้กี่คะแนน<input type="number" min={1} required value={reward.pointsCost} onChange={(e) => setReward({ ...reward, pointsCost: e.target.value })} /></label>
-            {reward.kind === "discount"
-              ? <label className="ad-field">ลดกี่บาท<input type="number" min={1} step="0.01" required value={reward.discountBaht} onChange={(e) => setReward({ ...reward, discountBaht: e.target.value })} /></label>
-              : <label className="ad-field">มูลค่าสูงสุด (บาท, ไม่บังคับ)<input type="number" min={1} step="0.01" placeholder="ว่าง = เต็มราคาบริการ" value={reward.discountBaht} onChange={(e) => setReward({ ...reward, discountBaht: e.target.value })} /></label>}
-            {data.tiers.length > 1 && (
-              <label className="ad-field">
-                ใครแลกได้
-                <select value={reward.minTierRank} onChange={(e) => setReward({ ...reward, minTierRank: e.target.value })}>
-                  <option value={0}>ทุกระดับ</option>
-                  {data.tiers.filter((t) => t.rank > 0).map((t) => <option key={t.rank} value={t.rank}>เฉพาะ {t.name} ขึ้นไป</option>)}
-                </select>
-              </label>
-            )}
-            <button className="ad-secondary" disabled={save.busy}>+ เพิ่มรางวัล</button>
+              {reward.kind === "free_offering" && (
+                <label className="ad-field">
+                  บริการที่ให้ฟรี
+                  <select required value={reward.offeringId} onChange={(e) => {
+                    const o = catalog.offerings.find((x) => x.id === e.target.value);
+                    setReward({ ...reward, offeringId: e.target.value, name: reward.name || (o ? `${o.name} ฟรี 1 ครั้ง` : "") });
+                  }}>
+                    <option value="">เลือกบริการ</option>
+                    {catalog.offerings.filter((o) => o.active !== false).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                  </select>
+                </label>
+              )}
+              <label className="ad-field">ชื่อรางวัล<input required maxLength={80} placeholder={reward.kind === "free_offering" ? "เช่น ตัดผมฟรี 1 ครั้ง" : "เช่น ส่วนลด 100 บาท"} value={reward.name} onChange={(e) => setReward({ ...reward, name: e.target.value })} /></label>
+              <label className="ad-field">ใช้กี่คะแนน<input type="number" min={1} required value={reward.pointsCost} onChange={(e) => setReward({ ...reward, pointsCost: e.target.value })} /></label>
+              {reward.kind === "discount"
+                ? <label className="ad-field">ลดกี่บาท<input type="number" min={1} step="0.01" required value={reward.discountBaht} onChange={(e) => setReward({ ...reward, discountBaht: e.target.value })} /></label>
+                : <label className="ad-field">มูลค่าสูงสุด (บาท, ไม่บังคับ)<input type="number" min={1} step="0.01" placeholder="ว่าง = เต็มราคาบริการ" value={reward.discountBaht} onChange={(e) => setReward({ ...reward, discountBaht: e.target.value })} /></label>}
+              {data.tiers.length > 1 && (
+                <label className="ad-field">
+                  ใครแลกได้
+                  <select value={reward.minTierRank} onChange={(e) => setReward({ ...reward, minTierRank: e.target.value })}>
+                    <option value={0}>ทุกระดับ</option>
+                    {data.tiers.filter((t) => t.rank > 0).map((t) => <option key={t.rank} value={t.rank}>เฉพาะ {t.name} ขึ้นไป</option>)}
+                  </select>
+                </label>
+              )}
+            </div>
+            <div className="ad-loy-actions">
+              <button type="button" className="ad-link" onClick={() => setAddingReward(false)}>ยกเลิก</button>
+              <button className="ad-primary" disabled={save.busy}>เพิ่มรางวัล</button>
+            </div>
           </form>
         )}
       </section>
 
-      <section className="ad-card">
+      <section className="ad-card ad-loy-section">
         <h2>สมาชิกล่าสุด</h2>
         {data.members.length === 0 && <p className="ad-empty">ยังไม่มีสมาชิกที่ได้คะแนน</p>}
-        <ul className="ad-list">
+        <ul className="ad-loy-members">
           {data.members.map((m) => (
-            <li key={m.lineUserId} className="ad-row ad-between ad-wrap">
-              <span>
-                <strong>{m.name}</strong> {m.tier && <span className="ad-status" data-tone="info">{m.tier}</span>} <span className="ad-muted">· {m.balance.toLocaleString("th-TH")} คะแนน{m.expiring > 0 ? ` · ${m.expiring} จะหมดอายุ` : ""}</span>
+            <li key={m.lineUserId} className="ad-loy-member">
+              <span className="ad-loy-member-avatar" aria-hidden="true">{(m.name || "?").replace(/^คุณ\s*/, "")[0] ?? "?"}</span>
+              <span className="ad-loy-member-body">
+                <strong>{m.name}</strong>
+                <span className="ad-muted">{m.tier ? `${m.tier} · ` : ""}{m.expiring > 0 ? `${m.expiring.toLocaleString("th-TH")} คะแนนจะหมดอายุ` : "สมาชิก LINE"}</span>
               </span>
-              {edit && <button type="button" className="ad-link" disabled={save.busy} onClick={() => adjust(m)}>ปรับคะแนน</button>}
+              <span className="ad-loy-member-points"><b>{m.balance.toLocaleString("th-TH")}</b><small>คะแนน</small></span>
+              {edit && <button type="button" className="ad-link" disabled={save.busy} onClick={() => adjust(m)}>ปรับ</button>}
             </li>
           ))}
         </ul>
@@ -1049,7 +1108,8 @@ function LoyaltyTab({ slug, catalog }) {
 
 // ---------- the brand's logo on its membership card (migration …003500) ----------
 
-function LogoCard({ data, edit, slug, onSaved, programName }) {
+// The brand's logo on the card: small buttons under the preview (square, plain background looks best)
+function LogoButtons({ data, edit, slug, onSaved }) {
   const [state, setState] = useState({ busy: false, error: "", done: "" });
   const logo = data.brand?.logoUrl ?? null;
 
@@ -1081,31 +1141,18 @@ function LogoCard({ data, edit, slug, onSaved, programName }) {
     }
   }
 
+  if (!edit) return null;
   return (
-    <section className="ad-card">
-      <div className="ad-row ad-between ad-wrap">
-        <h2>โลโก้บนบัตรสมาชิก</h2>
-        {data.brand?.name && <span className="ad-muted">แบรนด์ {data.brand.name}</span>}
-      </div>
-      <p className="ad-muted">แสดงบนบัตรในหน้า LINE ของลูกค้า และบนการ์ดแจ้งขึ้นระดับ / คะแนนใกล้หมดอายุ · ใช้รูปสี่เหลี่ยมจัตุรัส พื้นเรียบ จะดูดีที่สุด</p>
-      <div className="ad-logo-row">
-        <div className="ad-logo-preview">
-          <MemberCardFace programName={programName} balance={1250} logoUrl={logo} />
-        </div>
-        {edit && (
-          <div className="ad-stack">
-            <label className="ad-secondary ad-upload-button" aria-disabled={state.busy}>
-              <input type="file" accept={MEDIA_ACCEPT} onChange={upload} disabled={state.busy} hidden />
-              {state.busy ? "กำลังอัปโหลด…" : logo ? "เปลี่ยนโลโก้" : "อัปโหลดโลโก้"}
-            </label>
-            {logo && <button type="button" className="ad-link" disabled={state.busy} onClick={remove}>เอาโลโก้ออก</button>}
-          </div>
-        )}
-      </div>
-      {!edit && <p className="ad-notice">เฉพาะเจ้าของแบรนด์เปลี่ยนโลโก้ได้</p>}
+    <div className="ad-loy-logo">
+      <label className="ad-secondary ad-small-btn" aria-disabled={state.busy}>
+        <input type="file" accept={MEDIA_ACCEPT} onChange={upload} disabled={state.busy} hidden />
+        {state.busy ? "กำลังอัปโหลด…" : logo ? "เปลี่ยนโลโก้" : "+ ใส่โลโก้"}
+      </label>
+      {logo && <button type="button" className="ad-link" disabled={state.busy} onClick={remove}>เอาออก</button>}
+      <span className="ad-muted">รูปสี่เหลี่ยมจัตุรัส พื้นเรียบ</span>
       {state.error && <p className="ad-error" role="alert">{state.error}</p>}
       {state.done && <p className="ad-ok" role="status">{state.done}</p>}
-    </section>
+    </div>
   );
 }
 

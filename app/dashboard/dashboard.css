@@ -1083,3 +1083,15 @@
 @media (min-width: 760px) {
   .ad-loy-hero { grid-template-columns: 340px minmax(0, 1fr); align-items: start; }
 }
+
+/* Membership tiers: every tier in the same layout (owner's ask) */
+.ad-tier-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.ad-tier-grid .ad-field { min-width: 0; }
+.ad-tier-reach { margin: 0; }
+/* the starting tier has no way to reach it: a note the height of the fields it stands in for */
+.ad-tier-start { display: flex; align-items: center; min-height: 72px; padding: 0 12px; border: 1px dashed var(--line); border-radius: 10px; color: var(--muted); font-size: .85rem; }
+@media (max-width: 559px) {
+  .ad-tier-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ad-tier-grid .ad-field:first-child { grid-column: 1 / -1; }
+  .ad-tier-reach.ad-tier-grid .ad-field:first-child { grid-column: auto; }
+}

@@ -1229,7 +1229,8 @@ function TiersCard({ data, edit, programName, rule, onSave, busy }) {
                 {edit && i === tiers.length - 1 && i > 0 && <button type="button" className="ad-link" onClick={() => remove(i)}>ลบระดับนี้</button>}
                 {edit && tiers.length === 1 && <button type="button" className="ad-link" onClick={() => remove(0)}>ไม่ใช้ระดับ</button>}
               </div>
-              <div className="ad-grid">
+              {/* every tier the same layout: what it is on one row, how to reach it on the next */}
+              <div className="ad-tier-grid">
                 <label className="ad-field">ชื่อระดับ<input required maxLength={30} value={t.name} onChange={(e) => set(i, { name: e.target.value })} /></label>
                 <label className="ad-field">
                   หน้าตาบัตร
@@ -1237,10 +1238,16 @@ function TiersCard({ data, edit, programName, rule, onSave, busy }) {
                     {data.themes.map((th) => <option key={th.id} value={th.id}>{th.label}</option>)}
                   </select>
                 </label>
-                {i > 0 && <label className="ad-field">ยอดใช้จ่ายถึง (บาท)<input type="number" min={0} step="1" placeholder="0 = ไม่ใช้" value={t.minSpend} onChange={(e) => set(i, { minSpend: e.target.value })} /></label>}
-                {i > 0 && <label className="ad-field">หรือมาครบ (ครั้ง)<input type="number" min={0} step="1" placeholder="0 = ไม่ใช้" value={t.minVisits} onChange={(e) => set(i, { minVisits: e.target.value })} /></label>}
                 <label className="ad-field">คะแนนคูณ<input type="number" min={1} max={5} step="0.1" value={t.earnMultiplier} onChange={(e) => set(i, { earnMultiplier: e.target.value })} /></label>
               </div>
+              {i > 0 ? (
+                <div className="ad-tier-grid ad-tier-reach">
+                  <label className="ad-field">ยอดใช้จ่ายถึง (บาท)<input type="number" min={0} step="1" placeholder="0 = ไม่ใช้" value={t.minSpend} onChange={(e) => set(i, { minSpend: e.target.value })} /></label>
+                  <label className="ad-field">หรือมาครบ (ครั้ง)<input type="number" min={0} step="1" placeholder="0 = ไม่ใช้" value={t.minVisits} onChange={(e) => set(i, { minVisits: e.target.value })} /></label>
+                </div>
+              ) : (
+                <p className="ad-tier-reach ad-tier-start">สมาชิกใหม่ทุกคนเริ่มที่ระดับนี้ ไม่ต้องมีเงื่อนไข</p>
+              )}
               <label className="ad-field">สิทธิพิเศษ (บรรทัดละข้อ ไม่เกิน 5 ข้อ)<textarea rows={2} value={t.benefits} onChange={(e) => set(i, { benefits: e.target.value })} placeholder="เช่น ส่วนลดวันเกิด 10%" /></label>
             </div>
           ))}

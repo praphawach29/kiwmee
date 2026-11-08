@@ -1196,3 +1196,30 @@
 @keyframes ad-slide-in { from { transform: translateX(32px); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes ad-fade { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .ad-sheet, .ad-sheet-backdrop { animation: none; } }
+
+/* ---------- Thai date and time fields ---------- */
+.ad-time { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.ad-shell .ad-time select { width: auto; min-width: 58px; padding: 7px 6px; font-variant-numeric: tabular-nums; text-align: center; }
+.ad-time-unit { color: var(--muted); font-size: .9em; margin-left: 2px; }
+.ad-date { position: relative; display: inline-block; max-width: 100%; }
+.ad-date-btn { display: inline-flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 40px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); font: inherit; cursor: pointer; white-space: nowrap; }
+.ad-date-btn:hover { border-color: var(--grape); }
+.ad-field .ad-date, .ad-field .ad-date-btn { width: 100%; }
+.ad-date-icon { color: var(--muted); font-size: 12px; }
+.ad-date-fill { flex: 1; min-width: 0; display: flex; }
+.ad-date-fill > .ad-date-btn { flex: 1; min-width: 0; justify-content: center; min-height: 44px; border-radius: 12px; font-weight: 600; }
+.ad-date-fill > .ad-date-btn > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+.ad-date-required { position: absolute; left: 50%; bottom: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; }
+.ad-date-pop { position: absolute; z-index: 70; top: calc(100% + 6px); left: 0; width: 292px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: 0 12px 32px rgba(27, 22, 64, .16); display: grid; gap: 8px; }
+.ad-date-fill .ad-date-pop { left: 50%; transform: translateX(-50%); }
+.ad-date-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ad-date-head strong { font-family: var(--font-display); font-weight: 500; }
+.ad-date-head button { width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); color: var(--grape-deep); font-size: 18px; line-height: 1; cursor: pointer; }
+.ad-date-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; }
+.ad-date-dow { padding: 4px 0; color: var(--muted); font-size: 12px; }
+.ad-date-grid button { height: 36px; border: 0; border-radius: 10px; background: none; color: var(--ink); font: inherit; font-variant-numeric: tabular-nums; cursor: pointer; }
+.ad-date-grid button:hover:not(:disabled) { background: var(--selected); }
+.ad-date-grid button[data-today="true"] { box-shadow: inset 0 0 0 1px var(--grape); }
+.ad-date-grid button[data-on="true"] { background: var(--grape); color: #fff; font-weight: 600; }
+.ad-date-grid button:disabled { color: var(--line); cursor: not-allowed; }
+.ad-date-today { justify-self: center; }

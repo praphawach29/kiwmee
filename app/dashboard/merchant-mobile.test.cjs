@@ -135,3 +135,21 @@ test('members and points: the logo is a small button under the card, only for th
   assert.match(has, /เอาออก/);
   assert.equal(render(LogoButtons, { data: { brand: {} }, edit: false, slug: 'x', onSaved() {} }), '');
 });
+
+test('Thai date and time fields: 24-hour time with น., dates as Thai short date in พ.ศ.', () => {
+  const { TimeInput, DateInput, thaiDate } = load('[slug]/shop-admin-client.jsx', '\nexport { TimeInput, DateInput, thaiDate };');
+  assert.equal(thaiDate('2026-11-08'), 'อา. 8 พ.ย. 2569');
+  assert.equal(thaiDate('2026-01-31', { weekday: false }), '31 ม.ค. 2569');
+  assert.equal(thaiDate(''), '');
+  const time = render(TimeInput, { value: '14:07', onChange() {}, required: true, 'aria-label': 'เปิด' });
+  assert.match(time, /<option value="23">23<\/option>/);
+  assert.match(time, /<option value="07">07<\/option>/); // an odd minute already saved stays choosable
+  assert.match(time, /น\.<\/span>/);
+  assert.doesNotMatch(time, /AM|PM|type="time"/);
+  const empty = render(TimeInput, { value: '', onChange() {}, 'aria-label': 'ตั้งแต่' });
+  assert.match(empty, /<option value="" selected="">--<\/option>/);
+  const date = render(DateInput, { value: '2026-11-08', onChange() {}, required: true, 'aria-label': 'วันที่' });
+  assert.match(date, /อา\. 8 พ\.ย\. 2569/);
+  assert.doesNotMatch(date, /type="date"/);
+  assert.match(date, /required=""/);
+});

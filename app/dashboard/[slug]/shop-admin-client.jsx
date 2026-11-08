@@ -78,6 +78,103 @@ export function MediaEditor(props) {
   return readOnly ? null : <OwnerMediaEditor {...props} />;
 }
 
+// ---------- Thai date and time fields ----------
+// The browser's own date/time inputs follow the device language (10:00 AM, 11/08/2026), so the
+// dashboard uses its own: 24-hour time as hour + minute ("14:30 น.") and Thai dates in พ.ศ.
+// ("ส. 8 พ.ย. 2569") with a Thai month calendar. Values stay "HH:MM" and "YYYY-MM-DD".
+const TH_MONTHS = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+const TH_MONTHS_SHORT = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+const pad2 = (n) => String(n).padStart(2, "0");
+
+/** "2026-11-08" → "ส. 8 พ.ย. 2569" (weekday optional) */
+function thaiDate(iso, { weekday = true } = {}) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso ?? "")) return "";
+  const [y, m, d] = iso.split("-").map(Number);
+  const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  return `${weekday ? `${DAY_SHORT[dow]}. ` : ""}${d} ${TH_MONTHS_SHORT[m - 1]} ${y + 543}`;
+}
+
+function TimeInput({ value, onChange, required = false, step = 5, "aria-label": label = "เวลา" }) {
+  const [h = "", m = ""] = (value ?? "").slice(0, 5).split(":");
+  const hours = Array.from({ length: 24 }, (_, i) => pad2(i));
+  const mins = Array.from({ length: Math.ceil(60 / step) }, (_, i) => pad2(i * step));
+  if (m && !mins.includes(m)) mins.push(m), mins.sort();
+  return (
+    <span className="ad-time" role="group" aria-label={label}>
+      <select value={h} required={required} aria-label={`${label} ชั่วโมง`} onChange={(e) => onChange(e.target.value ? `${e.target.value}:${m || "00"}` : "")}>
+        {(!required || !h) && <option value="">--</option>}
+        {hours.map((x) => <option key={x} value={x}>{x}</option>)}
+      </select>
+      <span aria-hidden="true">:</span>
+      <select value={m} required={required} disabled={!h} aria-label={`${label} นาที`} onChange={(e) => onChange(`${h}:${e.target.value}`)}>
+        {!m && <option value="">--</option>}
+        {mins.map((x) => <option key={x} value={x}>{x}</option>)}
+      </select>
+      <span className="ad-time-unit">น.</span>
+    </span>
+  );
+}
+
+function DateInput({ value, onChange, min, max, required = false, "aria-label": label = "วันที่", className = "", buttonClassName = "", children }) {
+  const [open, setOpen] = useState(false);
+  const [month, setMonth] = useState(() => (value || today()).slice(0, 7));
+  const root = useRef(null);
+  useEffect(() => { if (open) setMonth((value || today()).slice(0, 7)); }, [open, value]);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e) => { if (!root.current?.contains(e.target)) setOpen(false); };
+    const key = (e) => { if (e.key === "Escape") { e.stopPropagation(); setOpen(false); } };
+    document.addEventListener("mousedown", away);
+    document.addEventListener("touchstart", away);
+    document.addEventListener("keydown", key, true);
+    return () => {
+      document.removeEventListener("mousedown", away);
+      document.removeEventListener("touchstart", away);
+      document.removeEventListener("keydown", key, true);
+    };
+  }, [open]);
+
+  const [y, mo] = month.split("-").map(Number);
+  const first = new Date(Date.UTC(y, mo - 1, 1)).getUTCDay();
+  const days = new Date(Date.UTC(y, mo, 0)).getUTCDate();
+  const cells = [...Array(first).fill(null), ...Array.from({ length: days }, (_, i) => `${month}-${pad2(i + 1)}`)];
+  const shift = (n) => {
+    const d = new Date(Date.UTC(y, mo - 1 + n, 1));
+    setMonth(`${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}`);
+  };
+  const allowed = (iso) => (!min || iso >= min) && (!max || iso <= max);
+  const pick = (iso) => { onChange(iso); setOpen(false); };
+  const now = today();
+
+  return (
+    <span className={`ad-date ${className}`} ref={root}>
+      <button type="button" className={`ad-date-btn ${buttonClassName}`} aria-haspopup="dialog" aria-expanded={open} aria-label={`${label}: ${thaiDate(value) || "ยังไม่เลือก"}`} onClick={() => setOpen((o) => !o)}>
+        {children ?? <span>{thaiDate(value) || "เลือกวันที่"}</span>}
+        <span className="ad-date-icon" aria-hidden="true">▾</span>
+      </button>
+      {required && <input className="ad-date-required" tabIndex={-1} aria-hidden="true" required value={value || ""} onChange={() => {}} />}
+      {open && (
+        <div className="ad-date-pop" role="dialog" aria-label={label}>
+          <div className="ad-date-head">
+            <button type="button" onClick={() => shift(-1)} aria-label="เดือนก่อน">‹</button>
+            <strong>{TH_MONTHS[mo - 1]} {y + 543}</strong>
+            <button type="button" onClick={() => shift(1)} aria-label="เดือนถัดไป">›</button>
+          </div>
+          <div className="ad-date-grid">
+            {DAY_SHORT.map((d) => <span key={d} className="ad-date-dow">{d}</span>)}
+            {cells.map((iso, i) => iso ? (
+              <button key={iso} type="button" disabled={!allowed(iso)} data-on={iso === value} data-today={iso === now} onClick={() => pick(iso)} aria-label={thaiDate(iso)}>
+                {Number(iso.slice(8))}
+              </button>
+            ) : <span key={`b${i}`} />)}
+          </div>
+          {allowed(now) && <button type="button" className="ad-link ad-date-today" onClick={() => pick(now)}>วันนี้ · {thaiDate(now)}</button>}
+        </div>
+      )}
+    </span>
+  );
+}
+
 function Status({ save }) {
   if (save.error) return <p className="ad-error" role="alert">{save.error}</p>;
   if (save.done) return <p className="ad-ok" role="status">{save.done}</p>;
@@ -301,10 +398,9 @@ function OverviewTab({ slug, catalog, onNavigate, onOpenBooking, onAddBooking })
     <div className="ad-stack ad-overview">
       <div className="ad-overview-day">
         <button type="button" className="ad-icon-btn ad-secondary" onClick={() => setDay(addDays(day, -1))} aria-label="วันก่อนหน้า">‹</button>
-        <label className="ad-overview-date">
+        <DateInput className="ad-date-fill" buttonClassName="ad-overview-date" value={day} onChange={setDay} aria-label="เลือกวัน">
           <span>{isToday ? "วันนี้ · " : ""}{shortDay(day)}</span>
-          <input type="date" value={day} onChange={(e) => e.target.value && setDay(e.target.value)} aria-label="เลือกวัน" />
-        </label>
+        </DateInput>
         <button type="button" className="ad-icon-btn ad-secondary" onClick={() => setDay(addDays(day, 1))} aria-label="วันถัดไป">›</button>
         {!isToday && <button type="button" className="ad-link" onClick={() => setDay(today())}>วันนี้</button>}
       </div>
@@ -513,7 +609,7 @@ function BookingsTab({ slug, catalog, initialDay, focusId = null, startAdding = 
         <div className="ad-row ad-wrap ad-between">
           <div className="ad-row ad-wrap">
             <button type="button" className="ad-secondary ad-icon-btn" onClick={() => setDay(addDays(day, -1))} aria-label="วันก่อนหน้า">‹</button>
-            <input type="date" value={day} onChange={(e) => e.target.value && setDay(e.target.value)} aria-label="วันที่" />
+            <DateInput value={day} onChange={setDay} aria-label="วันที่" />
             <button type="button" className="ad-secondary ad-icon-btn" onClick={() => setDay(addDays(day, 1))} aria-label="วันถัดไป">›</button>
             {day !== today() && <button type="button" className="ad-link" onClick={() => setDay(today())}>วันนี้</button>}
           </div>
@@ -1761,7 +1857,7 @@ function BillsTab({ slug, catalog, saleCode = null, onSaleDone = () => {} }) {
         <div className="ad-row ad-wrap ad-between">
           <div className="ad-row ad-wrap">
             <button type="button" className="ad-secondary ad-icon-btn" onClick={() => setDay(addDays(day, -1))} aria-label="วันก่อนหน้า">‹</button>
-            <input type="date" value={day} onChange={(e) => e.target.value && setDay(e.target.value)} aria-label="วันที่" />
+            <DateInput value={day} onChange={setDay} aria-label="วันที่" />
             <button type="button" className="ad-secondary ad-icon-btn" onClick={() => setDay(addDays(day, 1))} aria-label="วันถัดไป">›</button>
             {day !== today() && <button type="button" className="ad-link" onClick={() => setDay(today())}>วันนี้</button>}
           </div>
@@ -2115,11 +2211,11 @@ function BookingForm({ slug, catalog, booking, defaultDate, onClose, onSaved }) 
             </select>
           </label>
         )}
-        <label className="ad-field">{rental ? "วันรับ" : "วันที่"}<input type="date" required value={f.date} onChange={(e) => set({ date: e.target.value })} /></label>
-        <label className="ad-field">{rental ? "เวลารับ (คืนเวลาเดียวกัน)" : "เวลาเริ่ม"}<input type="time" required step={300} value={f.time} onChange={(e) => set({ time: e.target.value })} /></label>
+        <div className="ad-field">{rental ? "วันรับ" : "วันที่"}<DateInput required value={f.date} onChange={(date) => set({ date })} aria-label={rental ? "วันรับ" : "วันที่"} /></div>
+        <div className="ad-field">{rental ? "เวลารับ (คืนเวลาเดียวกัน)" : "เวลาเริ่ม"}<TimeInput required value={f.time} onChange={(time) => set({ time })} aria-label={rental ? "เวลารับ" : "เวลาเริ่ม"} /></div>
       </div>
       <div className="ad-field">
-        เวลาที่ยังว่าง (กดเลือก หรือพิมพ์เวลาเองในช่องเวลาเริ่ม)
+        เวลาที่ยังว่าง (กดเลือก หรือเลือกเวลาเองในช่องเวลาเริ่ม)
         {free === null ? (
           <span className="ad-muted">กำลังดู…</span>
         ) : free.times.length === 0 ? (
@@ -2818,8 +2914,8 @@ function OfferingEditor({ slug, catalog, initial, onSaved, onClose }) {
               ))}
             </span>
             <span className="ad-inline">
-              <input type="time" value={p.start ?? ""} onChange={(e) => setPrice(i, { start: e.target.value })} aria-label="ตั้งแต่" />–
-              <input type="time" value={p.end ?? ""} onChange={(e) => setPrice(i, { end: e.target.value })} aria-label="ถึง" />
+              <TimeInput value={p.start ?? ""} onChange={(start) => setPrice(i, { start })} aria-label="ตั้งแต่" />–
+              <TimeInput value={p.end ?? ""} onChange={(end) => setPrice(i, { end })} aria-label="ถึง" />
             </span>
             <button type="button" className="ad-link" onClick={() => set({ prices: o.prices.filter((_, j) => j !== i) })}>ลบ</button>
           </div>
@@ -3153,8 +3249,8 @@ function ResourceEditor({ slug, catalog, initial, onSaved, onClose }) {
                   <td>
                     {dayMode(s) === "custom" && (
                       <span className="ad-inline">
-                        <input type="time" required value={s.start ?? ""} onChange={(e) => setDay(s.dayOfWeek, { start: e.target.value })} aria-label="เริ่มงาน" />–
-                        <input type="time" required value={s.end ?? ""} onChange={(e) => setDay(s.dayOfWeek, { end: e.target.value })} aria-label="เลิกงาน" />
+                        <TimeInput required value={s.start ?? ""} onChange={(start) => setDay(s.dayOfWeek, { start })} aria-label="เริ่มงาน" />–
+                        <TimeInput required value={s.end ?? ""} onChange={(end) => setDay(s.dayOfWeek, { end })} aria-label="เลิกงาน" />
                       </span>
                     )}
                   </td>
@@ -3229,15 +3325,15 @@ function DaysOff({ title, items, add, remove, onSaved }) {
           if (await save.run(() => add(form), "เพิ่มแล้ว")) onSaved();
         }}
       >
-        <input type="date" required min={today()} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} aria-label="วันที่" />
+        <DateInput required min={today()} value={form.date} onChange={(date) => setForm({ ...form, date })} aria-label="วันที่" />
         <select value={form.isFullDay ? "full" : "part"} onChange={(e) => setForm({ ...form, isFullDay: e.target.value === "full" })} aria-label="ช่วง">
           <option value="full">ทั้งวัน</option>
           <option value="part">บางช่วง</option>
         </select>
         {!form.isFullDay && (
           <span className="ad-inline">
-            <input type="time" required value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value })} aria-label="ตั้งแต่" />–
-            <input type="time" required value={form.end} onChange={(e) => setForm({ ...form, end: e.target.value })} aria-label="ถึง" />
+            <TimeInput required value={form.start} onChange={(start) => setForm({ ...form, start })} aria-label="ตั้งแต่" />–
+            <TimeInput required value={form.end} onChange={(end) => setForm({ ...form, end })} aria-label="ถึง" />
           </span>
         )}
         <input placeholder="เหตุผล (ไม่บังคับ)" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} aria-label="เหตุผล" />
@@ -3343,8 +3439,8 @@ function HoursTab({ slug, catalog, onSaved }) {
                     <td>
                       {h.isOpen && (
                         <span className="ad-inline">
-                          <input type="time" required value={h.open} onChange={(e) => setDay(h.dayOfWeek, { open: e.target.value })} aria-label={`เปิดวัน${DAYS[h.dayOfWeek]}`} />–
-                          <input type="time" required value={h.close} onChange={(e) => setDay(h.dayOfWeek, { close: e.target.value })} aria-label={`ปิดวัน${DAYS[h.dayOfWeek]}`} />
+                          <TimeInput required value={h.open} onChange={(open) => setDay(h.dayOfWeek, { open })} aria-label={`เปิดวัน${DAYS[h.dayOfWeek]}`} />–
+                          <TimeInput required value={h.close} onChange={(close) => setDay(h.dayOfWeek, { close })} aria-label={`ปิดวัน${DAYS[h.dayOfWeek]}`} />
                         </span>
                       )}
                     </td>

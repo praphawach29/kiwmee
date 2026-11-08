@@ -103,8 +103,8 @@ test("plan_sync pauses what a plan lacks and resumes it when the plan returns; n
     assert.deepEqual((await db.query("select active, paused_by_plan from public.loyalty_programs where brand_id = $1", [shop.brand_id])).rows[0], { active: false, paused_by_plan: true });
     assert.deepEqual((await db.query("select active, paused_by_plan from public.addon_groups where business_id = $1", [shop.id])).rows[0], { active: false, paused_by_plan: true });
     assert.deepEqual(
-      (await db.query("select name, active, paused_by_plan from public.offerings where business_id = $1 order by name", [shop.id])).rows,
-      [{ name: "ตัดผม", active: true, paused_by_plan: false }, { name: "เช่ากล้อง", active: false, paused_by_plan: true }]
+      (await db.query("select name, active, paused_by_plan from public.offerings where business_id = $1 order by duration_mode", [shop.id])).rows, // days < fixed, whatever the collation
+      [{ name: "เช่ากล้อง", active: false, paused_by_plan: true }, { name: "ตัดผม", active: true, paused_by_plan: false }]
     );
     assert.equal((await db.query("select public.plan_sync($1) as r", [shop.brand_id])).rows[0].r.paused, 0, "running it again changes nothing");
 

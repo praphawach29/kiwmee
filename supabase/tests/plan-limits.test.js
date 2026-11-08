@@ -47,6 +47,9 @@ async function freeShop() {
   await admin.createShop(db, { name: "ร้านแพ็กเกจฟรี", slug: "plan-free-shop", kind: "salon" });
   await db.query("reset role");
   const { rows: [shop] } = await db.query("select id, brand_id from public.businesses where slug = 'plan-free-shop'");
+  // a first brand starts with the 14-day Pro trial (…004200); these tests are about the free plan
+  assert.equal((await db.query("select public.brand_plan($1) as p", [shop.brand_id])).rows[0].p, "pro");
+  await db.query("update public.brand_plans set plan = 'free', valid_until = null, complimentary = false, trial = false where brand_id = $1", [shop.brand_id]);
   assert.equal((await db.query("select public.brand_plan($1) as p", [shop.brand_id])).rows[0].p, "free");
   return shop;
 }

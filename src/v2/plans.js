@@ -101,7 +101,8 @@ function planRefusal(error, AppError) {
 function buildSkus() {
   const skus = {};
   for (const p of PLANS) {
-    if (p.monthly > 0) skus[`plan:${p.id}`] = { amount: p.monthly, label: `แพ็กเกจ${p.name} 1 เดือน`, apply: "plan", plan: p.id };
+    if (p.monthly > 0) skus[`plan:${p.id}`] = { amount: p.monthly, label: `แพ็กเกจ${p.name} 1 เดือน`, apply: "plan", plan: p.id, cycle: "month" };
+    if (p.yearly > 0) skus[`plan:${p.id}:year`] = { amount: p.yearly, label: `แพ็กเกจ${p.name} 1 ปี`, apply: "plan", plan: p.id, cycle: "year" };
   }
   for (const a of ADDONS) skus[a.sku] = { amount: a.amount, label: a.label, apply: a.apply, count: a.count };
   return skus;
@@ -121,4 +122,88 @@ function planCatalog() {
   };
 }
 
-module.exports = { PLAN_REASON_TEXT, planRefusal, PLANS, ADDONS, LIMIT_ROWS, FEATURE_ROWS, EVERY_PLAN, UNLIMITED, planById, buildSkus, planCatalog, PLAN_PRICES, PLAN_MESSAGES };
+
+// ---------- buying, renewing and changing a plan (B4, docs/BILLING_PLAN.md 5) ----------
+
+const DAY_MS = 24 * 3600 * 1000;
+const PERIOD_DAYS = { month: 30, year: 365 };
+const RENEW_WITHIN_DAYS = 3;
+const GRACE_DAYS = 7;
+const TRIAL_DAYS = 14;
+const addDays = (date, days) => new Date(new Date(date).getTime() + days * DAY_MS);
+
+/** Price of one period of a plan: monthly, or a year (= ten months) */
+function priceOf(planId, cycle = "month") {
+  const plan = planById(planId);
+  return cycle === "year" ? plan.yearly : plan.monthly;
+}
+
+/** The paid plan running now, or null (free, ended, or a plan Kiwmee gave: trial / launch offer) */
+function runningPaid(current, now) {
+  if (!current || current.effective === "free" || current.complimentary || !current.valid_until) return null;
+  return new Date(current.valid_until) > now ? current : null;
+}
+
+/**
+ * What buying `planId` for a `cycle` does today: { mode, amount, validUntil, cycle }.
+ *   new        nothing paid is running: full price, from today
+ *   after_free the plan Kiwmee gave is the same plan: full price, days run on after the free ones
+ *   renew      the same plan and cycle: full price, one more period after the current end
+ *   upgrade    a dearer plan, same cycle: pay the difference for the days left, same end date
+ *   switch     a longer cycle (month → year), same or dearer plan: a new period from today,
+ *              minus what is left of the current one
+ *   schedule   cheaper, or a shorter cycle: nothing now, it starts at the next renewal
+ * `current` = brand_plans row: { effective, valid_until, cycle, complimentary }.
+ */
+function quotePlan(current, planId, cycle = "month", now = new Date()) {
+  const price = priceOf(planId, cycle);
+  const days = PERIOD_DAYS[cycle];
+  const paid = runningPaid(current, now);
+  if (!paid) {
+    const gift = current?.complimentary && current.effective === planId && current.valid_until && new Date(current.valid_until) > now;
+    return { mode: gift ? "after_free" : "new", amount: price, validUntil: addDays(gift ? current.valid_until : now, days), cycle };
+  }
+  const from = planById(paid.effective);
+  const to = planById(planId);
+  const fromCycle = paid.cycle === "year" ? "year" : "month";
+  const fromPrice = priceOf(from.id, fromCycle);
+  const fromDays = PERIOD_DAYS[fromCycle];
+  const left = Math.min(fromDays, Math.max(0, (new Date(paid.valid_until) - now) / DAY_MS));
+  if (to.id === from.id && cycle === fromCycle) {
+    return { mode: "renew", amount: price, validUntil: addDays(paid.valid_until, days), cycle };
+  }
+  if (cycle === fromCycle && to.monthly > from.monthly) {
+    return { mode: "upgrade", amount: Math.ceil(((price - fromPrice) * left) / fromDays), validUntil: new Date(paid.valid_until), cycle };
+  }
+  if (cycle === "year" && fromCycle === "month" && to.monthly >= from.monthly) {
+    const credit = (fromPrice * left) / fromDays;
+    return { mode: "switch", amount: Math.max(0, Math.ceil(price - credit)), validUntil: addDays(now, days), cycle };
+  }
+  return { mode: "schedule", amount: 0, validUntil: new Date(paid.valid_until), cycle };
+}
+
+/**
+ * What the hourly renewal does for one brand: { action, amount, plan, cycle }
+ *   renew  within 3 days of the end (or in grace) and the wallet pays: next period after the end
+ *   short  the wallet cannot pay yet (it is tried again every hour)
+ *   grace  the end has passed and the wallet could not pay: 7 more days start now
+ *   end    auto-renew is off / the next plan is free: nothing is charged, the plan just ends
+ *   none   not due, a free plan, or a plan Kiwmee gave (trial / launch offer)
+ */
+function renewalDecision(row, now = new Date()) {
+  const none = { action: "none", amount: 0, plan: row.plan, cycle: row.cycle ?? "month" };
+  if (!row.plan || row.plan === "free" || row.complimentary || !row.validUntil) return none;
+  const end = new Date(row.validUntil);
+  const graceUntil = row.graceUntil ? new Date(row.graceUntil) : null;
+  if (end - now > RENEW_WITHIN_DAYS * DAY_MS) return none;
+  if (end <= now && graceUntil && graceUntil <= now) return none; // grace is over: the plan is free now
+  if (row.autoRenew === false || row.nextPlan === "free") return { ...none, action: "end" };
+  const plan = row.nextPlan ?? row.plan;
+  const cycle = row.nextCycle ?? row.cycle ?? "month";
+  const amount = priceOf(plan, cycle);
+  if ((Number(row.balance) || 0) >= amount) return { action: "renew", amount, plan, cycle };
+  if (end <= now && !graceUntil) return { action: "grace", amount, plan, cycle, graceUntil: addDays(end, GRACE_DAYS) };
+  return { action: "short", amount, plan, cycle };
+}
+
+module.exports = { PERIOD_DAYS, RENEW_WITHIN_DAYS, GRACE_DAYS, TRIAL_DAYS, priceOf, quotePlan, renewalDecision, PLAN_REASON_TEXT, planRefusal, PLANS, ADDONS, LIMIT_ROWS, FEATURE_ROWS, EVERY_PLAN, UNLIMITED, planById, buildSkus, planCatalog, PLAN_PRICES, PLAN_MESSAGES };

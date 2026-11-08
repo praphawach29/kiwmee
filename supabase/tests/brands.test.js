@@ -81,7 +81,7 @@ async function refused(fn, check) {
 const count = async (table, shopId) => Number((await db.query(`select count(*) from public.${table} where business_id = $1`, [shopId])).rows[0].count);
 const shopId = async (slug) => (await db.query("select id from public.businesses where slug = $1", [slug])).rows[0].id;
 
-test("every shop is a branch of a brand; a new shop starts its own brand on the free plan", { skip }, async () => {
+test("every shop is a branch of a brand; a new shop starts its own brand on the 14-day Pro trial", { skip }, async () => {
   await inTx(async () => {
     const { rows } = await db.query("select count(*)::int as n from public.businesses where brand_id is null");
     assert.equal(rows[0].n, 0);
@@ -91,7 +91,7 @@ test("every shop is a branch of a brand; a new shop starts its own brand on the 
     await admin.createShop(db, { name: "ร้านใหม่", slug: "new-shop", kind: "spa" });
     const list = await brands.listBrands(db);
     const mine = list.find((b) => b.name === "ร้านใหม่");
-    assert.deepEqual([mine.plan, mine.owner, mine.branchLimit, mine.branchCount, mine.shops.map((s) => [s.slug, s.role])], ["free", true, 1, 1, [["new-shop", "owner"]]]);
+    assert.deepEqual([mine.plan, mine.owner, mine.branchLimit, mine.branchCount, mine.shops.map((s) => [s.slug, s.role])], ["pro", true, 2, 1, [["new-shop", "owner"]]]);
     assert.ok(list.some((b) => b.shops.some((s) => s.slug === "bloom-hair")));
     assert.ok(!list.some((b) => b.shops.some((s) => s.slug === "gentleman-barber")), "another owner's brand stays hidden");
   });

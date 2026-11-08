@@ -12,6 +12,8 @@ const { AppError, badRequest, forbidden, notFound } = require("../errors");
 const { getBookingPool } = require("./db");
 const { getSetting, requirePlatformAdmin, requirePlatformAdminId } = require("./platform-settings");
 const { readSlip, receiverMatch } = require("./slip-check");
+const { promptPayQr } = require("./promptpay");
+const { buildSkus, planCatalog, planById, PLAN_PRICES, PLAN_MESSAGES } = require("./plans");
 
 const DAY = 24 * 3600 * 1000;
 const MIN_TOPUP = 100;
@@ -19,24 +21,14 @@ const MAX_TOPUP = 20000;
 const SLIP_MAX_BYTES = 1_500_000;
 const TOPUP_WINDOW_DAYS = 7;
 
-// What can be bought from the balance. `apply` says what the purchase changes.
-const SKUS = {
-  "plan:starter": { amount: 390, label: "แพ็กเกจเริ่มต้น 1 เดือน", apply: "plan", plan: "starter" },
-  "plan:pro": { amount: 890, label: "แพ็กเกจโปร 1 เดือน", apply: "plan", plan: "pro" },
-  "plan:loyalty": { amount: 590, label: "แพ็กเกจสมาชิก 1 เดือน", apply: "plan", plan: "loyalty" },
-  "msg:500": { amount: 99, label: "ข้อความ LINE เพิ่ม 500", apply: "messages", count: 500 },
-  "msg:1500": { amount: 249, label: "ข้อความ LINE เพิ่ม 1,500", apply: "messages", count: 1500 },
-  "msg:5000": { amount: 699, label: "ข้อความ LINE เพิ่ม 5,000", apply: "messages", count: 5000 },
-  "slip:100": { amount: 59, label: "ตรวจสลิปเพิ่ม 100 ครั้ง", apply: "slips", count: 100 }
-};
+// What can be bought from the balance, by SKU (`apply` says what the purchase changes). Built from
+// the one plan table in ./plans.js so prices live in one place.
+const SKUS = buildSkus();
 
 const imageError = (message) => new AppError("INVALID", message, 422);
 
-// How many LINE messages each package includes per month (docs/WALLET.md). The counter table keeps
-// what was actually granted; this is the fallback for brands whose plan was set before …003700.
-const PLAN_MESSAGES = { free: 100, starter: 900, pro: 4000, loyalty: 1200 };
-// ราคาต่อเดือนของแต่ละแพ็กเกจ
-const PLAN_PRICES = { free: 0, starter: 390, pro: 890, loyalty: 590 };
+// PLAN_MESSAGES (LINE messages a month) and PLAN_PRICES (baht a month) come from ./plans.js. The
+// counter table keeps what was actually granted; PLAN_MESSAGES is the fallback for older brands.
 
 /**
  * What a brand may send this month and how close it is: { used, total, remaining, percent, level }.
@@ -142,6 +134,25 @@ async function usageOf(client, brandId) {
   };
 }
 
+/**
+ * What a brand uses of its plan's limits right now: online bookings made this Bangkok month (the
+ * shop's own entries don't count), active resources, people with dashboard access, branches.
+ */
+async function brandCounts(client, brandId) {
+  const { rows: [counts] } = await client.query(
+    `select (select count(*)::int from public.bookings k join public.businesses b on b.id = k.business_id
+              where b.brand_id = $1 and k.source <> 'admin'
+                and k.created_at >= date_trunc('month', (now() at time zone 'Asia/Bangkok')) at time zone 'Asia/Bangkok') as bookings,
+            (select count(*)::int from public.resources r join public.businesses b on b.id = r.business_id
+              where b.brand_id = $1 and r.active) as resources,
+            (select count(distinct m.user_id)::int from public.business_members m join public.businesses b on b.id = m.business_id
+              where b.brand_id = $1) as members,
+            (select count(*)::int from public.businesses b where b.brand_id = $1) as branches`,
+    [brandId]
+  );
+  return counts ?? { bookings: 0, resources: 0, members: 0, branches: 0 };
+}
+
 /** Everything the wallet page shows for one brand. */
 async function walletOf(brandId, userId) {
   return ownerTx(async (client) => {
@@ -167,6 +178,7 @@ async function walletOf(brandId, userId) {
       ),
       billingInfo(client)
     ]);
+    const counts = await brandCounts(client, brandId);
     const planDaysLeft = plan.valid_until ? Math.ceil((new Date(plan.valid_until) - new Date()) / DAY) : null;
     return {
       balance: account?.balance ?? 0,
@@ -178,6 +190,10 @@ async function walletOf(brandId, userId) {
       topups,
       orders,
       packs: Object.entries(SKUS).map(([sku, s]) => ({ sku, ...s })),
+      catalog: planCatalog(),
+      planName: planById(plan.effective).name,
+      planDaysLeft,
+      counts,
       payTo: billing.shown,
       limits: { min: MIN_TOPUP, max: MAX_TOPUP }
     };
@@ -259,6 +275,20 @@ async function submitTopup(brandId, userId, { amount, image, mime } = {}) {
   });
 }
 
+/**
+ * A PromptPay QR for Kiwmee's account with the top-up amount already in it, so the shop scans it in
+ * a bank app instead of typing the number and the amount. null when no PromptPay is set in /super.
+ */
+async function topupQr(brandId, userId, amount) {
+  const value = cleanAmount(amount);
+  return ownerTx(async (client) => {
+    await assertOwner(client, brandId, userId);
+    const billing = await billingInfo(client);
+    const qr = await promptPayQr(billing.shown.promptPay, value).catch(() => null);
+    return { amount: value, qr, payTo: billing.shown };
+  });
+}
+
 const RENEW_WITHIN_DAYS = 3;
 
 /**
@@ -320,6 +350,13 @@ async function renewDuePlans(now = new Date()) {
   });
 }
 
+/** Would buying `planId` now cut short a dearer plan that is still paid for? */
+function downgradeLosesDays(current, planId, now = new Date()) {
+  if (!current || current.effective === "free" || !current.valid_until) return false;
+  if (new Date(current.valid_until) <= now) return false;
+  return (PLAN_PRICES[planId] ?? 0) < (PLAN_PRICES[current.effective] ?? 0);
+}
+
 /** Buy a package month or an add-on pack from the balance. */
 async function buy(brandId, userId, sku) {
   const item = SKUS[sku];
@@ -327,6 +364,14 @@ async function buy(brandId, userId, sku) {
 
   return ownerTx(async (client) => {
     await assertOwner(client, brandId, userId);
+    if (item.apply === "plan") {
+      // A cheaper plan would replace a dearer one that still has paid days left: refuse until the
+      // next-cycle downgrade exists (docs/BILLING_PLAN.md 5.3), so a shop never loses days it paid for
+      const current = await planOf(client, brandId);
+      if (downgradeLosesDays(current, item.plan)) {
+        throw new AppError("INVALID", "เปลี่ยนเป็นแพ็กเกจที่ถูกกว่าได้เมื่อแพ็กเกจปัจจุบันหมดอายุ", 422, { reason: "DOWNGRADE_MID_CYCLE" });
+      }
+    }
     const { rows: [order] } = await client.query(
       "insert into public.wallet_orders (brand_id, sku, amount, created_by) values ($1, $2, $3, $4) returning id",
       [brandId, sku, item.amount, userId]
@@ -488,4 +533,4 @@ async function reviewTopup(adminUserId, topupId, action) {
   });
 }
 
-module.exports = { ownerTx, SKUS, PLAN_MESSAGES, PLAN_PRICES, renewalDecision, renewDuePlans, quotaOf, messageAllowed, allowanceForBusiness, walletOf, submitTopup, buy, judgeTopup, recordMessages, recordSlipCheck, meterMessage, listTopups, reviewTopup, MIN_TOPUP, MAX_TOPUP };
+module.exports = { ownerTx, topupQr, brandCounts, downgradeLosesDays, SKUS, PLAN_MESSAGES, PLAN_PRICES, renewalDecision, renewDuePlans, quotaOf, messageAllowed, allowanceForBusiness, walletOf, submitTopup, buy, judgeTopup, recordMessages, recordSlipCheck, meterMessage, listTopups, reviewTopup, MIN_TOPUP, MAX_TOPUP };

@@ -132,3 +132,32 @@ test("only the server role may execute the money functions", { skip }, async () 
   assert.equal(await privilege("service_role", "public.wallet_apply_topup(uuid, numeric, text, text)"), true);
   assert.equal(await privilege("service_role", "public.usage_add(uuid, integer, integer, integer, integer)"), true);
 });
+
+test("the billing page counts what a brand uses against its plan (online bookings this month, active resources, people, branches)", { skip }, async () => {
+  const { brandCounts } = require("../../src/v2/wallet");
+  await inTx(async () => {
+    const brand = await brandOf(SALON);
+    const before = await brandCounts(db, brand);
+    assert.ok(before.branches >= 1);
+
+    await db.query("insert into public.resources (business_id, kind, name, capacity) values ($1, 'staff', 'ช่างนับโควตา', 1)", [SALON]);
+    await db.query("insert into public.resources (business_id, kind, name, capacity, active) values ($1, 'staff', 'ช่างที่ปิดอยู่', 1, false)", [SALON]);
+    await db.query("insert into auth.users (id, email) values ($1, $2)", [OTHER.id, OTHER.email]);
+    await db.query("insert into public.business_members (business_id, user_id, role) values ($1, $2, 'staff')", [SALON, OTHER.id]);
+    const { rows: [booking] } = await db.query(
+      `select k.id from public.bookings k join public.businesses b on b.id = k.business_id
+        where b.brand_id = $1 and k.source <> 'admin' and k.created_at >= date_trunc('month', now() at time zone 'Asia/Bangkok') at time zone 'Asia/Bangkok' limit 1`,
+      [brand]
+    );
+    if (booking) await db.query("update public.bookings set source = 'admin' where id = $1", [booking.id]);
+
+    const after = await brandCounts(db, brand);
+    assert.equal(after.resources, before.resources + 1, "only active resources count");
+    assert.equal(after.members, before.members + 1);
+    assert.equal(after.branches, before.branches);
+    assert.equal(after.bookings, before.bookings - (booking ? 1 : 0), "bookings the shop enters itself do not count");
+
+    const other = await brandCounts(db, await brandOf(BARBER));
+    assert.notDeepEqual(other, after, "another brand is counted on its own");
+  });
+});

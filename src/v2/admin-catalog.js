@@ -185,7 +185,7 @@ async function memberShop(client, slug, { owner = false } = {}) {
 /** Everything the admin page edits, for one shop. */
 async function getCatalog(client, shop) {
   const queries = [
-    "select name, kind, media, amenities, about, address, map_url from public.businesses where id = $1",
+    "select name, kind, media, amenities, about, address, map_url, brand_id, public.is_brand_owner(brand_id) as brand_owner from public.businesses where id = $1",
     `select min_lead_minutes, slot_interval_minutes, max_advance_days, hold_minutes,
             customer_can_cancel, customer_can_reschedule, customer_change_cutoff_hours,
             deposit_mode, deposit_value::float8 as deposit_value, payment_info, line_reminders, document_retention_days, slip_auto_confirm, deposit_allow_full
@@ -236,7 +236,7 @@ async function getCatalog(client, shop) {
   const dayHours = (d) => hours.find((h) => h.day_of_week === d) ?? (hours.length ? null : { is_open: true, open_time: "10:00", close_time: "19:00" });
 
   return {
-    shop: { slug: shop.slug, name: current.name, kind: current.kind, timezone: shop.timezone, role: shop.role, media: current.media, amenities: current.amenities ?? [], about: current.about ?? "", address: current.address ?? "", mapUrl: current.map_url ?? "" },
+    shop: { slug: shop.slug, name: current.name, kind: current.kind, timezone: shop.timezone, role: shop.role, media: current.media, amenities: current.amenities ?? [], about: current.about ?? "", address: current.address ?? "", mapUrl: current.map_url ?? "", brandId: current.brand_id ?? null, brandOwner: current.brand_owner === true },
     settings: {
       minLeadMinutes: s.min_lead_minutes,
       slotIntervalMinutes: s.slot_interval_minutes,

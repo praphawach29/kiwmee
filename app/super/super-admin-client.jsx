@@ -382,36 +382,35 @@ function RevenueSection() {
   if (!data) return <p className="ad-muted">กำลังโหลด…</p>;
 
   const baht = (n) => `${Number(n ?? 0).toLocaleString("th-TH", { maximumFractionDigits: 0 })} บาท`;
-  const kpi = { background: "#fff", border: "1px solid #e6e3f0", borderRadius: 14, padding: "14px 16px" };
 
   return (
     <>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 12, marginBottom: 16 }}>
-        <div style={kpi}>
-          <small style={{ color: "#6b6880" }}>MRR · แพ็กเกจที่ยังไม่หมดอายุ</small>
-          <div style={{ fontSize: 26, fontWeight: 700 }}>{baht(data.mrr)}</div>
-          <em style={{ color: "#6b6880", fontSize: 12 }}>{data.payingBrands} แบรนด์จ่ายเงิน จาก {data.brands} แบรนด์</em>
+      <div className="super-rev-kpis">
+        <div className="super-rev-kpi">
+          <small>MRR · แพ็กเกจที่ยังไม่หมดอายุ</small>
+          <span className="sp-num">{baht(data.mrr)}</span>
+          <em>{data.payingBrands} แบรนด์จ่ายเงิน จาก {data.brands} แบรนด์</em>
         </div>
-        <div style={kpi}>
-          <small style={{ color: "#6b6880" }}>เงินที่ร้านเติมเดือนนี้</small>
-          <div style={{ fontSize: 26, fontWeight: 700 }}>{baht(data.cashIn)}</div>
-          <em style={{ color: "#6b6880", fontSize: 12 }}>ยังไม่ใช่รายได้ จนกว่าจะใช้จากกระเป๋า</em>
+        <div className="super-rev-kpi">
+          <small>เงินที่ร้านเติมเดือนนี้</small>
+          <span className="sp-num">{baht(data.cashIn)}</span>
+          <em>ยังไม่ใช่รายได้ จนกว่าจะใช้จากกระเป๋า</em>
         </div>
-        <div style={kpi}>
-          <small style={{ color: "#6b6880" }}>ใช้จากกระเป๋าเดือนนี้</small>
-          <div style={{ fontSize: 26, fontWeight: 700 }}>{baht(data.spend)}</div>
-          <em style={{ color: "#6b6880", fontSize: 12 }}>ซื้อแพ็กเกจ/แพ็กเสริม</em>
+        <div className="super-rev-kpi">
+          <small>ใช้จากกระเป๋าเดือนนี้</small>
+          <span className="sp-num">{baht(data.spend)}</span>
+          <em>ซื้อแพ็กเกจ/แพ็กเสริม</em>
         </div>
-        <div style={kpi}>
-          <small style={{ color: "#6b6880" }}>ยอดคงเหลือในกระเป๋าทั้งระบบ</small>
-          <div style={{ fontSize: 26, fontWeight: 700 }}>{baht(data.liability)}</div>
-          <em style={{ color: "#6b6880", fontSize: 12 }}>หนี้สินที่ยังไม่ได้ให้บริการ · สลิปรอตรวจ {data.pendingTopups} ใบ</em>
+        <div className="super-rev-kpi">
+          <small>ยอดคงเหลือในกระเป๋าทั้งระบบ</small>
+          <span className="sp-num">{baht(data.liability)}</span>
+          <em>หนี้สินที่ยังไม่ได้ให้บริการ · สลิปรอตรวจ {data.pendingTopups} ใบ</em>
         </div>
       </div>
 
-      <div className="ui-row" style={{ marginBottom: 4 }}>
-        <a className="ui-btn ui-btn-secondary" href="/api/super/revenue/export">ดาวน์โหลด CSV</a>
-        <span className="ui-sub">เปิดใน Excel ได้ · ตัวเลขเดียวกับหน้านี้</span>
+      <div className="super-row" style={{ marginBottom: 8 }}>
+        <a className="super-btn" href="/api/super/revenue/export" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center" }}>↓ ดาวน์โหลด CSV</a>
+        <span className="super-muted">เปิดใน Excel ได้ · ตัวเลขเดียวกับหน้านี้</span>
       </div>
 
       <section className="super-card">
@@ -502,31 +501,38 @@ function TopupsSection() {
       </section>
 
       {rows.length === 0 ? (
-        <p className="ad-muted">ยังไม่มีรายการ</p>
+        <p className="super-muted">ยังไม่มีรายการ</p>
       ) : (
-        <section className="super-card">
-          <table className="ui-table ui-table-stack">
+        <section className="super-card" style={{ padding: 0, overflow: "hidden" }}>
+          <table className="sp-topup-table">
             <thead>
               <tr><th>เวลา</th><th>แบรนด์</th><th>ยอดที่ขอ</th><th>เหตุผล</th><th>สถานะ</th><th></th></tr>
             </thead>
             <tbody>
               {rows.map((t) => (
                 <tr key={t.id}>
-                  <td data-label="เวลา">{new Date(t.created_at).toLocaleString("th-TH")}</td>
-                  <td data-label="แบรนด์">{t.brand_name}</td>
-                  <td data-label="ยอดที่ขอ">{Number(t.amount).toLocaleString("th-TH")} บาท</td>
+                  <td data-label="เวลา"><small>{new Date(t.created_at).toLocaleString("th-TH")}</small></td>
+                  <td data-label="แบรนด์"><span className="sp-brand">{t.brand_name}</span></td>
+                  <td data-label="ยอดที่ขอ"><span className="sp-amt">{Number(t.amount).toLocaleString("th-TH")} บาท</span></td>
                   <td data-label="เหตุผล">{(t.check_reasons ?? []).map((r) => TOPUP_REASON[r] ?? r).join(" · ") || (t.check_status === "passed" ? "ตรวจผ่าน" : "—")}</td>
-                  <td data-label="สถานะ">{t.status === "pending" ? "รอตรวจ" : t.status === "credited" ? `เติมแล้ว ${Number(t.credit_amount ?? t.amount).toLocaleString("th-TH")} บาท` : "ปฏิเสธ"}</td>
+                  <td data-label="สถานะ">
+                    {t.status === "pending"
+                      ? <span className="super-status warn">รอตรวจ</span>
+                      : t.status === "credited"
+                      ? <span className="super-status ok">เติมแล้ว {Number(t.credit_amount ?? t.amount).toLocaleString("th-TH")} บาท</span>
+                      : <span className="super-status" style={{ background: "#fdf0f0", color: "#b91c1c" }}>ปฏิเสธ</span>
+                    }
+                  </td>
                   <td>
                     {t.status === "pending" && (
-                      <>
-                        <button className="super-btn" disabled={Boolean(busy)} onClick={() => act(t.id, "approve")}>
+                      <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                        <button className="super-btn" style={{ padding: "7px 14px", fontSize: 13 }} disabled={Boolean(busy)} onClick={() => act(t.id, "approve")}>
                           {busy === t.id + "approve" ? "กำลังเติม…" : "อนุมัติ"}
-                        </button>{" "}
-                        <button className="super-btn2" disabled={Boolean(busy)} onClick={() => act(t.id, "reject")}>
+                        </button>
+                        <button className="super-btn2" style={{ padding: "7px 14px", fontSize: 13 }} disabled={Boolean(busy)} onClick={() => act(t.id, "reject")}>
                           {busy === t.id + "reject" ? "…" : "ปฏิเสธ"}
                         </button>
-                      </>
+                      </div>
                     )}
                   </td>
                 </tr>

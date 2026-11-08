@@ -1219,9 +1219,12 @@ function TiersCard({ data, edit, programName, rule, onSave, busy }) {
         ระดับคิดจากยอดที่จ่ายจริง (หักคืนเงิน) หรือจำนวนครั้งที่มา ในช่วงเวลาที่ตั้ง — ถึงอย่างใดอย่างหนึ่งก็ขึ้นระดับ · ใช้คะแนนแลกของแล้วระดับไม่ลด ·
         ระดับสูงได้คะแนนคูณเพิ่ม · ขึ้นระดับแล้วลูกค้าได้การ์ดแจ้งใน LINE
       </p>
+      {/* the period sits above both columns, so the first tier and the card preview start level */}
+      <fieldset disabled={!edit || busy} className="ad-fieldset">
+        <label className="ad-field ad-short">นับยอดย้อนหลัง (เดือน)<input type="number" min={1} max={36} required value={months} onChange={(e) => setMonths(e.target.value)} /></label>
+      </fieldset>
       <div className="ad-tiers">
         <fieldset disabled={!edit || busy} className="ad-fieldset ad-tiers-list">
-          <label className="ad-field ad-short">นับยอดย้อนหลัง (เดือน)<input type="number" min={1} max={36} required value={months} onChange={(e) => setMonths(e.target.value)} /></label>
           {tiers.map((t, i) => (
             <div key={i} className="ad-tier-row" data-active={preview === i || undefined} onFocus={() => setPreview(i)} onClick={() => setPreview(i)}>
               <div className="ad-row ad-between">
@@ -1260,10 +1263,10 @@ function TiersCard({ data, edit, programName, rule, onSave, busy }) {
         </fieldset>
         {shown && (
           <div className="ad-tier-preview">
-            <p className="ad-muted">พรีวิวบัตรที่ลูกค้าเห็นใน LINE</p>
             <MemberCardFace programName={programName} tierName={shown.name} theme={shown.cardTheme} balance={1250} logoUrl={data.brand?.logoUrl}
               rule={earnRule(rule)} multiplier={Number(shown.earnMultiplier) || 1}
               next={nextOf(tiers.indexOf(shown)) ? { progress: 0.62, text: nextText(nextOf(tiers.indexOf(shown))) } : null} />
+            <p className="ad-muted ad-tier-preview-note">พรีวิวบัตรระดับ {shown.name} ที่ลูกค้าเห็นใน LINE</p>
             {String(shown.benefits).trim() && (
               <ul className="ad-tier-perks">{String(shown.benefits).split("\n").filter((b) => b.trim()).map((b) => <li key={b}>{b}</li>)}</ul>
             )}

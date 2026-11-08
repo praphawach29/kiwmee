@@ -1095,3 +1095,4 @@
   .ad-tier-grid .ad-field:first-child { grid-column: 1 / -1; }
   .ad-tier-reach.ad-tier-grid .ad-field:first-child { grid-column: auto; }
 }
+.ad-tier-preview-note { margin: 0; font-size: .8rem; text-align: center; }

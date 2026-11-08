@@ -2381,16 +2381,34 @@ function priceSummary(o) {
   return `${o.prices.length > 1 ? "เริ่ม " : ""}${money(base.amount)} ${UNITS[base.unit]}`;
 }
 
-// When an editor opens and the layout puts it below the list (phones, narrow desktops), scroll to it
-function useRevealEditor(key) {
-  const ref = useRef(null);
+// The add / edit form slides over the list from the right (full screen on phones), so the list
+// underneath never moves (rendered in place: no ancestor of the shell is transformed, so fixed works). "กลับไปรายการ" or Esc closes it; the page behind doesn't scroll meanwhile.
+function EditorSheet({ title, onClose, children }) {
+  const panel = useRef(null);
   useEffect(() => {
-    const el = ref.current;
-    if (!key || !el) return;
-    const top = el.getBoundingClientRect().top;
-    if (top > window.innerHeight * 0.6 || top < 0) el.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [key]);
-  return ref;
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    panel.current?.focus();
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = overflow;
+    };
+  }, [onClose]);
+  return (
+    <div className="ad-sheet-layer">
+      <div className="ad-sheet-backdrop" aria-hidden="true" />
+      <div className="ad-sheet" role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} ref={panel}>
+        <div className="ad-sheet-head">
+          <button type="button" className="ad-sheet-back" onClick={onClose}>← กลับไปรายการ</button>
+          <strong>{title}</strong>
+          <button type="button" className="ad-sheet-x" onClick={onClose} aria-label="ปิด">✕</button>
+        </div>
+        <div className="ad-sheet-body">{children}</div>
+      </div>
+    </div>
+  );
 }
 
 function OfferingsTab({ slug, catalog, onSaved }) {
@@ -2411,11 +2429,11 @@ function OfferingsTab({ slug, catalog, onSaved }) {
     setGroup((g) => (g?.id ? structuredClone((catalog.addonGroups ?? []).find((x) => x.id === g.id) ?? null) : null));
   }, [catalog]);
   const groups = catalog.addonGroups ?? [];
-  const solo = !editing && !group;
-  const editorRef = useRevealEditor(editing ? editing.id ?? "new" : group ? `g:${group.id ?? "new"}` : null);
+  const closeEditor = useCallback(() => setEditing(null), []);
+  const closeGroup = useCallback(() => setGroup(null), []);
 
   return (
-    <div className="ad-split" data-solo={solo}>
+    <div className="ad-split" data-solo="true">
       <div className="ad-stack">
         <section className="ad-card">
           <div className="ad-row ad-between">
@@ -2465,11 +2483,15 @@ function OfferingsTab({ slug, catalog, onSaved }) {
           </ul>
         </section>
       </div>
-      {!solo && (
-        <div className="ad-stack ad-editor-col" ref={editorRef}>
-          {editing && <OfferingEditor key={editing.id ?? "new"} slug={slug} catalog={catalog} initial={editing} onSaved={onSaved} onClose={() => setEditing(null)} />}
-          {group && <AddonGroupEditor key={group.id ?? "new-group"} slug={slug} catalog={catalog} initial={group} onSaved={onSaved} onClose={() => setGroup(null)} />}
-        </div>
+      {editing && (
+        <EditorSheet title={editing.id ? `แก้บริการ · ${editing.name}` : "เพิ่มบริการใหม่"} onClose={closeEditor}>
+          <OfferingEditor key={editing.id ?? "new"} slug={slug} catalog={catalog} initial={editing} onSaved={onSaved} onClose={closeEditor} />
+        </EditorSheet>
+      )}
+      {group && (
+        <EditorSheet title={group.id ? `แก้กลุ่ม · ${group.name}` : "เพิ่มกลุ่มตัวเลือกเสริม"} onClose={closeGroup}>
+          <AddonGroupEditor key={group.id ?? "new-group"} slug={slug} catalog={catalog} initial={group} onSaved={onSaved} onClose={closeGroup} />
+        </EditorSheet>
       )}
     </div>
   );
@@ -2892,10 +2914,10 @@ function ResourcesTab({ slug, catalog, onSaved }) {
   const [editing, setEditing] = useState(null);
   const readOnly = useContext(ReadOnly);
   useEffect(() => setEditing((e) => (e?.id ? structuredClone(catalog.resources.find((r) => r.id === e.id) ?? null) : null)), [catalog]);
-  const editorRef = useRevealEditor(editing ? editing.id ?? "new" : null);
+  const closeEditor = useCallback(() => setEditing(null), []);
 
   return (
-    <div className="ad-split" data-solo={!editing}>
+    <div className="ad-split" data-solo="true">
       <div className="ad-stack">
       <section className="ad-card">
         <div className="ad-row ad-between">
@@ -2925,9 +2947,9 @@ function ResourcesTab({ slug, catalog, onSaved }) {
       {catalog.resources.some((r) => r.active) && <LayoutEditor slug={slug} catalog={catalog} onSaved={onSaved} />}
       </div>
       {editing && (
-        <div className="ad-stack ad-editor-col" ref={editorRef}>
-          <ResourceEditor key={editing.id ?? "new"} slug={slug} catalog={catalog} initial={editing} onSaved={onSaved} onClose={() => setEditing(null)} />
-        </div>
+        <EditorSheet title={editing.id ? `แก้ · ${editing.name}` : `เพิ่ม${resourceWord(catalog)}ใหม่`} onClose={closeEditor}>
+          <ResourceEditor key={editing.id ?? "new"} slug={slug} catalog={catalog} initial={editing} onSaved={onSaved} onClose={closeEditor} />
+        </EditorSheet>
       )}
     </div>
   );

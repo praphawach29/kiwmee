@@ -1100,12 +1100,10 @@
 /* ---------- Shop settings (ตั้งค่าร้าน) ---------- */
 /* a list with no editor open takes the whole width; the editor column only appears while editing */
 .ad-split[data-solo="true"] { grid-template-columns: minmax(0, 1fr); }
-.ad-editor-col { scroll-margin-top: 16px; }
 .ad-count { display: inline-grid; place-items: center; min-width: 24px; height: 22px; margin-left: 6px; padding: 0 7px; border-radius: 11px; background: var(--selected); color: var(--grape-deep); font-size: 12px; font-weight: 600; vertical-align: 2px; }
 
 .ad-list.ad-tiles { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
 .ad-list.ad-tiles > li { padding: 0; border: 0; }
-.ad-split:not([data-solo="true"]) .ad-list.ad-tiles { grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .ad-list-item.ad-tile { grid-template-columns: 64px minmax(0, 1fr); align-items: center; gap: 12px; height: 100%; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
 .ad-list-item.ad-tile:hover { border-color: var(--grape); }
 .ad-tile .ad-resource-thumbnail { display: grid; place-items: center; width: 64px; height: 64px; overflow: hidden; border-radius: 10px; background: var(--selected); }
@@ -1163,3 +1161,38 @@
   .ad-savebar .ad-primary, .ad-savebar .ad-secondary { flex: 1 1 0; padding-inline: 12px; }
   .ad-savebar .ad-primary { flex-grow: 2; }
 }
+
+/* add / edit form as a slide-over: the list behind stays where it was */
+.ad-sheet-layer { position: fixed; inset: 0; z-index: 60; display: flex; justify-content: flex-end; }
+.ad-sheet-backdrop { position: absolute; inset: 0; background: rgba(27, 22, 64, .38); animation: ad-fade .18s ease-out; }
+.ad-sheet { position: relative; display: flex; flex-direction: column; width: min(760px, 100%); height: 100%; background: var(--bg, #F7F5FF); box-shadow: -12px 0 40px rgba(27, 22, 64, .18); outline: none; animation: ad-slide-in .22s ease-out; }
+.ad-sheet-head { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.ad-sheet-head strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; }
+.ad-sheet-back, .ad-sheet-x { flex: none; border: 1px solid var(--line); background: var(--surface); color: var(--grape-deep); border-radius: 999px; font: inherit; font-size: 14px; cursor: pointer; }
+.ad-sheet-back { padding: 7px 14px; font-weight: 600; }
+.ad-sheet-x { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; }
+.ad-sheet-back:hover, .ad-sheet-x:hover { border-color: var(--grape); background: var(--selected); }
+.ad-sheet-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 16px; }
+/* the sheet has its own title and close buttons */
+.ad-sheet-body .ad-card > .ad-row.ad-between:first-child:has(> .ad-link) { display: none; }
+.ad-sheet-body .ad-card, .merchant-layout .ad-sheet-body .ad-card { padding: 20px; box-shadow: none; }
+/* keep the save button in reach while scrolling a long form */
+.ad-sheet-body .ad-row:has(> .ad-primary) { position: sticky; bottom: -16px; z-index: 2; margin: 0 -20px -20px; padding: 12px 16px; background: var(--surface); border-top: 1px solid var(--line); border-radius: 0 0 14px 14px; }
+.ad-sheet-body .ad-row:has(> .ad-primary) .ad-primary { width: auto; padding-inline: 24px; }
+@media (max-width: 599px) {
+  .ad-sheet { width: 100%; }
+  .ad-sheet-head { padding: 10px 12px; }
+  .ad-sheet-head strong { font-size: 15px; }
+  .ad-sheet-body { padding: 12px; }
+  .ad-sheet-body .ad-card, .merchant-layout .ad-sheet-body .ad-card { padding: 16px; }
+  /* day rows: the day on its own line, then the choice and the times, so nothing runs off the side */
+  .ad-sheet-body .ad-table tr { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .ad-sheet-body .ad-table td { padding: 0; border: 0; }
+  .ad-sheet-body .ad-table td:empty { display: none; }
+  .ad-sheet-body .ad-table td:first-child { font-weight: 600; }
+  .ad-sheet-body .ad-table select { width: 100%; }
+  .ad-sheet-body .ad-row:has(> .ad-primary) { bottom: -12px; margin: 0 -16px -16px; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+}
+@keyframes ad-slide-in { from { transform: translateX(32px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes ad-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .ad-sheet, .ad-sheet-backdrop { animation: none; } }

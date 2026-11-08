@@ -20,7 +20,7 @@ function catalogSql(id) {
     'settings', (select row_to_json(t) from (
         select min_lead_minutes, slot_interval_minutes, max_advance_days, hold_minutes,
                customer_can_cancel, customer_can_reschedule, customer_change_cutoff_hours,
-               deposit_mode, deposit_value::float8 as deposit_value, payment_info, document_retention_days
+               deposit_mode, deposit_value::float8 as deposit_value, payment_info, document_retention_days, deposit_allow_full
           from public.business_booking_settings where business_id = ${id}) t),
     'flows', ${list(`select entry, require, optional, "then", options from public.booking_flows where business_id = ${id} and category is null`)},
     'hours', ${list(`select day_of_week, is_open, open_time, close_time from public.business_hours where business_id = ${id}`)},
@@ -29,7 +29,7 @@ function catalogSql(id) {
     'schedules', ${list(`select resource_id, day_of_week, is_working, start_time, end_time from public.resource_schedules where business_id = ${id}`)},
     'timeOff', ${list(`select resource_id, date::text as date, is_full_day, start_time, end_time from public.resource_time_off where business_id = ${id} and date >= current_date - 1`)},
     'offerings', ${list(`select id, category, name, description, duration_mode, duration_minutes, min_minutes, max_minutes, step_minutes, min_days, max_days, required_documents,
-                                buffer_after_minutes, max_party_size, sort_order, active
+                                buffer_after_minutes, max_party_size, sort_order, active, premium
                            from public.offerings where business_id = ${id} and active`)},
     'requirements', ${list(`select offering_id, kind, customer_picks, units_per_booking from public.offering_requirements where business_id = ${id}`)},
     'offeringResources', ${list(`select offering_id, resource_id from public.offering_resources where business_id = ${id}`)},

@@ -5,12 +5,12 @@
 // reason), and tapping an earlier step lets them change it without starting over.
 // The server decides what comes next (POST /api/b/{slug}/step); this page only shows it.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import CustomerFrame from "./customer-frame.jsx";
 import { useLiff } from "./use-liff.jsx";
 import { CheckinQr } from "./qr.jsx";
 import { bookingCode } from "../../../src/v2/scan-codes.js";
-import { BookingProgress, BookingReview, BookingSubmitBar, CustomerTabs, DepositBox, DirectionsButton, DocumentsBox, OfferingDetails, ShopAbout, ShopHeader, ShopHero, OfferingThumbnail, ResourceChoice, groupTimes, withMedia } from "./booking-presentation.jsx";
+import { BookingProgress, BookingReview, BookingSubmitBar, CustomerTabs, DepositBox, DocumentsBox, OfferingDetails, ShopAbout, ShopHeader, ShopHero, OfferingThumbnail, ResourceChoice, ResourceThumbnail, groupTimes, withMedia } from "./booking-presentation.jsx";
 
 const RESOURCE_WORD = { staff: "ช่าง", court: "สนาม", room: "ห้อง", equipment: "อุปกรณ์" };
 const STEP_TITLE = {
@@ -50,6 +50,7 @@ const KEY = {
   party: "partySize",
   addons: "addons"
 };
+const STEP_KEYS = Object.keys(KEY);
 const SUMMARY_ORDER = ["date", "offering", "resource", "time", "duration", "party", "addons"];
 // labels in the summary (short, so the value keeps the room)
 const SUMMARY_LABEL = { date: "วัน", offering: "บริการ", time: "เวลา", duration: "ระยะเวลา", party: "จำนวน", addons: "เพิ่มเติม" };
@@ -181,6 +182,8 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
   const [customer, setCustomer] = useState({ name: "", phone: "" });
   const [points, setPoints] = useState(null); // the LINE member's points and rewards (migration …003200)
   const [rewardId, setRewardId] = useState(null);
+  // the shop lets the customer transfer the whole price instead of the deposit (migration …003800)
+  const [payFull, setPayFull] = useState(false);
   const [booking, setBooking] = useState(null);
   const liff = useLiff(liffId);
 
@@ -191,9 +194,24 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
   const kind = shop.resources[0]?.kind;
   const resourceWord = RESOURCE_WORD[kind] ?? kind ?? "ช่าง";
 
+  // A LINE member: who they are to this shop (name and phone from last time, points, next booking).
+  // The form is filled from their last booking; a first-timer gets their LINE name.
+  const [welcome, setWelcome] = useState(null);
   useEffect(() => {
-    if (liff.name) setCustomer((c) => (c.name ? c : { ...c, name: liff.name }));
-  }, [liff.name]);
+    if (!liff.idToken) return;
+    let cancelled = false;
+    post(`/api/b/${shop.slug}/me/welcome`, { lineIdToken: liff.idToken }).then(
+      (w) => {
+        if (cancelled) return;
+        setWelcome(w);
+        setCustomer((c) => ({ ...c, name: c.name || w?.customer?.name || liff.name || "", phone: c.phone || w?.customer?.phone || "" }));
+      },
+      () => !cancelled && setCustomer((c) => (c.name ? c : { ...c, name: liff.name || "" }))
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [liff.idToken, liff.name, shop.slug]);
 
   const valueLabel = useCallback(
     (step, value) => {
@@ -214,12 +232,16 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     [offerings, resources, resourceWord, addonInfo]
   );
 
+  // only the answer to the latest request counts (a tap while an automatic pick is on its way wins)
+  const runSeq = useRef(0);
   const run = useCallback(
-    async (body) => {
+    async (body, { keepNotice = false } = {}) => {
+      const seq = ++runSeq.current;
       setBusy(true);
       setError(null);
       try {
         const data = await post(`${api}/step`, body);
+        if (seq !== runSeq.current) return;
         setSelected(data.selected);
         setView(data);
         if (data.ask === "date") setDateOptions(data.options ?? []);
@@ -237,6 +259,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
           return trail;
         });
         const dropped = data.cleared.filter((c) => c.reason);
+        if (keepNotice && !dropped.length) return;
         setNotice(
           dropped.length
             ? dropped
@@ -245,10 +268,12 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
             : null
         );
       } catch (e) {
-        setError(e.message);
+        if (seq === runSeq.current) setError(e.message);
       } finally {
-        setBusy(false);
-        setPending(null);
+        if (seq === runSeq.current) {
+          setBusy(false);
+          setPending(null);
+        }
       }
     },
     [api, valueLabel]
@@ -281,6 +306,47 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
 
   const [category, setCategory] = useState(null);
   const rental = offerings.get(selected.offeringId)?.minDays != null;
+  // วันและเวลาในหน้าเดียว (design "Kiwmee ปรับหน้าตา" · DateTime): once the service is chosen, the
+  // stylist, the day and the time are picked on one screen. Not for rentals (days) or a venue drawn
+  // on a map (courts keep their own step with the map).
+  const venue = shop.resources.filter((r) => r.layout).length >= 2;
+  const combined = Boolean(selected.offeringId) && !rental && !venue && ["resource", "date", "time"].includes(ask);
+  const [staff, setStaff] = useState({ key: null, options: [] });
+  const staffKey = `${selected.offeringId}|${selected.durationMinutes ?? ""}|${selected.partySize ?? ""}`;
+  useEffect(() => {
+    if (!combined) return;
+    if (ask === "resource") {
+      setStaff({ key: staffKey, options: view.options ?? [] });
+      return;
+    }
+    if (staff.key === staffKey) return;
+    let current = true;
+    post(`${api}/step`, { selected: { offeringId: selected.offeringId, durationMinutes: selected.durationMinutes, partySize: selected.partySize }, ask: "resource" })
+      .then((data) => { if (current) setStaff({ key: staffKey, options: data.options ?? [] }); })
+      .catch(() => { if (current) setStaff({ key: staffKey, options: [] }); });
+    return () => { current = false; };
+  }, [combined, ask, view, staffKey, staff.key, api, selected.offeringId, selected.durationMinutes, selected.partySize]);
+  const staffOptions = staff.key === staffKey && staff.options.some((o) => o.value !== null) ? staff.options : [];
+  // The defaults the design shows: anyone (when the shop allows it), then the first day with room
+  const autoKey = useRef(null);
+  // before the screen is painted, so no tap can land between the answer and the next automatic pick
+  useLayoutEffect(() => {
+    if (!combined || busy || !view?.options) return;
+    let pick = null;
+    if (ask === "resource" && selected.resourceId === undefined) {
+      const any = view.options.find((o) => o.value === null && o.available);
+      if (any) pick = ["resource", null];
+    } else if (ask === "date" && !selected.date) {
+      const first = view.options.find((o) => o.available);
+      if (first) pick = ["date", first.value];
+    }
+    if (!pick) return;
+    const key = `${pick[0]}|${JSON.stringify(selected)}`;
+    if (autoKey.current === key) return;
+    autoKey.current = key;
+    setPending({ step: pick[0], value: pick[1] });
+    run({ selected: { ...selected, [KEY[pick[0]]]: pick[1] }, changed: pick[0] }, { keepNotice: true });
+  }, [combined, busy, view, ask, selected, run]);
   const summaryItems = SUMMARY_ORDER.filter((s) => selected[KEY[s]] !== undefined).map((s) => ({
     step: s,
     label: s === "resource" ? resourceWord : (rental && RENTAL_LABEL[s]) || SUMMARY_LABEL[s] || s,
@@ -309,17 +375,57 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     if (shop.deposit.mode === "percent") return est ? Math.round((est * shop.deposit.value) / 100) : null;
     return typeof shop.deposit.value === "number" ? (est ? Math.min(shop.deposit.value, est) : shop.deposit.value) : null;
   }, [shop.deposit, estimate]);
+  // what paying in full costs: the price after any reward; offered only when it is more than the deposit
+  const fullAmount = shop.deposit?.allowFull && estimate?.short && typeof estimate.amount === "number"
+    ? Math.max((estimate.amount ?? 0) - (chosenReward ? rewardOff(chosenReward) : 0), 0)
+    : null;
+  const canPayFull = fullAmount !== null && depositAmount > 0 && fullAmount > depositAmount;
+  const paying = canPayFull && payFull ? fullAmount : depositAmount;
 
   // the tapped choice lights up at once; the server's answer follows
   const choose = (step, value) => {
     setPending({ step, value });
     return run({ selected: { ...selected, [KEY[step]]: value }, changed: step });
   };
+  // The bottom bar's button: on to the next thing not chosen yet (a step already answered can be left
+  // as it is), or to the form once everything is chosen
+  const canContinue = Boolean(ask && next?.step && next.step !== ask && next.step !== "start");
+  const continueOn = () => (STEP_KEYS.includes(next.step) ? showStep(next.step) : run({ selected }));
+  const continueLabel = !canContinue
+    ? ""
+    : next.step === "resource"
+      ? `ต่อไป: เลือก${resourceWord}`
+      : next.step === "date"
+        ? (rental ? "ต่อไป: วันรับ" : "ต่อไป: เลือกวัน")
+        : next.step === "time"
+          ? "ต่อไป: เลือกเวลา"
+          : next.step === "duration"
+            ? "ต่อไป: ระยะเวลา"
+            : next.step === "addons"
+              ? "ต่อไป: ตัวเลือกเสริม"
+              : next.step === "party"
+                ? "ต่อไป: จำนวนคน"
+                : STEP_KEYS.includes(next.step)
+                  ? "ต่อไป"
+                  : "ต่อไป: ข้อมูลผู้จอง";
+  // "จองซ้ำ": last time's service (and stylist, if the customer can still pick them); then the day
+  const rebook = (last) => {
+    const resourceId = last.resourceId && resources.has(last.resourceId) ? last.resourceId : undefined;
+    setPending({ step: "show", value: "rebook" });
+    setStepTrail(["offering"]);
+    return run({ selected: { offeringId: last.offeringId, ...(resourceId ? { resourceId } : {}) }, changed: resourceId ? "resource" : "offering" });
+  };
   const showStep = (step) => {
     setPending({ step: "show", value: step });
     return run({ selected, ask: step });
   };
-  const backStep = atCustomer ? stepTrail.at(-1) : stepTrail.length > 1 ? stepTrail.at(-2) : null;
+  const GROUPED = ["resource", "date", "time"];
+  // on the one-screen stylist/day/time step, back goes to what came before it (the service)
+  const backStep = atCustomer
+    ? stepTrail.at(-1)
+    : combined
+      ? [...stepTrail].reverse().find((step) => !GROUPED.includes(step)) ?? null
+      : stepTrail.length > 1 ? stepTrail.at(-2) : null;
   const backStepLabel = backStep === "resource" ? resourceWord : (rental && RENTAL_TITLE[backStep]) || STEP_TITLE[backStep] || "ขั้นตอนก่อนหน้า";
 
   // Pre-select offering if passed in URL (?offeringId=... or ?serviceId=...)
@@ -356,7 +462,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     setBusy(true);
     setError(null);
     try {
-      const result = await post(`${api}/bookings`, { selected, customer, lineIdToken: liff.idToken || undefined, rewardId: rewardId || undefined });
+      const result = await post(`${api}/bookings`, { selected, customer, lineIdToken: liff.idToken || undefined, rewardId: rewardId || undefined, payFull: canPayFull && payFull ? true : undefined });
       setBooking(result);
     } catch (e) {
       if (e.status === 409 && e.reason === "ADDON_UNAVAILABLE") {
@@ -382,8 +488,7 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
     return (
       <CustomerFrame>
         <main className="bk-shell">
-          <BookingProgress phase="complete" resourceWord={resourceWord} />
-          <BookingDone shop={shop} booking={booking} items={summaryItems} selected={selected} resourceWord={resourceWord}
+          <BookingDone shop={shop} booking={booking} items={summaryItems} selected={selected} resourceWord={resourceWord} customerName={customer.name}
             onSlip={(view) => setBooking((b) => ({ ...b, status: view.booking.status, deposit: { ...b.deposit, slips: view.booking.deposit?.slips ?? 1 } }))} />
           <PoweredBy />
         </main>
@@ -457,10 +562,16 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
   return (
     <CustomerFrame
       hero={withMedia(shop) ? <ShopHero shop={shop} compact={Boolean(atCustomer)} /> : null}
-      aside={<SummaryAside items={summaryItems} estimate={estimate} shop={shop} onEdit={showStep} busy={busy} />}
+      aside={
+        <SummaryAside items={summaryItems} estimate={shownPrice} shop={shop} busy={busy}
+          length={selected.offeringId ? offeringLength(offerings.get(selected.offeringId)) : null}
+          when={[selected.date ? shortDate(selected.date) : null, selected.time ? `${selected.time} น.` : null].filter(Boolean).join(" · ")}
+          next={ask && canContinue ? { label: continueLabel, go: continueOn } : null}
+          onEdit={atCustomer ? () => showStep(selected.time && !rental && !venue ? "time" : summaryItems.at(-1)?.step ?? "offering") : null} />
+      }
     >
       <main className={liffId && atStart && !selected.offeringId ? "bk-shell bk-with-tabs" : "bk-shell"} aria-busy={busy}>
-        <ShopHeader shop={shop} subtitle="จองคิวออนไลน์ · เลือกจากคิวว่างของร้าน" />
+        <ShopHeader shop={shop} subtitle="จองคิวออนไลน์ · เลือกจากคิวว่างของร้าน" steps={atCustomer ? 3 : ask && ask !== "offering" ? 2 : 1} />
         {backStep && (
           <button type="button" className="bk-flow-back" onClick={() => showStep(backStep)} disabled={busy}>
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /><path d="M9 12h11" /></svg>
@@ -468,13 +579,17 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
             <small>ไปยัง{backStepLabel}</small>
           </button>
         )}
+        {!atCustomer && summaryItems.length === 0 && (
+          <MemberWelcome liff={liff} welcome={welcome} slug={shop.slug} busy={busy}
+            rebook={welcome?.last && offerings.has(welcome.last.offeringId) ? welcome.last : null} onRebook={rebook} />
+        )}
         {/* the venue's details while the customer is still looking; out of the way once they start picking */}
         {!atCustomer && summaryItems.length === 0 && <ShopAbout shop={shop} />}
-        <BookingProgress phase={atCustomer ? "customer" : "selection"} ask={ask} resourceWord={resourceWord} />
+        <BookingProgress phase={atCustomer ? "customer" : "selection"} ask={combined ? "time" : ask} resourceWord={resourceWord} />
 
-        {!atCustomer && summaryItems.length > 0 && (
+        {!atCustomer && summaryItems.some((item) => !(combined && GROUPED.includes(item.step))) && (
           <nav className="bk-chips" aria-label="ที่เลือกไว้">
-            {summaryItems.map((item) => (
+            {summaryItems.filter((item) => !(combined && GROUPED.includes(item.step))).map((item) => (
               <button key={item.step} type="button" className="bk-chip" data-active={ask === item.step} data-pending={(pending?.step === "show" && pending.value === item.step) || undefined} onClick={() => showStep(item.step)} disabled={busy}>
                 <span>{item.step === "date" ? shortDate(selected.date) : item.value}</span>
                 <small>เปลี่ยน</small>
@@ -515,27 +630,9 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
 
         {ask && view.options && (
           <section className="bk-card" data-step={ask}>
-            {ask === "offering" && (
-              <>
-                <div className="bk-storefront-banner">
-                  <div className="bk-storefront-icon">🏪</div>
-                  <div className="bk-storefront-details">
-                    <div className="bk-storefront-row">
-                      <strong>{shop.name}</strong>
-                      <span className="bk-badge-live">● เปิดให้บริการ</span>
-                    </div>
-                    <small className="bk-muted">{shop.address || "พร้อมดูแลและให้บริการลูกค้าทุกท่าน"}</small>
-                  </div>
-                </div>
-                <div className="bk-tip-notice">
-                  <span>💡</span>
-                  <span><strong>เลือกตัวเลือกที่ต้องการ:</strong> ระบบแสดงเฉพาะคิวที่ร้านเปิดให้จอง</span>
-                </div>
-              </>
-            )}
             <div className="bk-step-head">
-              <h2>{ask === "resource" ? `เลือก${resourceWord}` : ask === "time" ? "เลือกวันและเวลา" : (rental && RENTAL_TITLE[ask]) || STEP_TITLE[ask]}</h2>
-              {ask === "time" && selected.date && (
+              <h2>{combined || ask === "time" ? "เลือกวันและเวลา" : ask === "resource" ? `เลือก${resourceWord}` : (rental && RENTAL_TITLE[ask]) || STEP_TITLE[ask]}</h2>
+              {ask === "time" && selected.date && (rental || !combined) && (
                 <p className="bk-muted">
                   {rental ? "เลือกเวลาที่สะดวกรับ · คืนเวลาเดียวกัน" : "เลือกเวลาว่างของร้านในวันที่เลือก"}
                   {rental && selected.durationMinutes ? ` วัน${returnDay(selected.date, selected.durationMinutes)}` : ""}
@@ -562,7 +659,24 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
                 ))}
               </div>
             )}
-            {ask === "addons" ? (
+            {combined && staffOptions.length > 0 && (
+              <StaffRow
+                options={ask === "resource" ? view.options : staffOptions}
+                resources={resources}
+                resourceWord={resourceWord}
+                chosen={pending?.step === "resource" ? pending.value : selected.resourceId}
+                busy={busy}
+                onChoose={(value) => choose("resource", value)}
+              />
+            )}
+            {combined && ask === "resource" ? (
+              <p className="bk-muted bk-combined-hint">เลือก{resourceWord}ด้านบน แล้วเลือกวันและเวลาที่ว่าง</p>
+            ) : combined && ask === "date" ? (
+              <>
+                <DateStrip options={view.options} today={todayIn(shop.timezone)} optionProps={optionProps} />
+                <p className="bk-muted bk-combined-hint">เลือกวันเพื่อดูเวลาที่ว่าง</p>
+              </>
+            ) : ask === "addons" ? (
               <AddonsStep key={`${selected.date}-${selected.time}`} view={view} info={addonInfo} initial={selected.addons} busy={busy} onDone={(picks) => choose("addons", picks)} />
             ) : ask === "date" ? (
               <DateStrip options={view.options} today={todayIn(shop.timezone)} optionProps={optionProps} />
@@ -593,46 +707,40 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
           </section>
         )}
 
-        {ask === "offering" && selected.offeringId && offerings.get(selected.offeringId) && (
-          <div className="bk-step1-drawer">
+        {/* what has been picked so far, the price, and the way on — on every step until the form */}
+        {ask && summaryItems.length > 0 && (
+          <div className="bk-step1-drawer" data-testid="pick-bar" data-action={canContinue || undefined}>
             <div className="bk-step1-drawer-inner">
               <div className="bk-step1-drawer-info">
-                <div className="bk-step1-drawer-meta">
-                  <span className="bk-step1-badge">เลือกแล้ว 1 รายการ</span>
-                  <span className="bk-step1-duration">⏱ {offeringLength(offerings.get(selected.offeringId))}</span>
-                </div>
-                <div className="bk-step1-drawer-price">
-                  <small>ยอดรวม</small>
-                  <strong>฿{(offerings.get(selected.offeringId).price?.amount ?? 0).toLocaleString("th-TH")}</strong>
-                </div>
+                <span className="bk-pick-bar-what">{summaryItems.map((item) => (item.step === "date" ? shortDate(selected.date) : item.value)).join(" · ")}</span>
+                <strong className="bk-pick-bar-price">{shownPrice?.short ?? (offerings.get(selected.offeringId)?.price ? priceText(offerings.get(selected.offeringId).price) : "เลือกต่อด้านบน")}</strong>
               </div>
-              <button
-                type="button"
-                className="bk-primary bk-step1-drawer-cta"
-                disabled={busy}
-                onClick={() => {
-                  if (next?.step && next.step !== "offering") showStep(next.step);
-                  else choose("offering", selected.offeringId);
-                }}
-              >
-                <span>ถัดไป: {next?.step === "resource" ? `เลือก${resourceWord}` : next?.step === "date" ? (rental ? "เลือกวันรับ" : "เลือกวัน") : next?.step === "time" ? (rental ? "เลือกเวลารับ" : "เลือกเวลา") : next?.step === "duration" ? "เลือกระยะเวลา" : next?.step === "addons" ? "เลือกตัวเลือกเสริม" : "เลือกคิว"}</span>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-              </button>
+              {canContinue && (
+                <button type="button" className="bk-primary bk-step1-drawer-cta" disabled={busy} onClick={continueOn}>
+                  <span>{continueLabel}</span>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </button>
+              )}
             </div>
           </div>
         )}
 
         {atCustomer && (
           <>
+            <ConfirmSummary
+              selected={selected}
+              items={summaryItems}
+              price={shownPrice}
+              deposit={Boolean(shop.deposit)}
+              busy={busy}
+              onEdit={() => showStep(selected.time && !rental && !venue ? "time" : summaryItems.at(-1)?.step ?? "offering")}
+            />
             {liff.name ? (
               <div className="bk-line-connected-card">
                 <div className="bk-line-avatar-wrap">
                   <div className="bk-line-avatar">
-                    {liff.pictureUrl ? (
-                      <img src={liff.pictureUrl} alt={liff.name} />
-                    ) : (
-                      <span className="bk-line-initial">{liff.name[0]}</span>
-                    )}
+                    <span className="bk-line-initial">{(customer.name || liff.name)[0]}</span>
+                    {liff.pictureUrl && <img src={liff.pictureUrl} alt={liff.name} onError={(e) => e.currentTarget.remove()} />}
                   </div>
                   <span className="bk-line-chat-badge" aria-hidden="true">💬</span>
                 </div>
@@ -704,40 +812,36 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
                 </label>
 
                 <label className="bk-field" htmlFor="cust-note">
-                  <span className="bk-field-label">โน้ตเพิ่มเติมถึงช่าง <small className="bk-muted">(ถ้ามี)</small></span>
+                  <span className="bk-field-label">ฝากถึงร้าน <small className="bk-muted">(ไม่บังคับ)</small></span>
                   <div className="bk-input-wrap">
                     <textarea
                       id="cust-note"
                       name="note"
                       rows={2}
-                      placeholder="เช่น ทรงผมที่ต้องการ หรือสไตล์ที่ชอบ"
+                      maxLength={300}
+                      placeholder="เช่น ขอสระด้วยน้ำอุ่น หรือทรงที่อยากได้"
                       value={customer.note || ""}
                       onChange={(e) => setCustomer({ ...customer, note: e.target.value })}
                     />
                   </div>
                 </label>
               </div>
-              {shop.deposit && <DepositNote deposit={shop.deposit} estimate={estimate} />}
+              {shop.deposit && !canPayFull && <DepositNote deposit={shop.deposit} estimate={estimate} />}
             </form>
 
-            <BookingReview items={summaryItems} onEdit={showStep} busy={busy} price={shownPrice} />
             {points && !points.none && points.rewards.length > 0 && (
               <PointsChoice points={points} chosen={rewardId} onChoose={setRewardId} busy={busy} valueOf={rewardOff} />
             )}
 
-            {(shop.selfService?.cancel || shop.selfService?.reschedule) && <div className="bk-cancellation-banner">
-              <div className="bk-cancellation-icon" aria-hidden="true">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--mint-deep)" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-              </div>
-              <div className="bk-cancellation-text">
-                <strong>นโยบายการเปลี่ยนแปลงนัดหมาย</strong>
-                <p>
-                  {shop.selfService?.reschedule && shop.selfService?.cancel ? "เลื่อนหรือยกเลิกนัดได้" : shop.selfService?.reschedule ? "เลื่อนนัดได้" : "ยกเลิกนัดได้"} ก่อนเวลานัดอย่างน้อย{" "}
-                  <span className="bk-cancellation-highlight">{shop.selfService?.cutoffHours ?? shop.cancellation_lead_hours ?? 2} ชั่วโมง</span>{" "}
-                  ผ่านลิงก์จัดการการจอง
-                </p>
-              </div>
-            </div>}
+            {canPayFull && (
+              <PayChoice deposit={depositAmount} full={fullAmount} payFull={payFull} onChoose={setPayFull} busy={busy} holdMinutes={shop.deposit.holdMinutes} />
+            )}
+            {(shop.selfService?.cancel || shop.selfService?.reschedule) && (
+              <p className="bk-confirm-policy">
+                {shop.selfService?.reschedule && shop.selfService?.cancel ? "เลื่อนหรือยกเลิก" : shop.selfService?.reschedule ? "เลื่อน" : "ยกเลิก"}เองได้ถึง{" "}
+                <b>{shop.selfService?.cutoffHours ?? shop.cancellation_lead_hours ?? 2} ชม.</b> ก่อนนัด จากลิงก์ที่ได้หลังจอง · ข้อมูลของคุณใช้เพื่อการนัดหมายนี้เท่านั้น
+              </p>
+            )}
 
           </>
         )}
@@ -747,7 +851,8 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
             disabled={busy || !liff.ready}
             busy={busy}
             price={shownPrice?.short}
-            deposit={depositAmount}
+            deposit={paying}
+            payFull={canPayFull && payFull}
           />
         )}
         <PoweredBy />
@@ -909,6 +1014,167 @@ function TimeTabs({ options, optionButton }) {
 
 // "ใช้คะแนน" (migration …003200): a LINE member picks one reward; its points are set aside with the
 // booking and the discount comes off at the desk. Rewards they cannot use yet say why.
+// What is being booked, on top of the form (design Confirm): the day in a tile, the service, when and
+// with whom, the extras, the price — and one way back to change it
+function ConfirmSummary({ selected, items, price, deposit, busy, onEdit }) {
+  const by = (step) => items.find((item) => item.step === step)?.value;
+  const when = [selected.date ? shortDate(selected.date) : null, selected.time ? `${selected.time} น.` : null, by("resource")].filter(Boolean).join(" · ");
+  const more = items.filter((item) => !["date", "time", "offering", "resource"].includes(item.step));
+  const tile = selected.date ? new Date(`${selected.date}T00:00:00Z`) : null;
+  return (
+    <section className="bk-card bk-confirm-summary" aria-labelledby="confirm-summary-title" data-testid="confirm-summary">
+      <div className="bk-confirm-row">
+        {tile && (
+          <span className="bk-date-tile bk-confirm-tile" aria-hidden="true">
+            <small>{new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", month: "short" }).format(tile)}</small>
+            <strong>{tile.getUTCDate()}</strong>
+          </span>
+        )}
+        <div className="bk-confirm-what">
+          <strong id="confirm-summary-title">{by("offering") ?? "นัดหมาย"}</strong>
+          {when && <span>{when}</span>}
+          {more.map((item) => <small key={item.step}>{item.label}: {item.value}</small>)}
+        </div>
+        <button type="button" className="bk-text-button bk-confirm-edit" disabled={busy} onClick={onEdit}>แก้ไข</button>
+      </div>
+      {price?.value && (
+        <div className="bk-confirm-price">
+          <span>{price.label}</span>
+          <strong>{price.value}{deposit ? "" : " · จ่ายที่ร้าน"}</strong>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// Stylists as a row of round faces (design DateTime): "anyone" first, then each one; a full one is grey
+function StaffRow({ options, resources, resourceWord, chosen, busy, onChoose }) {
+  return (
+    <>
+    <span className="bk-staff-label">{resourceWord}</span>
+    <div className="bk-staff-row" role="radiogroup" aria-label={`เลือก${resourceWord}`}>
+      {options.map((o) => {
+        const resource = o.value === null ? null : resources.get(o.value);
+        const on = chosen === o.value;
+        return (
+          <button
+            key={o.value ?? "any"}
+            type="button"
+            role="radio"
+            className="bk-staff"
+            data-testid="option-resource"
+            data-value={o.value === null ? "any" : o.value}
+            data-selected={on}
+            aria-checked={on}
+            disabled={busy || !o.available}
+            onClick={() => onChoose(o.value)}
+          >
+            <span className="bk-staff-face" aria-hidden="true">
+              {o.value === null ? "✱" : <ResourceThumbnail resource={resource ?? { name: o.label }} />}
+            </span>
+            <span className="bk-staff-name">{o.value === null ? "ใครก็ได้" : resource?.name ?? o.label}</span>
+            {!o.available && <small className="bk-staff-reason">ไม่ว่าง</small>}
+          </button>
+        );
+      })}
+    </div>
+    </>
+  );
+}
+
+// The first thing a LINE member sees: their LINE picture and name, tier, points, and the next booking
+// still to come. Outside LINE (a browser, with the shop's LIFF app set up): one tap to sign in with LINE.
+function MemberWelcome({ liff, welcome, slug, rebook = null, onRebook, busy = false }) {
+  if (!liff.idToken) {
+    if (!liff.login) return null;
+    return (
+      <section className="bk-member bk-member-login" data-testid="member-login">
+        <span className="bk-member-line" aria-hidden="true">LINE</span>
+        <span className="bk-member-copy">
+          <strong>เข้าสู่ระบบด้วย LINE</strong>
+          <small>จองเร็วขึ้น · สะสมคะแนน · ดูการจองของคุณ</small>
+        </span>
+        <button type="button" className="bk-member-button" onClick={liff.login}>เข้าสู่ระบบ</button>
+      </section>
+    );
+  }
+  const name = welcome?.customer?.name || liff.name;
+  const visits = welcome?.customer?.visits ?? 0;
+  const points = welcome?.points;
+  const next = welcome?.next;
+  return (
+    <section className="bk-member" data-testid="member-welcome" aria-label="สมาชิก">
+      <div className="bk-member-head">
+        <span className="bk-member-avatar" aria-hidden="true">
+          <span>{(name || "?")[0]}</span>
+          {liff.pictureUrl && <img src={liff.pictureUrl} alt="" onError={(e) => e.currentTarget.remove()} />}
+        </span>
+        <span className="bk-member-copy">
+          <small>{welcome?.customer ? (visits > 0 ? `ยินดีต้อนรับกลับมา · มาแล้ว ${visits} ครั้ง` : "ยินดีต้อนรับกลับมา") : "ยินดีต้อนรับ"}</small>
+          <strong>คุณ {name || "ลูกค้า"}</strong>
+        </span>
+        {points?.tier && <span className="bk-member-tier">{points.tier.name}</span>}
+      </div>
+      {(points || next) && (
+        <div className="bk-member-stats">
+          {points && (
+            <a className="bk-member-stat" href={`/b/${slug}/me`}>
+              <small>คะแนนสะสม</small>
+              <strong>{points.balance.toLocaleString("th-TH")} <span>คะแนน</span></strong>
+              {points.usable > 0 && <em>แลกได้ {points.usable} รางวัล</em>}
+            </a>
+          )}
+          {next && (
+            <a className="bk-member-stat" href={next.link ?? `/b/${slug}/me`} data-testid="member-next">
+              <small>นัดถัดไป</small>
+              <strong>{shortDate(next.date)} · {next.start} น.</strong>
+              <em>{next.offering}{["held", "pending"].includes(next.status) ? " · รอชำระ/ตรวจสลิป" : ""}</em>
+            </a>
+          )}
+        </div>
+      )}
+      {rebook && (
+        <button type="button" className="bk-member-rebook" data-testid="member-rebook" disabled={busy} onClick={() => onRebook?.(rebook)}>
+          <span className="bk-member-rebook-icon" aria-hidden="true">↻</span>
+          <span className="bk-member-copy">
+            <strong>จองซ้ำ</strong>
+            <small>{rebook.offering}{rebook.resource ? ` · ${rebook.resource}` : ""}</small>
+          </span>
+          <span aria-hidden="true">›</span>
+        </button>
+      )}
+      <a className="bk-member-link" href={`/b/${slug}/me`}>บัตรสมาชิกและประวัติการจอง ›</a>
+    </section>
+  );
+}
+
+// Deposit or the whole price, the customer's choice (migration …003800). Either way the booking waits
+// for the transfer; paying in full leaves nothing to pay at the shop.
+function PayChoice({ deposit, full, payFull, onChoose, busy, holdMinutes }) {
+  const choices = [
+    { value: false, title: `มัดจำ ${money(deposit)}`, meta: `ส่วนที่เหลือ ${money(full - deposit)} จ่ายที่ร้าน` },
+    { value: true, title: `จ่ายเต็มจำนวน ${money(full)}`, meta: "ไม่ต้องจ่ายเพิ่มที่ร้าน" }
+  ];
+  return (
+    <section className="bk-card bk-pay-choice" aria-labelledby="pay-choice-title" data-testid="pay-choice">
+      <h2 id="pay-choice-title">เลือกวิธีชำระ</h2>
+      <div className="bk-options bk-options-reward" role="radiogroup" aria-label="เลือกวิธีชำระ">
+        {choices.map((c) => (
+          <button key={String(c.value)} type="button" className="bk-option" role="radio" aria-checked={payFull === c.value} data-selected={payFull === c.value}
+            disabled={busy} onClick={() => onChoose(c.value)}>
+            <span className="bk-option-text">
+              <strong>{c.title}</strong>
+              <span className="bk-option-meta"><span>{c.meta}</span></span>
+            </span>
+            <span className="bk-choice-mark" aria-hidden="true" />
+          </button>
+        ))}
+      </div>
+      <p className="bk-fine">หลังกดยืนยันจะแสดง QR และเวลาส่งสลิป {formatMinutes(holdMinutes ?? 10)}</p>
+    </section>
+  );
+}
+
 function PointsChoice({ points, chosen, onChoose, busy, valueOf }) {
   return (
     <section className="bk-card bk-points-choice" aria-labelledby="points-choice-title">
@@ -1183,16 +1449,41 @@ function SelfServiceNote({ shop }) {
 }
 
 // Wide screens: what has been picked so far, beside the step being answered.
-function SummaryAside({ items, estimate, shop, onEdit, busy }) {
+// Wide screens (design "Kiwmee ปรับหน้าตา" · BookDesktop): what is picked, how long, the total, and the
+// way on, beside the step being answered
+function SummaryAside({ items, estimate, shop, busy, length = null, when = "", next = null, onEdit = null }) {
+  // the day and the time on one line ("วันเวลา"), after what and with whom
+  const rows = [
+    ...items.filter((item) => item.step !== "date" && item.step !== "time")
+      .flatMap((item) => (item.step === "offering" && length ? [item, { step: "length", label: "ระยะเวลา", value: length }] : [item])),
+    ...(when ? [{ step: "when", label: "วันเวลา", value: when }] : [])
+  ];
   return (
-    <div className="bk-aside-card">
+    <div className="bk-aside-card" data-testid="summary-aside">
+      <div className="bk-aside-head">
+        <h2>สรุปการจอง</h2>
+        {onEdit && <button type="button" className="bk-text-button" disabled={busy} onClick={onEdit}>แก้ไข</button>}
+      </div>
       {items.length === 0 ? (
-        <>
-          <h2>สรุปการจอง</h2>
-          <p className="bk-muted">ยังไม่ได้เลือก · ทุกตัวเลือกแสดงตามคิวว่างจริงของร้าน</p>
-        </>
+        <p className="bk-muted">ยังไม่ได้เลือก · ทุกตัวเลือกแสดงตามคิวว่างจริงของร้าน</p>
       ) : (
-        <BookingReview id="booking-aside-title" items={items} onEdit={onEdit} busy={busy} price={estimate} />
+        <dl className="bk-aside-list">
+          {rows.map((item) => (
+            <div key={item.step}>
+              <dt>{item.label}</dt>
+              <dd data-strong={item.step === "when" || undefined}>{item.value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {estimate?.value && (
+        <div className="bk-aside-total">
+          <span>รวม</span>
+          <strong>{estimate.value}</strong>
+        </div>
+      )}
+      {next && (
+        <button type="button" className="bk-primary bk-aside-next" disabled={busy} onClick={next.go}>{next.label}</button>
       )}
       <p className="bk-fine">
         <SelfServiceNote shop={shop} /> จองกับ {shop.name}
@@ -1206,7 +1497,7 @@ function icsText(value) {
 }
 const icsTime = (iso) => new Date(iso).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 
-function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
+function BookingDone({ shop, booking, items, selected, resourceWord, customerName = "", onSlip }) {
   const timeFormat = (iso) => new Intl.DateTimeFormat("th-TH", { timeZone: shop.timezone, hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
   const dayPart = (opts) => new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", ...opts }).format(new Date(`${selected.date}T00:00:00Z`));
   const dateOf = (iso) => new Intl.DateTimeFormat("en-CA", { timeZone: shop.timezone }).format(new Date(iso));
@@ -1221,17 +1512,21 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
   // what the shop gave: its own kind's word (a car is "รถ", not "ช่าง")
   const givenKind = booking.resources?.[0]?.kind;
   const givenWord = givenKind ? RESOURCE_WORD[givenKind] ?? givenKind : resourceWord;
-  const rows = items.filter((item) => item.step !== "date" && item.step !== "time");
+  // "anyone" was picked and the shop gave someone: one line with who it is, not "anyone" as well
+  const showAssigned = booking.resources?.length > 0 && selected.resourceId == null;
+  const rows = items.filter((item) => item.step !== "date" && item.step !== "time" && !(showAssigned && item.step === "resource"));
   const managePath = booking.manageToken ? `/b/${shop.slug}/manage/${booking.manageToken}` : null;
   const held = booking.status === "held";
   const pendingStatus = booking.status === "pending";
   const statusLabel = held ? "รอชำระมัดจำ" : pendingStatus ? "รอร้านตรวจสอบ" : booking.status === "confirmed" ? "ยืนยันแล้ว" : "รอรับบริการ";
-  const successTitle = held ? "กันคิวไว้ให้แล้ว" : pendingStatus ? "ส่งสลิปแล้ว รอร้านยืนยัน" : "จองคิวสำเร็จเรียบร้อยแล้ว!";
+  const successTitle = held ? "กันคิวไว้ให้แล้ว" : pendingStatus ? "ส่งสลิปแล้ว รอร้านยืนยัน" : "จองคิวสำเร็จแล้ว";
   const successCopy = held && booking.deposit
-    ? "ชำระมัดจำตามรายละเอียดด้านล่างเพื่อยืนยันคิว"
+    ? booking.deposit.payFull ? "ชำระเต็มจำนวนตามรายละเอียดด้านล่างเพื่อยืนยันคิว" : "ชำระมัดจำตามรายละเอียดด้านล่างเพื่อยืนยันคิว"
     : pendingStatus
       ? "ร้านกำลังตรวจสอบสลิป คุณดูสถานะการจองได้จากลิงก์ด้านล่าง"
-      : "บันทึกหมายเลขการจองและ QR นี้ไว้ใช้เมื่อมาถึงร้าน";
+      : customerName.trim()
+        ? `${shop.name} รอพบคุณ${customerName.trim().split(/\s+/)[0]}`
+        : `${shop.name} รอพบคุณ`;
   // the ID / licence a rental asks for (design 11.7 E3), sent right here with the customer's consent
   const asked = shop.offerings.find((o) => o.id === selected.offeringId)?.requiredDocuments ?? [];
   const [documents, setDocuments] = useState(() =>
@@ -1288,7 +1583,6 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
             ? <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
             : <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7" /></svg>}
         </span>
-        <small className="bk-done-eyebrow">สรุปการจอง · {shop.name}</small>
         <h1>{successTitle}</h1>
         <p className="bk-muted">{successCopy}</p>
       </div>
@@ -1307,21 +1601,13 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
         <DocumentsBox documents={documents} shopName={shop.name} uploadUrl={`/api/b/${shop.slug}/manage/${booking.manageToken}/document`} onUploaded={(view) => setDocuments(view.documents ?? documents)} />
       )}
 
-      <div className="bk-card bk-done-card bk-pass-card">
-        <div className="bk-pass-header">
-          <div className="bk-pass-brand">
-            <span className="bk-pass-badge">KIWMEE BOOKING PASS</span>
-          </div>
+      {/* the booking in one card (design "Kiwmee ปรับหน้าตา" · Done): when, what, who, how much, and the
+          two things people do next — put it in their calendar, find the way */}
+      <div className="bk-card bk-done-card">
+        <div className="bk-done-meta">
+          {booking.id && <span>รหัสการจอง <b>#{bookingCode(booking.id)}</b></span>}
           <span className="bk-done-status" data-state={held ? "held" : pendingStatus ? "pending" : "confirmed"}>{statusLabel}</span>
         </div>
-
-        {booking.id && (
-          <div className="bk-done-reference">
-            <small>หมายเลขการจอง</small>
-            <strong>#{bookingCode(booking.id)}</strong>
-          </div>
-        )}
-
         {selected.date && (
           <div className="bk-done-schedule">
             <div className="bk-when">
@@ -1335,7 +1621,7 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
               </div>
             </div>
             {booking.price?.total > 0 && (
-              <div className="bk-done-total"><small>ราคารวม</small><strong>{money(booking.price.total)}</strong></div>
+              <div className="bk-done-total"><small>{booking.deposit ? "ราคารวม" : "จ่ายที่ร้าน"}</small><strong>{money(booking.price.total)}</strong></div>
             )}
           </div>
         )}
@@ -1346,10 +1632,13 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
               <dd>{item.value}</dd>
             </div>
           ))}
-          {booking.resources?.length > 0 && selected.resourceId == null && (
+          {showAssigned && (
             <div>
               <dt>{givenWord}</dt>
-              <dd>{assigned || "ร้านจัดให้"}</dd>
+              <dd>
+                {assigned || "ร้านจัดให้"}
+                {assigned && items.some((item) => item.step === "resource") && <><br /><small className="bk-muted">ระบบเลือกให้</small></>}
+              </dd>
             </div>
           )}
           {booking.points && (
@@ -1359,38 +1648,31 @@ function BookingDone({ shop, booking, items, selected, resourceWord, onSlip }) {
             </div>
           )}
         </dl>
-        {booking.id && (
-          <div className="bk-done-qr">
-            <CheckinQr slug={shop.slug} id={booking.id} open={true} />
-            <small className="bk-muted" style={{ textAlign: "center", display: "block", marginTop: 4 }}>แสดง QR Code นี้ให้พนักงานเพื่อเช็คอินเมื่อถึงร้าน</small>
-          </div>
-        )}
         {held && booking.holdExpiresAt && !booking.deposit && <p className="bk-notice">กรุณาชำระเงินภายใน {timeFormat(booking.holdExpiresAt)} น.</p>}
-        {(shop.address || shop.directions) && (
-          <div className="bk-done-location">
-            <span className="bk-done-location-icon" aria-hidden="true"><LocationIcon /></span>
-            <span className="bk-done-location-copy"><strong>{shop.name}</strong>{shop.address && <small>{shop.address}</small>}</span>
-            <DirectionsButton href={shop.directions} className="bk-done-map-link" />
-          </div>
-        )}
+        {shop.address && <p className="bk-done-address"><LocationIcon /> <span>{shop.address}</span></p>}
+        <div className="bk-done-actions">
+          {booking.startAt && booking.endAt && (
+            <button type="button" className="bk-done-action" onClick={addToCalendar}>เพิ่มลงปฏิทิน</button>
+          )}
+          {shop.directions && (
+            <a className="bk-done-action" href={shop.directions} target="_blank" rel="noreferrer">ดูเส้นทาง</a>
+          )}
+          <button type="button" className="bk-done-action" onClick={shareBooking}>{shared ? "✓ คัดลอกแล้ว" : "ส่งให้เพื่อน"}</button>
+        </div>
       </div>
 
-      <div className="bk-actions-grid">
-        {booking.startAt && booking.endAt && (
-          <button type="button" className="bk-btn-primary-action bk-btn-calendar" onClick={addToCalendar}>
-            <span>📅 เพิ่มลงปฏิทิน</span>
-          </button>
-        )}
-        <button type="button" className="bk-btn-primary-action bk-btn-share" onClick={shareBooking}>
-          <span>{shared ? "✓ คัดลอกแล้ว" : "📤 แชร์เข้า LINE"}</span>
-        </button>
-      </div>
+      {/* the check-in QR once the booking counts: not while the deposit is still awaited */}
+      {booking.id && (held || pendingStatus) && <p className="bk-qr-wait">QR เช็กอินจะแสดงเมื่อร้านยืนยันมัดจำแล้ว</p>}
+      {booking.id && !held && !pendingStatus && (
+        <div className="bk-card bk-done-qr">
+          <strong className="bk-done-qr-title">QR เช็กอินเมื่อถึงร้าน</strong>
+          <CheckinQr slug={shop.slug} id={booking.id} open={true} />
+        </div>
+      )}
 
       {managePath && <ManageLink shop={shop} path={managePath} />}
 
-      <a className="bk-home-btn" href={`/b/${shop.slug}`}>
-        <span>🏠 กลับสู่หน้าหลัก / ดูบริการอื่นๆ</span>
-      </a>
+      <a className="bk-again" href={`/b/${shop.slug}`}>จองคิวอีกครั้ง</a>
 
     </section>
   );
@@ -1445,67 +1727,34 @@ function OptionBody({ ask, option, offering, resource, resourceWord, date, shop,
     const length = offeringLength(offering);
     const depVal = shop?.deposit?.mode === "fixed" ? shop.deposit.value : shop?.deposit?.mode === "percent" && offering.price?.amount ? Math.round((offering.price.amount * shop.deposit.value) / 100) : null;
     const isSelected = Boolean(chosen || option?.["data-selected"]);
-    const isPopular = offering.badge === "popular" || offering.name?.includes("ยอดนิยม") || (offering.price?.amount && offering.price.amount < 1000);
-    const isPremium = offering.badge === "premium" || offering.name?.includes("พรีเมียม") || (offering.price?.amount && offering.price.amount >= 2000);
+    // booked most here in the last 30 days (shopInfo counts real bookings)
+    const isPopular = offering.popular === true;
+    // the shop's own choice on its catalogue page, not a guess from the price
+    const isPremium = offering.premium === true;
 
+    // one row (design "Kiwmee ปรับหน้าตา" · Main): picture · name, length, price · a tick when chosen
     return (
-      <div className="bk-offering-card-layout">
-        {isSelected && (
-          <div className="bk-offering-tag-selected" aria-hidden="true">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
-            <span>เลือกแล้ว</span>
-          </div>
+      <div className="bk-offering-row">
+        {withMedia(offering) ? (
+          <OfferingThumbnail offering={offering} />
+        ) : (
+          <span className="bk-offering-initial" aria-hidden="true">{offering.name?.[0] ?? "•"}</span>
         )}
-        <div className="bk-offering-card-top">
-          {withMedia(offering) ? (
-            <OfferingThumbnail offering={offering} />
-          ) : (
-            <span className="bk-offering-icon-avatar" aria-hidden="true">
-              {offering.name?.includes("ฟุตบอล") ? "⚽" : offering.name?.includes("แบด") ? "🏸" : offering.name?.includes("นวด") ? "💆" : offering.name?.includes("สปา") ? "🌿" : "✂️"}
+        <span className="bk-offering-row-body">
+          {(isPopular || isPremium) && (
+            <span className="bk-offering-badges">
+              {isPopular ? <span className="bk-badge-popular">ยอดนิยม 🔥</span> : <span className="bk-badge-premium">พรีเมียม ✨</span>}
             </span>
           )}
-          <div className="bk-offering-card-body">
-            <div className="bk-offering-badges">
-              {isPopular ? (
-                <span className="bk-badge-popular">ยอดนิยม 🔥</span>
-              ) : isPremium ? (
-                <span className="bk-badge-premium">พรีเมียม ✨</span>
-              ) : (
-                <span className="bk-badge-rec">บริการแนะนำ</span>
-              )}
-            </div>
-            <strong className="bk-offering-name">{offering.name}</strong>
-            {offering.description && (
-              <span className="bk-option-desc">{offering.description}</span>
-            )}
-            <div className="bk-offering-meta-row">
-              <span className="bk-duration-tag">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                <span>{length}</span>
-              </span>
-              {depVal > 0 && <span className="bk-deposit-tag">🔒 มัดจำ ฿{depVal.toLocaleString("th-TH")}</span>}
-            </div>
-          </div>
-        </div>
-        <div className="bk-offering-card-bottom">
-          <div className="bk-offering-price-box">
-            <span className="bk-offering-price-label">ราคาบริการ</span>
-            <strong className="bk-offering-price-val">{offering.price ? priceText(offering.price) : "ฟรี"}</strong>
-          </div>
-          <span className={`bk-offering-action-pill ${isSelected ? "bk-pill-selected" : "bk-pill-add"}`}>
-            {isSelected ? (
-              <>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
-                <span>เลือกอยู่</span>
-              </>
-            ) : (
-              <>
-                <span>+</span>
-                <span>เลือกบริการ</span>
-              </>
-            )}
+          <strong className="bk-offering-name">{offering.name}</strong>
+          <span className="bk-offering-meta">
+            {length}
+            {depVal > 0 ? ` · มัดจำ ฿${depVal.toLocaleString("th-TH")}` : ""}
           </span>
-        </div>
+          {offering.description && <span className="bk-option-desc">{offering.description}</span>}
+          <span className="bk-offering-price">{offering.price ? priceText(offering.price) : "ฟรี"}</span>
+        </span>
+        <span className="bk-choice-mark" aria-hidden="true" data-on={isSelected || undefined} />
       </div>
     );
   }

@@ -95,6 +95,7 @@ export default function ShopAdmin({ slug }) {
   const [focusBooking, setFocusBooking] = useState(null); // a booking opened from the scanner
   const [scanned, setScanned] = useState(null); // ?scan=… when a phone camera opened a check-in QR
   const [saleCode, setSaleCode] = useState(null); // a member scanned at the desk → a sale for them
+  const [adding, setAdding] = useState(0); // the "+" on the overview: open the bookings tab with the form
   const activity = useActivity(slug, Boolean(catalog?.shop.role));
 
   const reload = useCallback(async () => {
@@ -152,6 +153,13 @@ export default function ShopAdmin({ slug }) {
     show("bookings");
   }
 
+  function addBooking() {
+    setBookingDay(null);
+    setFocusBooking(null);
+    setAdding((n) => n + 1);
+    show("bookings");
+  }
+
   function saleFor(code) {
     setSaleCode(code);
     show("bills");
@@ -200,7 +208,7 @@ export default function ShopAdmin({ slug }) {
         </header>
         <MobileShopHeader
           name={catalog.shop.name}
-          subtitle={`${activeLabel} · ${roleLabel}`}
+          subtitle={`${shortDay(today())} · ${activeLabel}`}
           bell={<ActivityBell activity={activity} onPick={pickActivity} />}
         />
         <main className="ad-shell merchant-content">
@@ -209,8 +217,8 @@ export default function ShopAdmin({ slug }) {
       {role === "staff" && <p className="ad-notice">พนักงานจัดการการจอง ขายหน้าร้าน และปิดบิลได้ · การตั้งค่าร้านและคืนเงินเฉพาะเจ้าของร้าน</p>}
       {!tab && <p className="ad-error" role="alert">คุณไม่มีสิทธิ์เข้าถึงเมนูจัดการร้านนี้ กรุณาติดต่อเจ้าของร้าน</p>}
       <ReadOnly.Provider value={readOnly}>
-        {tab === "overview" && <OverviewTab slug={slug} catalog={catalog} onNavigate={show} />}
-        {tab === "bookings" && <BookingsTab key={`${bookingDay ?? "today"}:${focusBooking ?? ""}`} slug={slug} catalog={catalog} initialDay={bookingDay} focusId={focusBooking} />}
+        {tab === "overview" && <OverviewTab slug={slug} catalog={catalog} onNavigate={show} onOpenBooking={openBooking} onAddBooking={addBooking} />}
+        {tab === "bookings" && <BookingsTab key={`${bookingDay ?? "today"}:${focusBooking ?? ""}:${adding}`} slug={slug} catalog={catalog} initialDay={bookingDay} focusId={focusBooking} startAdding={adding > 0} />}
         {tab === "scan" && <ScanTab slug={slug} initial={scanned} onBooking={openBooking} onSale={saleFor} />}
         {tab === "bills" && <BillsTab key={saleCode ?? "bills"} slug={slug} catalog={catalog} saleCode={saleCode} onSaleDone={() => setSaleCode(null)} />}
         {tab === "members" && <LoyaltyTab slug={slug} catalog={catalog} />}
@@ -235,15 +243,17 @@ export default function ShopAdmin({ slug }) {
 
 // ---------- overview (dashboard summary) ----------
 
-function OverviewTab({ slug, catalog, onNavigate }) {
+// The day at a glance (design "Kiwmee ปรับหน้าตา" · AdminMobile): three numbers, the next customers
+// with the one thing to do for each, the day's takings, and "+" to take a booking
+function OverviewTab({ slug, catalog, onNavigate, onOpenBooking, onAddBooking }) {
   const [day, setDay] = useState(today());
   const [bookings, setBookings] = useState(null);
   const [bills, setBills] = useState(null);
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  // staff run the desk too: these actions are theirs as much as the owner's
+  const save = useSave();
 
   const load = useCallback(async () => {
-    setBusy(true);
     setError("");
     try {
       const [bookingList, billData] = await Promise.all([
@@ -255,8 +265,6 @@ function OverviewTab({ slug, catalog, onNavigate }) {
     } catch (e) {
       if (e.status === 401) window.location.href = "/dashboard";
       setError(e.message);
-    } finally {
-      setBusy(false);
     }
   }, [slug, day]);
 
@@ -264,148 +272,139 @@ function OverviewTab({ slug, catalog, onNavigate }) {
     setBookings(null);
     setBills(null);
     load();
+    const timer = setInterval(() => document.visibilityState === "visible" && load(), 60000);
+    return () => clearInterval(timer);
   }, [load]);
 
-  const active = (bookings ?? []).filter((b) => ACTIVE.includes(b.status));
-  const upcoming = active.filter((b) => ["held", "pending", "confirmed"].includes(b.status));
-  const checkedIn = active.filter((b) => b.status === "checked_in").length;
-  const completed = active.filter((b) => b.status === "completed").length;
-  const closed = active.filter((b) => b.status === "cancelled" || b.status === "no_show").length;
-  const sum = bills?.summary;
-  const walkIns = (bills?.bills ?? []).filter((b) => !b.bookingId).length;
-  const resources = catalog.resources ?? [];
-  const offerings = catalog.offerings ?? [];
-  const activeOfferings = offerings.filter((o) => o.active).length;
+  async function act(booking, path, body, done) {
+    if (await save.run(() => api("POST", shopPath(slug, `/bookings/${booking.id}/${path}`), body), done)) load();
+  }
+  function confirmDeposit(booking) {
+    const answer = window.prompt(`ยืนยันว่าได้รับมัดจำของ ${booking.customer.name} แล้ว\nยอดที่ได้รับ (บาท) — ใส่ 0 ถ้ายืนยันคิวโดยไม่บันทึกเงิน`, String(booking.depositDue ?? 0));
+    if (answer === null) return;
+    const amount = Number(answer);
+    if (!Number.isFinite(amount) || amount < 0) return window.alert("ยอดเงินไม่ถูกต้อง");
+    act(booking, "deposit", { amount }, `ยืนยันมัดจำของ ${booking.customer.name} แล้ว`);
+  }
 
-  // still to serve: done, cancelled and no-show bookings are not "next"
-  const nextBookings = active
+  const active = (bookings ?? []).filter((b) => ACTIVE.includes(b.status));
+  const waiting = active.filter((b) => ["held", "pending"].includes(b.status)).length;
+  const sum = bills?.summary;
+  // still to serve, soonest first
+  const queue = active
     .filter((b) => b.status !== "completed")
     .sort((a, b) => `${a.date ?? day} ${a.start}`.localeCompare(`${b.date ?? day} ${b.start}`))
-    .slice(0, 5);
+    .slice(0, 6);
+  const isToday = day === today();
 
   return (
-    <div className="ad-stack">
-      <section className="ad-card">
-        <div className="ad-row ad-wrap ad-between">
-          <div>
-            <p className="ad-muted">สรุปการดำเนินงาน</p>
-            <h2>{longDate(day)}{day === today() ? " (วันนี้)" : ""}</h2>
-          </div>
-          <div className="ad-row ad-wrap">
-            <button type="button" className="ad-secondary ad-icon-btn" onClick={() => setDay(addDays(day, -1))} aria-label="วันก่อนหน้า">‹</button>
-            <input type="date" value={day} onChange={(e) => e.target.value && setDay(e.target.value)} aria-label="วันที่" />
-            <button type="button" className="ad-secondary ad-icon-btn" onClick={() => setDay(addDays(day, 1))} aria-label="วันถัดไป">›</button>
-            {day !== today() && <button type="button" className="ad-link" onClick={() => setDay(today())}>วันนี้</button>}
-            <button type="button" className="ad-secondary" disabled={busy} onClick={load}>{busy ? "กำลังโหลด…" : "รีเฟรช"}</button>
-          </div>
-        </div>
-        {error && <p className="ad-error" role="alert">{error}</p>}
-      </section>
-
-      <section className="ad-grid" aria-label="ตัวชี้วัดวันนี้">
-        <article className="ad-card ad-metric">
-          <span className="ad-muted">การจองทั้งหมด</span>
-          <strong>{bookings === null ? "…" : bookings.length}</strong>
-          <span className="ad-muted">{upcoming.length} รอให้บริการ · {checkedIn} มาถึงแล้ว</span>
-        </article>
-        <article className="ad-card ad-metric">
-          <span className="ad-muted">รายรับสุทธิ</span>
-          <strong>{sum ? money(sum.net) : "…"}</strong>
-          <span className="ad-muted">{sum ? `${sum.closedBills} บิลปิดแล้ว` : "กำลังโหลด…"}</span>
-        </article>
-        <article className="ad-card ad-metric">
-          <span className="ad-muted">เสร็จแล้ว</span>
-          <strong>{bookings === null ? "…" : completed}</strong>
-          <span className="ad-muted">{checkedIn} กำลังให้บริการ · {closed} ยกเลิก/ไม่มา</span>
-        </article>
-        <article className="ad-card ad-metric">
-          <span className="ad-muted">ทรัพยากร / บริการ</span>
-          <strong>{resources.length} / {activeOfferings}</strong>
-          <span className="ad-muted">{offerings.length} บริการทั้งหมด · {catalog.shop.media?.length ?? 0} รูปร้าน</span>
-        </article>
-      </section>
-
-      <div className="ad-split">
-        <section className="ad-card">
-          <div className="ad-row ad-between">
-            <h2>คิวถัดไป</h2>
-            <button type="button" className="ad-link" onClick={() => onNavigate?.("bookings")}>ดูทั้งหมด</button>
-          </div>
-          {!bookings && !error && <p className="ad-muted">กำลังโหลด…</p>}
-          {bookings && nextBookings.length === 0 && <p className="ad-empty">ยังไม่มีการจองที่รอให้บริการ</p>}
-          <ul className="ad-bookings">
-            {nextBookings.map((b) => {
-              const [label, tone] = STATUS[b.status] ?? [b.status, "off"];
-              return (
-                <li key={b.id} className="ad-booking">
-                  <div className="ad-booking-time"><strong>{b.start}</strong><span>{b.end}</span></div>
-                  <div className="ad-booking-main">
-                    <div className="ad-row ad-wrap">
-                      <strong className="ad-booking-name">{b.customer.name}</strong>
-                      <span className="ad-status" data-tone={tone}>{label}</span>
-                    </div>
-                    <div className="ad-muted">
-                      {b.offering.name}
-                      {b.resources.length ? ` · ${b.resources.map((r) => r.name).join(", ")}` : ""}
-                      {b.partySize > 1 ? ` · ${b.partySize} คน` : ""}
-                      {b.price ? ` · ${money(b.price)}` : ""}
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-
-        <section className="ad-card">
-          <div className="ad-row ad-between">
-            <h2>รายรับและบิล</h2>
-            <button type="button" className="ad-link" onClick={() => onNavigate?.("bills")}>ดูทั้งหมด</button>
-          </div>
-          {sum && (
-            <dl className="ad-totals">
-              <div data-main="true"><dt>รับสุทธิ</dt><dd>{money(sum.net)}</dd></div>
-              {Object.entries(METHODS).map(([k, v]) => (sum.byMethod[k] ? <div key={k}><dt>{v}</dt><dd>{money(sum.byMethod[k])}</dd></div> : null))}
-              {sum.refunds > 0 && <div><dt>คืนเงิน</dt><dd>−{money(sum.refunds)}</dd></div>}
-              <div><dt>จำนวนบิล</dt><dd>{sum.closedBills}</dd></div>
-              <div><dt>ขายหน้าร้าน</dt><dd>{walkIns}</dd></div>
-            </dl>
-          )}
-          {!sum && !error && <p className="ad-muted">กำลังโหลด…</p>}
-          {(bills?.bills ?? []).length > 0 && (
-            <ul className="ad-bookings">
-              {(bills.bills ?? []).slice(0, 5).map((b) => (
-                <li key={b.id} className="ad-booking">
-                  <div className="ad-booking-time"><strong>{b.time}</strong></div>
-                  <div className="ad-booking-main">
-                    <div className="ad-row ad-wrap">
-                      <strong className="ad-booking-name">{b.title}</strong>
-                      {b.status !== "closed" && <span className="ad-status" data-tone="warn">ยังไม่ปิด</span>}
-                      {!b.bookingId && <span className="ad-status" data-tone="info">ขายหน้าร้าน</span>}
-                    </div>
-                    <div className="ad-muted">{b.customerName ? `${b.customerName} · ` : ""}{money(b.total)}</div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+    <div className="ad-stack ad-overview">
+      <div className="ad-overview-day">
+        <button type="button" className="ad-icon-btn ad-secondary" onClick={() => setDay(addDays(day, -1))} aria-label="วันก่อนหน้า">‹</button>
+        <label className="ad-overview-date">
+          <span>{isToday ? "วันนี้ · " : ""}{shortDay(day)}</span>
+          <input type="date" value={day} onChange={(e) => e.target.value && setDay(e.target.value)} aria-label="เลือกวัน" />
+        </label>
+        <button type="button" className="ad-icon-btn ad-secondary" onClick={() => setDay(addDays(day, 1))} aria-label="วันถัดไป">›</button>
+        {!isToday && <button type="button" className="ad-link" onClick={() => setDay(today())}>วันนี้</button>}
       </div>
+      {error && <p className="ad-error" role="alert">{error}</p>}
 
-      <section className="ad-card">
-        <h2>ทางลัด</h2>
-        <div className="ad-row ad-wrap">
-          <button type="button" className="ad-primary" onClick={() => onNavigate?.("bookings")}>+ เพิ่มการจอง</button>
-          <button type="button" className="ad-secondary" onClick={() => onNavigate?.("bills")}>+ ขายหน้าร้าน</button>
-          <button type="button" className="ad-secondary" onClick={() => onNavigate?.("offerings")}>จัดการบริการ</button>
-          <button type="button" className="ad-secondary" onClick={() => onNavigate?.("resources")}>จัดการสนาม/ช่าง</button>
-          <button type="button" className="ad-secondary" onClick={() => onNavigate?.("hours")}>เวลาทำการ</button>
-        </div>
-        <p className="ad-muted">ภาพร้านและบริการแก้ได้ในแท็บ “บริการและราคา” และ “ร้านและเวลาทำการ”</p>
+      <section className="ad-kpis" aria-label="ตัวเลขของวัน">
+        <button type="button" className="ad-kpi" onClick={() => onNavigate?.("bookings")}>
+          <span>{isToday ? "นัดวันนี้" : "นัดวันนั้น"}</span>
+          <strong>{bookings === null ? "…" : active.length}</strong>
+        </button>
+        <button type="button" className="ad-kpi" data-tone={waiting > 0 ? "accent" : undefined} onClick={() => onNavigate?.("bookings")}>
+          <span>รอยืนยัน</span>
+          <strong>{bookings === null ? "…" : waiting}</strong>
+        </button>
+        <button type="button" className="ad-kpi" onClick={() => onNavigate?.("bills")}>
+          <span>{isToday ? "ยอดวันนี้" : "ยอดวันนั้น"}</span>
+          <strong data-small>{sum ? Number(sum.net).toLocaleString("th-TH") : "…"}</strong>
+        </button>
       </section>
+
+      <section className="ad-queue-wrap" aria-labelledby="queue-title">
+        <div className="ad-row ad-between">
+          <h2 id="queue-title">คิวถัดไป</h2>
+          <button type="button" className="ad-link" onClick={() => onNavigate?.("bookings")}>ดูทั้งวัน</button>
+        </div>
+        <Status save={save} />
+        {!bookings && !error && <p className="ad-muted">กำลังโหลด…</p>}
+        {bookings && queue.length === 0 && <p className="ad-empty">ไม่มีคิวที่รอให้บริการ</p>}
+        <ul className="ad-queue">
+          {queue.map((b) => {
+            const waitingDeposit = ["held", "pending"].includes(b.status) && b.depositDue !== null && b.depositDue !== undefined;
+            const [label, tone] = waitingDeposit
+              ? (b.status === "pending" ? ["รอตรวจสลิป", "warn"] : ["รอโอนมัดจำ", "warn"])
+              : STATUS[b.status] ?? [b.status, "off"];
+            const action = waitingDeposit
+                ? { label: "ยืนยันมัดจำ", primary: true, run: () => confirmDeposit(b) }
+                : ["pending", "confirmed"].includes(b.status)
+                  ? { label: "มาถึงแล้ว", run: () => act(b, "status", { status: "checked_in" }, `${b.customer.name} มาถึงแล้ว`) }
+                  : b.status === "checked_in"
+                    ? { label: "ปิดบิล", primary: true, run: () => onOpenBooking?.(b) }
+                    : null;
+            return (
+              <li key={b.id} className="ad-queue-item" data-tone={tone} data-testid="queue-item">
+                <div className="ad-queue-time">
+                  <strong>{b.start}</strong>
+                  <span>{lengthText(b.start, b.end)}</span>
+                </div>
+                <div className="ad-queue-main">
+                  <strong>{b.customer.name}</strong>
+                  <span className="ad-queue-what">{b.offering.name}{b.resources.length ? ` · ${b.resources.map((r) => r.name).join(", ")}` : ""}</span>
+                  <span className="ad-status" data-tone={tone}>{label}</span>
+                </div>
+                {action && (
+                  <button type="button" className={action.primary ? "ad-primary ad-queue-act" : "ad-secondary ad-queue-act"} disabled={save.busy} onClick={action.run}>{action.label}</button>
+                )}
+                <button type="button" className="ad-queue-more" aria-label={`ดูการจองของ ${b.customer.name}`} onClick={() => onOpenBooking?.(b)}>⋯</button>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+
+      <section className="ad-card ad-takings" aria-labelledby="takings-title">
+        <div className="ad-row ad-between">
+          <h2 id="takings-title">รายรับ</h2>
+          <button type="button" className="ad-link" onClick={() => onNavigate?.("bills")}>ดูบิล</button>
+        </div>
+        {sum ? (
+          <div className="ad-takings-row">
+            <strong>{money(sum.net)}</strong>
+            <span className="ad-muted">
+              {sum.closedBills} บิล
+              {Object.entries(METHODS).map(([k, v]) => (sum.byMethod[k] ? ` · ${v} ${money(sum.byMethod[k])}` : "")).join("")}
+              {sum.refunds > 0 ? ` · คืนเงิน ${money(sum.refunds)}` : ""}
+            </span>
+          </div>
+        ) : !error && <p className="ad-muted">กำลังโหลด…</p>}
+      </section>
+
+      <button type="button" className="ad-fab" aria-label="เพิ่มการจอง" onClick={onAddBooking}>
+        <span aria-hidden="true">+</span><span className="ad-fab-label">เพิ่มการจอง</span>
+      </button>
     </div>
   );
 }
+
+// "60 นาที" · "2 ชม." · "1 ชม. 30 นาที" from two HH:MM times on the same day
+function lengthText(start, end) {
+  const toMin = (t) => (typeof t === "string" && /^\d{2}:\d{2}/.test(t) ? Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5)) : null);
+  const a = toMin(start);
+  const b = toMin(end);
+  if (a === null || b === null || b <= a) return "";
+  const m = b - a;
+  if (m < 60) return `${m} นาที`;
+  return m % 60 ? `${Math.floor(m / 60)} ชม. ${m % 60} นาที` : `${m / 60} ชม.`;
+}
+
+const shortDay = (date) =>
+  new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", weekday: "long", day: "numeric", month: "short" }).format(new Date(`${date}T00:00:00Z`));
+
 const STATUS = {
   held: ["รอชำระ", "warn"],
   pending: ["รอยืนยัน", "warn"],
@@ -428,11 +427,11 @@ function addDays(date, n) {
 const longDate = (date) =>
   new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date(`${date}T00:00:00Z`));
 
-function BookingsTab({ slug, catalog, initialDay, focusId = null }) {
+function BookingsTab({ slug, catalog, initialDay, focusId = null, startAdding = false }) {
   const [day, setDay] = useState(() => initialDay ?? today());
   const [list, setList] = useState(null);
   const [error, setError] = useState("");
-  const [form, setForm] = useState(null); // { booking? } while the form is open
+  const [form, setForm] = useState(() => (startAdding ? {} : null)); // { booking? } while the form is open
   const [checkout, setCheckout] = useState(null); // the booking whose bill is being closed
   const [showOff, setShowOff] = useState(false);
   const [link, setLink] = useState(null); // { path, name, phone, date, time } while the link is on screen
@@ -508,6 +507,8 @@ function BookingsTab({ slug, catalog, initialDay, focusId = null }) {
       {link && <ManageLinkCard shop={catalog.shop} link={link} onClose={() => setLink(null)} />}
       <RentalTimeline slug={slug} catalog={catalog} day={day} onDay={setDay} refresh={list} />
       {docs && <DocumentsPanel slug={slug} booking={docs} onClose={() => { setDocs(null); load(); }} />}
+      <div className="ad-bookings-layout">
+      <BookingCalendar slug={slug} day={day} onDay={setDay} refresh={list} />
       <section className="ad-card">
         <div className="ad-row ad-wrap ad-between">
           <div className="ad-row ad-wrap">
@@ -595,6 +596,7 @@ function BookingsTab({ slug, catalog, initialDay, focusId = null }) {
                         : " · ยังไม่ได้ส่งสลิป"}
                     </div>
                   )}
+                  {b.note && <div className="ad-booking-note">📝 {b.note}</div>}
                   <div className="ad-muted">
                     {b.customer.phone && <a className="ad-link" href={`tel:${b.customer.phone}`}>{b.customer.phone}</a>}
                     {b.customer.phone ? " · " : ""}
@@ -627,6 +629,7 @@ function BookingsTab({ slug, catalog, initialDay, focusId = null }) {
           })}
         </ul>
       </section>
+      </div>
       {checkout && (
         <CheckoutForm
           key={checkout.id}
@@ -656,6 +659,94 @@ function BookingsTab({ slug, catalog, initialDay, focusId = null }) {
         />
       )}
     </div>
+  );
+}
+
+// The month at a glance (owner's ask): a dot on each day with bookings (orange when some still wait
+// for the shop), today ringed, the chosen day filled; tap a day and its list shows under the calendar.
+// Folds away to the day arrows, remembered on this device.
+const WEEKDAYS = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
+function BookingCalendar({ slug, day, onDay, refresh }) {
+  const [month, setMonth] = useState(day.slice(0, 7));
+  const [counts, setCounts] = useState({});
+  const [open, setOpenState] = useState(true);
+  useEffect(() => {
+    try { if (window.localStorage.getItem("kiwmee.dash.calendar") === "closed") setOpenState(false); } catch { /* private mode */ }
+  }, []);
+  const setOpen = (on) => {
+    setOpenState(on);
+    try { window.localStorage.setItem("kiwmee.dash.calendar", on ? "open" : "closed"); } catch { /* private mode */ }
+  };
+  // the month follows the chosen day (the arrows below, a date picked elsewhere)
+  useEffect(() => setMonth(day.slice(0, 7)), [day]);
+  const first = `${month}-01`;
+  const lead = new Date(`${first}T00:00:00Z`).getUTCDay();
+  const start = addDays(first, -lead);
+  // as many weeks as the month needs (five, sometimes four or six)
+  const monthDays = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).getUTCDate();
+  const length = Math.ceil((lead + monthDays) / 7) * 7;
+  useEffect(() => {
+    if (!open) return;
+    let current = true;
+    api("GET", shopPath(slug, `/bookings/days?from=${start}&days=${length}`))
+      .then((rows) => current && setCounts(Object.fromEntries((rows ?? []).map((r) => [r.date, r]))))
+      .catch(() => current && setCounts({}));
+    return () => { current = false; };
+  }, [slug, start, length, refresh, open]);
+  const shift = (n) => {
+    const d = new Date(`${first}T00:00:00Z`);
+    d.setUTCMonth(d.getUTCMonth() + n);
+    setMonth(d.toISOString().slice(0, 7));
+  };
+  const title = new Intl.DateTimeFormat("th-TH", { timeZone: "UTC", month: "long", year: "numeric" }).format(new Date(`${first}T00:00:00Z`));
+  const now = today();
+  const cells = Array.from({ length }, (_, i) => addDays(start, i));
+  const total = cells.filter((d) => d.startsWith(month)).reduce((n, d) => n + (counts[d]?.count ?? 0), 0);
+  return (
+    <section className="ad-card ad-calendar" aria-label="ปฏิทินการจอง" data-testid="booking-calendar">
+      <div className="ad-calendar-head">
+        <button type="button" className="ad-secondary ad-icon-btn" onClick={() => shift(-1)} aria-label="เดือนก่อนหน้า" hidden={!open}>‹</button>
+        <div className="ad-calendar-title">
+          <strong>{title}</strong>
+          {open && <span className="ad-muted">{total} การจองในเดือนนี้</span>}
+        </div>
+        <button type="button" className="ad-secondary ad-icon-btn" onClick={() => shift(1)} aria-label="เดือนถัดไป" hidden={!open}>›</button>
+        <button type="button" className="ad-link" onClick={() => setOpen(!open)} aria-expanded={open}>{open ? "ย่อปฏิทิน" : "ดูปฏิทิน"}</button>
+      </div>
+      {open && (
+        <>
+          <div className="ad-calendar-grid" role="grid">
+            {WEEKDAYS.map((w) => <span key={w} className="ad-calendar-dow" role="columnheader">{w}</span>)}
+            {cells.map((d) => {
+              const c = counts[d];
+              return (
+                <button
+                  key={d}
+                  type="button"
+                  role="gridcell"
+                  className="ad-calendar-day"
+                  data-outside={!d.startsWith(month) || undefined}
+                  data-today={d === now || undefined}
+                  aria-selected={d === day}
+                  aria-label={`${longDate(d)}${c?.count ? ` · ${c.count} การจอง${c.waiting ? ` (รอยืนยัน ${c.waiting})` : ""}` : ""}`}
+                  onClick={() => onDay(d)}
+                >
+                  <span>{Number(d.slice(8))}</span>
+                  {c?.count > 0 && (
+                    <i className="ad-calendar-dot" data-waiting={c.waiting > 0 || undefined} aria-hidden="true">{c.count > 1 ? c.count : ""}</i>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <div className="ad-calendar-legend" aria-hidden="true">
+            <span><i className="ad-calendar-dot" /> มีการจอง</span>
+            <span><i className="ad-calendar-dot" data-waiting /> มีรอยืนยัน</span>
+            {day !== now && <button type="button" className="ad-link" onClick={() => onDay(now)}>ไปวันนี้</button>}
+          </div>
+        </>
+      )}
+    </section>
   );
 }
 
@@ -1295,6 +1386,7 @@ function ScanTab({ slug, initial = null, onBooking, onSale }) {
             <div><dt>บริการ</dt><dd>{b.offering.name}{b.resources.length ? ` · ${b.resources.map((r) => r.name).join(", ")}` : ""}</dd></div>
             {b.price ? <div><dt>ราคา</dt><dd>{money(b.price)}{b.bill?.status === "closed" ? " · ชำระแล้ว" : ""}</dd></div> : null}
             {b.customer.phone && <div><dt>โทร</dt><dd><a className="ad-link" href={`tel:${b.customer.phone}`}>{b.customer.phone}</a></dd></div>}
+            {b.note && <div><dt>ฝากถึงร้าน</dt><dd>{b.note}</dd></div>}
           </dl>
           {b.status === "held" && <p className="ad-notice">ยังรอมัดจำ — ยืนยันมัดจำในรายการจองก่อนเช็กอิน</p>}
           <div className="ad-row ad-wrap">
@@ -1423,24 +1515,26 @@ function MemberBox({ slug, bookingId = null, initialCode = null, onChange }) {
 }
 
 function CheckoutForm({ slug, booking, onClose, onSaved }) {
+  // what is already on the booking's open bill (the deposit the shop confirmed): it counts toward the total
+  const alreadyPaid = booking.bill?.status === "open" ? round2(booking.bill.paid) : 0;
+  const owing = (total, reward) => Math.max(round2(round2(total) - (reward ? Math.min(reward.discountBaht, round2(total)) : 0) - alreadyPaid), 0);
   const [subtotal, setSubtotal] = useState(String(booking.price ?? 0));
-  const [lines, setLines] = useState([{ method: "cash", amount: String(booking.price ?? 0) }]);
+  const [lines, setLines] = useState([{ method: "cash", amount: String(owing(booking.price ?? 0, null)) }]);
   const [note, setNote] = useState("");
   const [points, setPoints] = useState({ reward: null });
   const save = useSave();
   const discount = points.reward ? Math.min(points.reward.discountBaht, round2(subtotal)) : 0;
-  const due = round2(round2(subtotal) - discount);
+  const due = owing(subtotal, points.reward);
 
   function changeSubtotal(value) {
     setSubtotal(value);
     // one payment line follows the amount until the shop splits it
-    if (lines.length === 1) setLines([{ ...lines[0], amount: String(round2(round2(value) - (points.reward ? Math.min(points.reward.discountBaht, round2(value)) : 0))) }]);
+    if (lines.length === 1) setLines([{ ...lines[0], amount: String(owing(value, points.reward)) }]);
   }
 
   function changePoints(next) {
     setPoints(next);
-    const off = next.reward ? Math.min(next.reward.discountBaht, round2(subtotal)) : 0;
-    if (lines.length === 1) setLines([{ ...lines[0], amount: String(round2(round2(subtotal) - off)) }]);
+    if (lines.length === 1) setLines([{ ...lines[0], amount: String(owing(subtotal, next.reward)) }]);
   }
 
   async function submit(event) {
@@ -1468,6 +1562,7 @@ function CheckoutForm({ slug, booking, onClose, onSaved }) {
       </div>
       {booking.customer.fromLine && <MemberBox slug={slug} bookingId={booking.id} onChange={changePoints} />}
       {discount > 0 && <p className="ad-muted">ส่วนลดจากคะแนน −{money(discount)}</p>}
+      {alreadyPaid > 0 && <p className="ad-muted" data-testid="checkout-deposit">หักมัดจำที่รับแล้ว −{money(alreadyPaid)}</p>}
       <PaymentLines lines={lines} setLines={setLines} due={due} />
       <Status save={save} />
       <div className="ad-row">
@@ -2216,6 +2311,7 @@ function emptyOffering(catalog) {
     maxPartySize: 1,
     sortOrder: 0,
     active: true,
+    premium: false,
     requirements: [{ kind, customerPicks: true, unitsPerBooking: "one" }],
     resourceIds: resources.filter((r) => r.kind === kind).map((r) => r.id),
     prices: [{ unit: "per_booking", amount: "", daysOfWeek: null, start: null, end: null, priority: null }]
@@ -2477,6 +2573,7 @@ function OfferingEditor({ slug, catalog, initial, onSaved, onClose }) {
       bufferAfterMinutes: toInt(o.bufferAfterMinutes) ?? 0,
       maxPartySize: toInt(o.maxPartySize) ?? 1,
       sortOrder: toInt(o.sortOrder) ?? 0,
+      premium: o.premium === true,
       requirements: o.requirements.map((r) => ({ ...r, unitsPerBooking: toInt(o.maxPartySize) > 1 ? r.unitsPerBooking : "one" })),
       resourceIds: o.resourceIds.filter((id) => usable.some((r) => r.id === id)),
       prices: o.prices.map((p) => ({ ...p, amount: p.amount === "" ? null : Number(p.amount), start: p.start || null, end: p.end || null }))
@@ -2536,6 +2633,10 @@ function OfferingEditor({ slug, catalog, initial, onSaved, onClose }) {
         <label className="ad-field">จองได้สูงสุดกี่คนต่อครั้ง<input type="number" min={1} value={o.maxPartySize} onChange={(e) => set({ maxPartySize: e.target.value })} /></label>
         <label className="ad-field">ลำดับที่แสดง<input type="number" value={o.sortOrder} onChange={(e) => set({ sortOrder: e.target.value })} /></label>
       </div>
+      <label className="ad-check">
+        <input type="checkbox" checked={o.premium === true} onChange={(e) => set({ premium: e.target.checked })} />
+        แสดงป้าย "พรีเมียม ✨" บนหน้าจอง
+      </label>
 
       <div className="ad-field">
         ต้องใช้อะไร
@@ -3201,6 +3302,12 @@ function DepositSettings({ settings, setSetting }) {
           <label className="ad-field">พร้อมเพย์ (ไม่บังคับ)<input maxLength={20} inputMode="numeric" placeholder="เบอร์มือถือหรือเลขบัตร" value={info.promptPay ?? ""} onChange={(e) => setInfo("promptPay", e.target.value)} /></label>
           <label className="ad-field">ข้อความถึงลูกค้า (ไม่บังคับ)<input maxLength={200} placeholder="เช่น โอนแล้วแนบสลิปในหน้านี้" value={info.note ?? ""} onChange={(e) => setInfo("note", e.target.value)} /></label>
         </div>
+      )}
+      {(mode === "fixed" || mode === "percent") && (
+        <label className="ad-check">
+          <input type="checkbox" checked={settings.depositAllowFull !== false} onChange={(e) => setSetting("depositAllowFull", e.target.checked)} />
+          ให้ลูกค้าเลือกจ่ายเต็มจำนวนตอนจองได้ (แทนมัดจำ · จ่ายครบแล้วไม่ต้องจ่ายเพิ่มที่ร้าน)
+        </label>
       )}
       {mode !== "none" && (
         <label className="ad-check">

@@ -9,7 +9,7 @@ const { transformSync } = require('next/dist/build/swc');
 
 function loadComponents(file = 'booking-presentation.jsx') {
   const filename = path.join(__dirname, file);
-  const source = fs.readFileSync(filename, 'utf8') + (file.includes('shop-admin-client') ? '\nexport { ResourceEditor, ResourcesTab, emptyResource, ReadOnly };' : file === 'booking-v2-client.jsx' ? '\nexport { OptionBody, DateStrip, TimeTabs };' : '');
+  const source = fs.readFileSync(filename, 'utf8') + (file.includes('shop-admin-client') ? '\nexport { ResourceEditor, ResourcesTab, emptyResource, ReadOnly };' : file === 'booking-v2-client.jsx' ? '\nexport { OptionBody, DateStrip, TimeTabs, MemberWelcome, StaffRow };' : '');
   const { code } = transformSync(source, {
     filename,
     jsc: { parser: { syntax: 'ecmascript', jsx: true }, transform: { react: { runtime: 'automatic' } } },
@@ -257,4 +257,89 @@ test('initials skip the kind word and keep a Thai leading vowel with its consona
   assert.equal(initial('สนาม A'), 'A');
   assert.equal(initial('ช่าง'), 'ช');
   assert.equal(initial(''), '◇');
+});
+
+test('LINE member welcome: picture, name, tier, points and the next booking; outside LINE a sign-in button; nothing without LIFF', () => {
+  const { MemberWelcome } = loadComponents('booking-v2-client.jsx');
+  const liff = { idToken: 't', name: 'malee', pictureUrl: 'https://profile.line-scdn.net/x' };
+  const welcome = {
+    customer: { name: 'มาลี ใจดี', phone: '0812345678', visits: 3 },
+    points: { name: 'Bloom Club', balance: 1250, tier: { name: 'Gold' }, usable: 2 },
+    next: { status: 'confirmed', date: '2026-11-10', start: '14:00', offering: 'ตัดผม', link: '/b/bloom-hair/manage/abc' }
+  };
+  const html = render(MemberWelcome, { liff, welcome, slug: 'bloom-hair' });
+  assert.match(html, /src="https:\/\/profile.line-scdn.net\/x"/);
+  assert.match(html, /คุณ มาลี ใจดี/);
+  assert.match(html, /มาแล้ว 3 ครั้ง/);
+  assert.match(html, />Gold</);
+  assert.match(html, /1,250/);
+  assert.match(html, /แลกได้ 2 รางวัล/);
+  assert.match(html, /href="\/b\/bloom-hair\/manage\/abc"/);
+  assert.match(html, /14:00 น\./);
+  assert.doesNotMatch(html, /จองซ้ำ/, 'no rebook unless the page offers it');
+  const again = render(MemberWelcome, { liff, welcome, slug: 'bloom-hair', rebook: { offeringId: 'c1', offering: 'ตัดผม', resourceId: 'a1', resource: 'ช่างแนน' }, onRebook() {} });
+  assert.match(again, /data-testid="member-rebook"/);
+  assert.match(again, /จองซ้ำ/);
+  assert.match(again, /ตัดผม · ช่างแนน/);
+  // first time here: welcome, LINE name, no stats
+  const first = render(MemberWelcome, { liff: { ...liff, pictureUrl: null }, welcome: { customer: null, points: null, next: null }, slug: 'bloom-hair' });
+  assert.match(first, /ยินดีต้อนรับ</);
+  assert.match(first, /คุณ malee/);
+  assert.doesNotMatch(first, /คะแนนสะสม|นัดถัดไป/);
+  // a browser with LIFF set up: sign in; no LIFF at all: nothing
+  assert.match(render(MemberWelcome, { liff: { idToken: null, login: () => {} }, welcome: null, slug: 'bloom-hair' }), /เข้าสู่ระบบด้วย LINE/);
+  assert.equal(render(MemberWelcome, { liff: { idToken: null, login: null }, welcome: null, slug: 'bloom-hair' }), '');
+});
+
+test('header shows today\'s hours, or that the shop is closed today', () => {
+  const { ShopHeader } = loadComponents();
+  assert.match(render(ShopHeader, { shop: { name: 'Bloom', today: { open: '10:00', close: '20:00', state: 'later' } } }), /เปิดวันนี้ 10:00–20:00 น\./);
+  assert.match(render(ShopHeader, { shop: { name: 'Bloom', today: { open: '10:00', close: '20:00', state: 'open' } } }), /เปิดอยู่ · ถึง 20:00 น\./);
+  assert.match(render(ShopHeader, { shop: { name: 'Bloom', today: { open: '10:00', close: '20:00', state: 'closed' } } }), /วันนี้ปิดแล้ว/);
+  assert.match(render(ShopHeader, { shop: { name: 'Bloom', today: null } }), /วันนี้ร้านปิด/);
+  assert.doesNotMatch(render(ShopHeader, { shop: { name: 'Bloom' } }), /เปิดวันนี้|วันนี้ร้านปิด/);
+  // one line: today, then where — no second line of 'online booking' text
+  const line = render(ShopHeader, { shop: { name: 'Bloom', today: { open: '10:00', close: '20:00', state: 'open' }, address: 'สยามสแควร์ ซอย 3' }, subtitle: 'จองคิวออนไลน์' });
+  assert.match(line, /<p class="bk-shop-line">.*เปิดอยู่ · ถึง 20:00 น\..*· สยามสแควร์ ซอย 3.*<\/p>/);
+  assert.equal((line.match(/<p/g) || []).length, 1);
+  assert.doesNotMatch(line, /จองคิวออนไลน์/);
+  assert.match(render(ShopHeader, { shop: { name: 'Bloom', today: { open: '10:00', close: '20:00', state: 'closed' }, address: 'สยาม' } }), /วันนี้ปิดแล้ว<\/span>/);
+});
+
+test('ยอดนิยม only on a service the shop really books most; no made-up badge from the price', () => {
+  const { OptionBody } = loadComponents('booking-v2-client.jsx');
+  const base = { ask: 'offering', option: { value: 'c1' }, resourceWord: 'ช่าง', shop: {} };
+  const cheap = render(OptionBody, { ...base, offering: { id: 'c1', name: 'ตัดผม', price: { amount: 450, unit: 'per_booking' }, popular: false } });
+  assert.doesNotMatch(cheap, /ยอดนิยม|บริการแนะนำ/);
+  const hot = render(OptionBody, { ...base, offering: { id: 'c1', name: 'ตัดผม', price: { amount: 450, unit: 'per_booking' }, popular: true } });
+  assert.match(hot, /ยอดนิยม/);
+  // พรีเมียม is the shop's tick, not the price
+  const dear = render(OptionBody, { ...base, offering: { id: 'c1', name: 'ทำสีผม', price: { amount: 2500, unit: 'per_booking' }, premium: false } });
+  assert.doesNotMatch(dear, /พรีเมียม/);
+  const ticked = render(OptionBody, { ...base, offering: { id: 'c1', name: 'ทำสีผม', price: { amount: 900, unit: 'per_booking' }, premium: true } });
+  assert.match(ticked, /พรีเมียม/);
+});
+
+test('stylists as a row of faces on the day-and-time screen: anyone first, a full one cannot be tapped', () => {
+  const { StaffRow } = loadComponents('booking-v2-client.jsx');
+  const resources = new Map([['a1', { id: 'a1', name: 'ช่างแนน', media: [] }], ['a2', { id: 'a2', name: 'ช่างบี', media: [] }]]);
+  const options = [{ value: null, available: true }, { value: 'a1', label: 'ช่างแนน', available: true }, { value: 'a2', label: 'ช่างบี', available: false }];
+  const html = render(StaffRow, { options, resources, resourceWord: 'ช่าง', chosen: null, busy: false, onChoose() {} });
+  assert.equal((html.match(/data-testid="option-resource"/g) || []).length, 3);
+  assert.match(html, /data-value="any" data-selected="true"/);
+  assert.match(html, /ใครก็ได้/);
+  assert.match(html, /ช่างแนน/);
+  assert.match(html, /data-value="a2" data-selected="false" aria-checked="false" disabled=""/);
+  assert.match(html, /ไม่ว่าง/);
+});
+
+test('under the PromptPay QR one short line: the amount is above and the account below', () => {
+  const { DepositBox } = loadComponents();
+  const html = render(DepositBox, {
+    deposit: { due: 1800, qr: 'data:image/png;base64,AAAA', paymentInfo: { bank: 'กสิกรไทย', accountNumber: '123-4-56789-0', accountName: 'ประภาวัชร์ สุทธิประภา', promptPay: '0812345678' } },
+    status: 'held', deadline: '00:32 น.', uploadUrl: '/x', onUploaded() {}
+  });
+  assert.match(html, /<figcaption><strong>สแกนด้วยแอปธนาคาร<\/strong><\/figcaption>/);
+  assert.doesNotMatch(html, /ใส่ให้แล้ว|สแกนจ่าย/);
+  assert.match(html, /123-4-56789-0/);
 });

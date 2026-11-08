@@ -170,6 +170,7 @@ function NextBooking({ booking, directions, slug, shop }) {
           <CheckinQr slug={slug} id={booking.checkin} open={true} />
         </div>
       )}
+      {!booking.checkin && ["held", "pending"].includes(booking.status) && <p className="bk-qr-wait">QR เช็กอินจะแสดงเมื่อร้านยืนยันมัดจำแล้ว</p>}
 
       {/* Action Buttons */}
       <div style={{ display: "grid", gap: 8, marginTop: 4 }}>

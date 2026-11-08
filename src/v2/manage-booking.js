@@ -98,7 +98,8 @@ async function findManaged(db, slug, token, now = new Date()) {
     shop: { slug: shop.slug, name: shop.name, timezone: shop.timezone, address: shop.address ?? "", directions: directionsLink({ address: shop.address, mapUrl: shop.map_url }) },
     booking: {
       // what the check-in QR carries (the shop scans it at the desk; it opens nothing for anyone else)
-      checkin: OPEN.includes(b.status) ? b.id : null,
+      // only once the booking counts (a deposit still awaited: no QR yet)
+      checkin: ["confirmed", "checked_in"].includes(b.status) ? b.id : null,
       status: b.status,
       date: start.date,
       start: start.time,
@@ -114,7 +115,7 @@ async function findManaged(db, slug, token, now = new Date()) {
       addons: b.addons.map((a) => ({ name: a.name, quantity: a.quantity, total: Number(a.total) })),
       // a deposit to transfer (held), or a slip the shop has not looked at yet (pending)
       deposit: b.deposit_due !== null
-        ? { due: b.deposit_due, slips: b.slips, paymentInfo: ["held", "pending"].includes(b.status) ? b.payment_info : null, ...(qr ? { qr } : {}) }
+        ? { due: b.deposit_due, slips: b.slips, ...(b.price > 0 && b.deposit_due >= b.price ? { payFull: true } : {}), paymentInfo: ["held", "pending"].includes(b.status) ? b.payment_info : null, ...(qr ? { qr } : {}) }
         : null
     },
     cancel: policy(b.can_cancel),

@@ -83,3 +83,43 @@ test('add-on group editor: pick rule, offerings to tick, and each add-on with pr
   assert.match(html, /ลูกค้าเห็นตัวเลือกเหล่านี้หลังเลือกเวลา/);
   assert.doesNotMatch(html, /ยังไม่มีไม้แบดที่เปิดอยู่/);
 });
+
+test('checkout after a confirmed deposit: the deposit is taken off what the desk still takes', () => {
+  const { CheckoutForm } = load('[slug]/shop-admin-client.jsx', '\nexport { CheckoutForm };');
+  const booking = { id: 'b1', price: 600, start: '10:00', end: '11:00', offering: { name: 'ทรีตเมนต์' }, resources: [], customer: { name: 'มาลี', fromLine: false }, bill: { id: 'x', status: 'open', total: 600, paid: 200 } };
+  const html = render(CheckoutForm, { slug: 's', booking, onClose() {}, onSaved() {} });
+  assert.match(html, /หักมัดจำที่รับแล้ว −200 บาท/);
+  assert.match(html, /รับเงิน 400 บาท และปิดบิล/);
+  assert.match(html, /value="400"/);
+  const fresh = render(CheckoutForm, { slug: 's', booking: { ...booking, bill: null }, onClose() {}, onSaved() {} });
+  assert.doesNotMatch(fresh, /หักมัดจำ/);
+  assert.match(fresh, /รับเงิน 600 บาท และปิดบิล/);
+});
+
+test('overview (design AdminMobile): three numbers, the next customers, and "+" to take a booking', () => {
+  const { OverviewTab, lengthText } = load('[slug]/shop-admin-client.jsx', '\nexport { OverviewTab, lengthText };');
+  assert.equal(lengthText('13:00', '14:00'), '1 ชม.');
+  assert.equal(lengthText('13:00', '13:45'), '45 นาที');
+  assert.equal(lengthText('13:00', '14:30'), '1 ชม. 30 นาที');
+  assert.equal(lengthText('13:00', '15:00'), '2 ชม.');
+  assert.equal(lengthText('13:00', null), '');
+  const html = render(OverviewTab, { slug: 'bloom-hair', catalog: { shop: { name: 'Bloom' }, resources: [], offerings: [] }, onNavigate() {}, onOpenBooking() {}, onAddBooking() {} });
+  assert.match(html, /นัดวันนี้/);
+  assert.match(html, /รอยืนยัน/);
+  assert.match(html, /ยอดวันนี้/);
+  assert.match(html, /คิวถัดไป/);
+  assert.match(html, /class="ad-fab" aria-label="เพิ่มการจอง"/);
+  assert.doesNotMatch(html, /ทางลัด|ทรัพยากร \/ บริการ/);
+});
+
+test('bookings month calendar: weekday heads, the month in as many weeks as it needs, the chosen day marked', () => {
+  const { BookingCalendar } = load('[slug]/shop-admin-client.jsx', '\nexport { BookingCalendar };');
+  // November 2026 starts on a Sunday and has 30 days: five weeks
+  const html = render(BookingCalendar, { slug: 'bloom-hair', day: '2026-11-10', onDay() {}, refresh: null });
+  assert.equal((html.match(/role="columnheader"/g) || []).length, 7);
+  assert.equal((html.match(/role="gridcell"/g) || []).length, 35);
+  assert.match(html, /aria-selected="true"[^>]*aria-label="วันอังคารที่ 10 พฤศจิกายน 2569"/);
+  assert.match(html, /data-testid="booking-calendar"/);
+  // February 2026 starts on a Sunday and has 28 days: four weeks
+  assert.equal((render(BookingCalendar, { slug: 'x', day: '2026-02-03', onDay() {} }).match(/role="gridcell"/g) || []).length, 28);
+});

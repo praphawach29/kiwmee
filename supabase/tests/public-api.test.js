@@ -69,6 +69,39 @@ test("shop info lists what the page needs and nothing private", { skip }, async 
   await assert.rejects(shopInfo(db, "../etc"), (e) => e.status === 404);
 });
 
+test("ยอดนิยม: only a service really booked most here lately (at least 3 that went ahead); none for a quiet shop", { skip }, async () => {
+  const flags = async () => (await shopInfo(db, "bloom-hair")).offerings.map((o) => [o.name, o.popular]);
+  await inTx(async () => {
+    assert.ok((await flags()).every(([, p]) => p === false), "no bookings yet: no badge, whatever the price");
+    const at = (time, resourceId) => ({ selected: { offeringId: CUT, resourceId, date: DAY, time }, customer: { name: "ลูกค้า", phone: "0812345678" } });
+    await book(db, "bloom-hair", at("10:00", NAN));
+    const two = await book(db, "bloom-hair", at("12:00", NAN));
+    assert.ok((await flags()).every(([, p]) => p === false), "two bookings are not enough");
+    await book(db, "bloom-hair", at("14:00", NAN));
+    assert.deepEqual((await flags()).filter(([, p]) => p).map(([n]) => n), ["ตัดผมหญิง + สระไดร์"]);
+    // a cancelled one does not count; nor does a booking from long ago
+    await db.query("update public.bookings set status = 'cancelled' where id = $1", [two.id]);
+    assert.ok((await flags()).every(([, p]) => p === false));
+    await db.query("update public.bookings set status = 'confirmed', created_at = now() - interval '40 days' where id = $1", [two.id]);
+    assert.ok((await flags()).every(([, p]) => p === false));
+  });
+});
+
+test("today's hours for the header, in the shop's time; a full-day closure or a closed weekday = closed today", { skip }, async () => {
+  const noon = new Date(`${DAY}T05:00:00Z`).getTime(); // 12:00 Bangkok
+  assert.deepEqual((await shopInfo(db, "bloom-hair", { now: noon })).today, { open: "10:00", close: "20:00", state: "open" });
+  assert.equal((await shopInfo(db, "bloom-hair", { now: noon - 4 * 3600000 })).today.state, "later"); // 08:00
+  assert.equal((await shopInfo(db, "bloom-hair", { now: noon + 9 * 3600000 })).today.state, "closed"); // 21:00
+  await inTx(async () => {
+    await db.query("insert into public.business_closures (business_id, date, is_full_day, reason) select id, $1, true, 'หยุด' from public.businesses where slug = 'bloom-hair'", [DAY]);
+    assert.equal((await shopInfo(db, "bloom-hair", { now: noon })).today, null);
+  });
+  await inTx(async () => {
+    await db.query("update public.business_hours set is_open = false where business_id = (select id from public.businesses where slug = 'bloom-hair') and day_of_week = extract(dow from $1::date)", [DAY]);
+    assert.equal((await shopInfo(db, "bloom-hair", { now: noon })).today, null);
+  });
+});
+
 test("the salon page: start page, then each way in walks to the customer form", { skip }, async () => {
   const first = await step(db, "bloom-hair", { selected: {} });
   assert.deepEqual(first.next, { step: "start", choices: ["date", "offering"] });

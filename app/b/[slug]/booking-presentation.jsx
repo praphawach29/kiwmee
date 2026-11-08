@@ -164,22 +164,49 @@ export function ResourceSummary({ resources }) {
   return <span className="bk-manage-resources">{resources.map((resource) => <span className="bk-manage-resource" key={resource.id || resource.name}>{safeMedia(resource.media).length > 0 && <ResourceThumbnail resource={resource} />}<span>{resource.name}</span></span>)}</span>;
 }
 
-export function ShopHeader({ shop, subtitle }) {
+// steps: 1–3, the three steps shown at the header's right on wide screens (design BookDesktop)
+const HEADER_STEPS = ["บริการ", "วันและเวลา", "ข้อมูลผู้จอง"];
+export function ShopHeader({ shop, subtitle, steps = null }) {
   return (
     <header className="bk-header bk-shop-header">
       <span className="bk-shop-monogram" aria-hidden="true">{shop.name?.[0]}</span>
       <div className="bk-shop-header-info">
         <h1>{shop.name}</h1>
-        <p className="bk-muted">
-          {shop.address ? (
-            <span className="bk-header-location">
-              <span className="bk-pin-icon" aria-hidden="true">📍</span> {shop.address}
+        {shop.today !== undefined ? (
+          // one line (design "Kiwmee ปรับหน้าตา"): open today or not, then where
+          <p className="bk-shop-line">
+            <span className="bk-shop-today" data-open={shop.today?.state === "open"}>
+              {!shop.today
+                ? `วันนี้ร้านปิด${shop.address ? "" : " · จองล่วงหน้าได้"}`
+                : shop.today.state === "open"
+                  ? `เปิดอยู่ · ถึง ${shop.today.close} น.`
+                  : shop.today.state === "closed"
+                    ? `วันนี้ปิดแล้ว${shop.address ? "" : " · จองล่วงหน้าได้"}`
+                    : `เปิดวันนี้ ${shop.today.open}–${shop.today.close} น.`}
             </span>
-          ) : (
-            subtitle
-          )}
-        </p>
+            {shop.address && <span className="bk-shop-place"> · {shop.address}</span>}
+          </p>
+        ) : (
+          <p className="bk-muted">
+            {shop.address ? (
+              <span className="bk-header-location">
+                <span className="bk-pin-icon" aria-hidden="true">📍</span> {shop.address}
+              </span>
+            ) : (
+              subtitle
+            )}
+          </p>
+        )}
       </div>
+      {steps && (
+        <ol className="bk-header-steps" aria-label="ขั้นตอนการจอง">
+          {HEADER_STEPS.map((label, i) => (
+            <li key={label} data-state={i + 1 < steps ? "done" : i + 1 === steps ? "now" : "later"} aria-current={i + 1 === steps ? "step" : undefined}>
+              {i + 1 < steps ? "✓" : i + 1} {label}
+            </li>
+          ))}
+        </ol>
+      )}
     </header>
   );
 }
@@ -207,16 +234,22 @@ export function BookingProgress({ phase, ask, resourceWord = "รายการ
     stepTitle = "เลือกบริการ";
   } else {
     stepIndex = 1;
-    stepTitle = ask === "resource" ? `เลือก${resourceWord}` : ask === "date" ? "เลือกวัน" : ask === "time" ? "เลือกเวลา" : ask === "duration" ? "เลือกระยะเวลา" : ask === "addons" ? "เลือกตัวเลือกเสริม" : "เลือกคิว";
+    stepTitle = ask === "resource" ? `เลือก${resourceWord}` : ask === "date" ? "เลือกวัน" : ask === "time" ? "วันและเวลา" : ask === "duration" ? "เลือกระยะเวลา" : ask === "addons" ? "เลือกตัวเลือกเสริม" : "เลือกคิว";
   }
 
   const percent = Math.round(((stepIndex + 1) / totalSteps) * 100);
   const current = phase === "complete" ? 3 : phase === "customer" ? 2 : stepIndex === 0 ? 0 : 1;
+  // what comes after this screen: the day and time still to pick come before the form
+  const nextText = phase === "selection" && ["resource", "duration", "party"].includes(ask)
+    ? "ต่อไป: วันและเวลา"
+    : phase === "selection" && ask === "date"
+      ? "ต่อไป: เลือกเวลา"
+      : PHASES[current + 1] ? `ต่อไป: ${PHASES[current + 1].label}` : "เสร็จแล้ว";
   return (
     <div className="bk-progress-wrap">
       <div className="bk-progress-meta">
-        <span className="bk-step-badge">ขั้นตอนที่ {stepIndex + 1} จาก {totalSteps} · {stepTitle}</span>
-        <span className="bk-progress-pct">{percent}% เสร็จสิ้น</span>
+        <span className="bk-step-badge"><b>ขั้นที่ {stepIndex + 1}</b> จาก {totalSteps} · {stepTitle}</span>
+        <span className="bk-progress-pct">{nextText}</span>
       </div>
       <ol className="bk-progress" aria-label="ภาพรวมการจอง">
         {PHASES.map((item, index) => (
@@ -291,19 +324,20 @@ export function BookingReview({ items, onEdit, busy, price, id = "booking-review
 }
 
 // Stacked confirmation drawer matching Stitch Screen 3: status badge + price on top, full-width button below
-export function BookingSubmitBar({ formId, disabled, busy, price, deposit, label = "ราคารวม" }) {
+export function BookingSubmitBar({ formId, disabled, busy, price, deposit, payFull = false, label = "ราคารวม" }) {
   const isDeposit = typeof deposit === "number" && deposit > 0;
+  // two columns, each a label over its amount: the whole price, and what is paid now (or at the shop)
   return (
     <div className="bk-submit-bar" data-has-price={Boolean(price) || undefined}>
       {price && (
         <div className="bk-submit-total" aria-hidden="true">
-          <div className="bk-submit-badge-row">
-            <span className="bk-pulse-dot" aria-hidden="true" />
-            <span>{isDeposit ? `มัดจำ ฿${deposit.toLocaleString("th-TH")} · รับ QR หลังยืนยัน` : "ชำระเงินตามเงื่อนไขของร้าน"}</span>
-          </div>
-          <div className="bk-submit-price-row">
+          <div className="bk-submit-sum">
             <small>{label}</small>
             <strong>{price}</strong>
+          </div>
+          <div className="bk-submit-now" data-now={isDeposit || undefined}>
+            <small>{isDeposit ? (payFull ? "จ่ายเต็มตอนนี้" : "มัดจำตอนนี้") : "ชำระเงิน"}</small>
+            <strong>{isDeposit ? `${deposit.toLocaleString("th-TH")} บาท` : "ที่ร้าน"}</strong>
           </div>
         </div>
       )}
@@ -322,7 +356,7 @@ export function BookingSubmitBar({ formId, disabled, busy, price, deposit, label
               <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
               <polyline points="22 4 12 14.01 9 11.01" />
             </svg>
-            <span>{isDeposit ? "ยืนยันและดู QR มัดจำ" : "ยืนยันการจองคิว"}</span>
+            <span>{isDeposit ? (payFull ? "ยืนยันและดู QR ชำระเงิน" : "ยืนยันและดู QR มัดจำ") : "ยืนยันการจองคิว"}</span>
           </span>
         )}
       </button>
@@ -474,7 +508,7 @@ export function DepositBox({ deposit, status, deadline, uploadUrl, onUploaded })
   return (
     <section className="bk-deposit" data-status={status} aria-labelledby="deposit-title">
       <div className="bk-deposit-head">
-        <h2 id="deposit-title">{waiting ? "โอนมัดจำเพื่อยืนยันคิว" : "ส่งสลิปแล้ว รอร้านตรวจ"}</h2>
+        <h2 id="deposit-title">{waiting ? (deposit.payFull ? "โอนชำระเต็มจำนวนเพื่อยืนยันคิว" : "โอนมัดจำเพื่อยืนยันคิว") : "ส่งสลิปแล้ว รอร้านตรวจ"}</h2>
         <strong className="bk-deposit-amount">{baht(deposit.due)}</strong>
       </div>
       {waiting && deadline && <p className="bk-deposit-deadline">กรุณาโอนและส่งสลิปภายใน <b>{deadline}</b> ไม่อย่างนั้นคิวจะถูกปล่อยให้คนอื่น</p>}
@@ -483,9 +517,9 @@ export function DepositBox({ deposit, status, deadline, uploadUrl, onUploaded })
         <figure className="bk-qr">
           <span className="bk-qr-brand" aria-hidden="true">PromptPay · พร้อมเพย์</span>
           <img src={deposit.qr} alt={`QR พร้อมเพย์ ยอด ${baht(deposit.due)}`} width="220" height="220" />
+          {/* the amount is above and the account below: one short line is enough */}
           <figcaption>
-            <strong>สแกนจ่ายด้วยแอปธนาคาร</strong>
-            <span>ยอด {baht(deposit.due)} ใส่ให้แล้ว{info.accountName ? ` · ${info.accountName}` : ""}</span>
+            <strong>สแกนด้วยแอปธนาคาร</strong>
           </figcaption>
           <a className="bk-secondary" href={deposit.qr} download="promptpay-qr.png">บันทึกรูป QR</a>
           <small className="bk-muted">ในแอป LINE: กดค้างที่รูปเพื่อบันทึก แล้วเลือกจากอัลบั้มในแอปธนาคาร</small>

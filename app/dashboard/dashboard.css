@@ -946,3 +946,80 @@
 .ad-logo-row { display: grid; gap: 16px; align-items: center; }
 @media (min-width: 700px) { .ad-logo-row { grid-template-columns: minmax(0, 360px) auto; } }
 .ad-upload-button { display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.ad-booking-note { margin: 4px 0; padding: 6px 10px; border-radius: 10px; background: #fff8e6; color: #5c4400; font-size: .86rem; line-height: 1.5; overflow-wrap: anywhere; }
+
+/* Overview (design "Kiwmee ปรับหน้าตา" · AdminMobile): the day at a glance */
+.ad-overview { gap: 14px; }
+.ad-overview-day { display: flex; align-items: center; gap: 8px; }
+.ad-overview-date { position: relative; flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); font-weight: 600; color: var(--ink); cursor: pointer; }
+.ad-overview-date span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the native picker stays under the label, invisible: tapping the label opens it */
+.ad-overview-date input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.ad-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.ad-kpi { display: grid; gap: 2px; justify-items: start; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.ad-kpi span { font-size: .78rem; color: var(--muted); }
+.ad-kpi strong { font-family: var(--font-display, inherit); font-weight: 500; font-size: 1.65rem; line-height: 1.15; }
+.ad-kpi strong[data-small] { font-size: 1.35rem; padding-top: 3px; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.ad-kpi[data-tone="accent"] strong { color: var(--grape-deep); }
+.ad-kpi:hover { border-color: var(--grape); }
+.ad-queue-wrap { display: grid; gap: 8px; }
+.ad-queue-wrap h2 { margin: 0; font-size: 1.1rem; }
+.ad-queue { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.ad-queue-item { display: flex; align-items: center; gap: 12px; padding: 12px 6px 12px 14px; border: 1px solid var(--line); border-left: 4px solid var(--grape); border-radius: 16px; background: var(--surface); min-width: 0; }
+.ad-queue-item[data-tone="ok"] { border-left-color: var(--mint, #3DDC97); }
+.ad-queue-item[data-tone="warn"] { border-left-color: #F5A524; }
+.ad-queue-item[data-tone="info"] { border-left-color: var(--grape); }
+.ad-queue-time { display: grid; width: 56px; flex: none; }
+.ad-queue-time strong { font-family: var(--font-display, inherit); font-weight: 500; font-size: 1.05rem; }
+.ad-queue-time span { font-size: .72rem; color: var(--muted); }
+.ad-queue-main { display: grid; gap: 2px; flex: 1; min-width: 0; justify-items: start; }
+.ad-queue-main > strong { font-size: .95rem; overflow-wrap: anywhere; }
+.ad-queue-what { max-width: 100%; font-size: .82rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ad-queue-main .ad-status { font-size: .7rem; }
+.ad-queue-act { flex: none; min-height: 40px; padding: 0 12px; font-size: .82rem; white-space: nowrap; }
+.ad-queue-more { flex: none; width: 32px; min-height: 40px; border: 0; background: none; color: var(--muted); font-size: 1.15rem; cursor: pointer; }
+.ad-takings { gap: 8px; }
+.ad-takings-row { display: grid; gap: 2px; }
+.ad-takings-row strong { font-family: var(--font-display, inherit); font-weight: 500; font-size: 1.5rem; }
+.ad-fab { position: fixed; right: 18px; bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 29; display: grid; place-items: center; width: 56px; height: 56px; border: 0; border-radius: 18px; background: var(--grape); color: #fff; font-size: 1.8rem; line-height: 1; box-shadow: 0 10px 24px rgba(106, 76, 255, .35); cursor: pointer; }
+.ad-fab-label { display: none; }
+.ad-overview { padding-bottom: 72px; }
+@media (min-width: 1100px) {
+  /* wide screens: the sidebar carries the menu; "+" is a plain button at the top right */
+  .ad-overview { padding-bottom: 0; }
+  .ad-fab { position: static; justify-self: end; order: -1; width: auto; height: auto; min-height: 44px; padding: 0 18px; border-radius: 12px; font-size: 1rem; display: inline-flex; gap: 6px; box-shadow: none; }
+  .ad-fab-label { display: inline; }
+  .ad-kpis { gap: 12px; }
+  .ad-kpi { padding: 14px 16px; }
+}
+
+/* Bookings: the month calendar (owner's ask) — a dot per day with bookings, tap a day for its list */
+.ad-bookings-layout { display: grid; gap: 16px; align-items: start; min-width: 0; }
+.ad-calendar { gap: 10px; }
+.ad-calendar-head { display: flex; align-items: center; gap: 8px; }
+.ad-calendar-head .ad-icon-btn[hidden] { display: none; }
+.ad-calendar-title { display: grid; flex: 1; min-width: 0; text-align: center; }
+.ad-calendar-title strong { font-size: 1.05rem; }
+.ad-calendar-title .ad-muted { font-size: .78rem; }
+.ad-calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.ad-calendar-dow { padding: 2px 0 4px; text-align: center; font-size: .75rem; color: var(--muted); }
+.ad-calendar-day { position: relative; display: grid; justify-items: center; align-content: start; gap: 2px; min-height: 48px; padding: 6px 0 4px; border: 1px solid transparent; border-radius: 12px; background: none; color: var(--ink); font: inherit; font-size: .92rem; cursor: pointer; }
+.ad-calendar-day:hover { background: var(--bg); }
+.ad-calendar-day[data-outside] { color: var(--muted); opacity: .5; }
+.ad-calendar-day[data-today] { border-color: var(--grape); }
+.ad-calendar-day[data-today] > span { font-weight: 700; color: var(--grape-deep); }
+.ad-calendar-day[aria-selected="true"] { background: var(--grape); border-color: var(--grape); color: #fff; }
+.ad-calendar-day[aria-selected="true"] > span { color: #fff; }
+.ad-calendar-dot { display: inline-grid; place-items: center; min-width: 8px; height: 8px; padding: 0; border-radius: 999px; background: var(--grape); color: #fff; font-style: normal; font-size: .62rem; font-weight: 700; line-height: 1; }
+.ad-calendar-dot:not(:empty) { min-width: 16px; height: 16px; padding: 0 4px; }
+.ad-calendar-dot[data-waiting] { background: #F5A524; }
+.ad-calendar-day[aria-selected="true"] .ad-calendar-dot { background: #fff; color: var(--grape-deep); }
+.ad-calendar-day[aria-selected="true"] .ad-calendar-dot[data-waiting] { background: #FFE2A8; color: #7a4a00; }
+.ad-calendar-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; font-size: .78rem; color: var(--muted); }
+.ad-calendar-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.ad-calendar-legend .ad-link { margin-left: auto; }
+@media (min-width: 1100px) {
+  /* wide screens: the calendar beside the day's list */
+  .ad-bookings-layout { grid-template-columns: 360px minmax(0, 1fr); }
+  .ad-calendar { position: sticky; top: 16px; }
+}

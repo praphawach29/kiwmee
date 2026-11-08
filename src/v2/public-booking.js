@@ -9,7 +9,7 @@ const crypto = require("node:crypto");
 const { REASON_TEXT } = require("./reason-text");
 const { AppError, badRequest, notFound } = require("../errors");
 const { findShopWithCatalog } = require("./catalog-repository");
-const { getOptions, nextStep, reconcile, localToMs } = require("./options-engine");
+const { getOptions, nextStep, reconcile, localToMs, msToLocal } = require("./options-engine");
 const { issueToken } = require("./manage-booking");
 const { getSetting } = require("./platform-settings");
 const { bookingCard, manageLink, pushLine, sealLink } = require("./line-notify");
@@ -67,7 +67,41 @@ function priceFrom(prices, offeringId) {
   return { amount: cheapest.amount, unit: cheapest.unit, varies: new Set(own.map((p) => p.amount)).size > 1 };
 }
 
-async function shopInfo(db, slug) {
+// The services booked most at this shop in the last 30 days: the top 2 (the top 1 when the shop has
+// only 1–3 services), each with at least POPULAR_MIN bookings that went ahead. None for a new shop.
+const POPULAR_MIN = 3;
+async function popularOfferings(db, businessId, offeringCount, now = Date.now()) {
+  if (offeringCount < 2) return new Set();
+  const { rows } = await db.query(
+    `select b.offering_id, count(*)::int as n
+       from public.bookings b join public.offerings o on o.id = b.offering_id and o.active
+      where b.business_id = $1 and b.status in ('confirmed', 'checked_in', 'completed')
+        and b.created_at >= $2::timestamptz - interval '30 days'
+      group by b.offering_id having count(*) >= $3
+      order by count(*) desc, b.offering_id
+      limit $4`,
+    [businessId, new Date(now).toISOString(), POPULAR_MIN, offeringCount <= 3 ? 1 : 2]
+  );
+  return new Set(rows.map((r) => r.offering_id));
+}
+
+// Today's opening hours in the shop's own time, for the page header: { open, close } or null (closed today)
+function todayHours(catalog, timezone, now = Date.now()) {
+  const date = msToLocal(now, timezone).date;
+  const day = new Date(`${date}T00:00:00Z`).getUTCDay();
+  if ((catalog.closures ?? []).some((c) => c.date === date && c.is_full_day)) return null;
+  const hours = catalog.hours ?? [];
+  // a shop with no hours saved yet is open 10–19 every day (as the options engine assumes)
+  const h = hours.length ? hours.find((x) => x.day_of_week === day) : { is_open: true, open_time: "10:00", close_time: "19:00" };
+  if (!h?.is_open) return null;
+  const open = String(h.open_time).slice(0, 5);
+  const close = String(h.close_time).slice(0, 5);
+  const time = msToLocal(now, timezone).time;
+  // before opening · open now · closed for the day
+  return { open, close, state: time < open ? "later" : time < close ? "open" : "closed" };
+}
+
+async function shopInfo(db, slug, { now = Date.now() } = {}) {
   const { shop, catalog } = await requireShopWithCatalog(db, slug);
   // Keep gallery reads out of the availability snapshot: media never affects booking rules.
   const { rows: [gallery] } = await db.query(
@@ -91,6 +125,7 @@ async function shopInfo(db, slug) {
       .filter(Boolean)
   );
   const bySort = (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name.localeCompare(b.name);
+  const popular = await popularOfferings(db, shop.id, catalog.offerings.length, now);
   return {
     slug: shop.slug,
     name: shop.name,
@@ -102,6 +137,8 @@ async function shopInfo(db, slug) {
     address: gallery.address ?? "",
     directions: directionsLink({ address: gallery.address, mapUrl: gallery.map_url }),
     documentRetentionDays: catalog.settings?.document_retention_days ?? 30,
+    // "เปิดวันนี้ 10:00–19:00" under the shop's name; null = closed today
+    today: todayHours(catalog, shop.timezone, now),
     flow: {
       entry: catalog.flow.entry,
       then: catalog.flow.then,
@@ -111,7 +148,13 @@ async function shopInfo(db, slug) {
     // asked before booking; the transfer details come with the held booking
     deposit: (catalog.settings?.deposit_mode ?? "none") === "none"
       ? null
-      : { mode: catalog.settings.deposit_mode, value: catalog.settings.deposit_value, holdMinutes: catalog.settings.hold_minutes },
+      : {
+          mode: catalog.settings.deposit_mode,
+          value: catalog.settings.deposit_value,
+          holdMinutes: catalog.settings.hold_minutes,
+          // the customer may pick "pay in full" instead of the deposit (migration …003800)
+          allowFull: ["fixed", "percent"].includes(catalog.settings.deposit_mode) && catalog.settings.deposit_allow_full !== false
+        },
     selfService: {
       cancel: catalog.settings?.customer_can_cancel ?? true,
       reschedule: catalog.settings?.customer_can_reschedule ?? true,
@@ -131,7 +174,11 @@ async function shopInfo(db, slug) {
       minDays: o.duration_mode === "days" ? o.min_days : null,
       maxDays: o.duration_mode === "days" ? o.max_days : null,
       maxPartySize: o.max_party_size,
-      price: priceFrom(catalog.prices, o.id)
+      price: priceFrom(catalog.prices, o.id),
+      // "ยอดนิยม": among the most booked here in the last 30 days (real bookings, not a guess)
+      popular: popular.has(o.id),
+      // "พรีเมียม ✨": ticked by the shop (migration …004000)
+      premium: o.premium === true
     })),
     resources: catalog.resources
       .filter((r) => pickable.has(r.id))
@@ -225,6 +272,8 @@ async function book(
     if (!line) throw new AppError("FORBIDDEN", "ยืนยันตัวตน LINE ไม่สำเร็จ กรุณาเปิดจาก LINE อีกครั้ง", 403);
   }
   if (!name) throw new AppError("INVALID_CUSTOMER", "กรุณากรอกชื่อ", 422);
+  // "ฝากถึงร้าน": a short note kept with the booking for the shop (migration …003900)
+  const note = typeof body.customer?.note === "string" ? body.customer.note.replace(/\s+/g, " ").trim().slice(0, 300) : "";
   if (phone ? !THAI_PHONE.test(phone) : !line) {
     throw new AppError("INVALID_CUSTOMER", "กรุณากรอกเบอร์โทร 10 หลัก", 422);
   }
@@ -234,13 +283,18 @@ async function book(
   const startAt = new Date(localToMs(selected.date, selected.time, shop.timezone)).toISOString();
   // a deposit to transfer (or a flow that ends in payment): the booking is held until the shop has it
   const hold = (catalog.flow.then || []).includes("payment") || (catalog.settings?.deposit_mode ?? "none") !== "none";
+  // the customer chose to transfer the whole price instead of the deposit
+  const payFull = body.payFull === true && ["fixed", "percent"].includes(catalog.settings?.deposit_mode) && catalog.settings?.deposit_allow_full !== false;
   // the customer's link to see, cancel or move this booking (/b/<slug>/manage/<token>)
   const link = issueToken();
   let result;
   try {
     const { rows } = await db.query(
-      `select x.booking, case when $12::uuid is null then null else public.loyalty_hold_for_booking((x.booking->>'id')::uuid, $12::uuid) end as points
-         from (select public.booking_attach_manage_token(public.create_booking($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, null, $11::jsonb), $10) as booking) x`,
+      // one statement: the booking, the points set aside, then (paying in full) the due raised to the price
+      `select x.booking, p.points,
+              case when $13 then public.booking_pay_full((x.booking->>'id')::uuid, coalesce((p.points->>'discount')::numeric, 0)) end as full_due
+         from (select public.booking_attach_manage_token(public.create_booking($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, null, $11::jsonb), $10) as booking) x
+         cross join lateral (select case when $12::uuid is null then null else public.loyalty_hold_for_booking((x.booking->>'id')::uuid, $12::uuid) end as points offset 0) p`,
       [
         shop.id,
         selected.offeringId,
@@ -253,10 +307,12 @@ async function book(
         line ? "liff" : "web",
         link.hash,
         JSON.stringify(selected.addons ?? {}),
-        rewardId
+        rewardId,
+        payFull
       ]
     );
     const b = rows[0].booking;
+    if (note) await db.query("update public.bookings set customer_note = $2 where id = $1", [b.id, note]);
     const ids = b.resources.filter((r) => !r.addon_id).map((r) => r.resource_id); // a rented racket is not "the stylist"
     const names = (await db.query("select id, name from public.resources where business_id = $1 and id = any($2::uuid[])", [shop.id, ids])).rows;
     result = {
@@ -266,7 +322,11 @@ async function book(
       endAt: b.end_at,
       holdExpiresAt: b.hold_expires_at,
       deposit: b.deposit_due !== null && b.deposit_due !== undefined
-        ? { due: Number(b.deposit_due), paymentInfo: catalog.settings?.payment_info ?? {} }
+        ? {
+            due: Number(rows[0].full_due ?? b.deposit_due),
+            paymentInfo: catalog.settings?.payment_info ?? {},
+            ...(rows[0].full_due !== null && rows[0].full_due !== undefined ? { payFull: true } : {})
+          }
         : null,
       price: b.price,
       manageToken: link.token,

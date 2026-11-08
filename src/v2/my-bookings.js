@@ -55,7 +55,8 @@ async function myBookings(db, slug, body = {}, { now = new Date(), verifyLineTok
       upcoming,
       booking: {
         // what the check-in QR carries (the shop scans it at the desk; it opens nothing for anyone else)
-        checkin: upcoming ? b.id : null,
+        // only once the booking counts (a deposit still awaited: no QR yet)
+        checkin: upcoming && ["confirmed", "checked_in"].includes(status) ? b.id : null,
         status,
         date: start.date,
         start: start.time,
@@ -119,4 +120,60 @@ async function myRewards(db, slug, body = {}, { verifyLineToken = (token) => ver
   return { name: card.name, balance: card.balance, tier: card.tier ? { name: card.tier.name } : null, rewards };
 }
 
-module.exports = { myBookings, myMemberCode, myRewards };
+/**
+ * The booking page's welcome for a LINE member (body = { lineIdToken }): who they are to this shop —
+ * the name and phone they booked with last time (to fill the form), their points and tier, the next
+ * booking still to come, and how many visits so far. A first-timer gets { customer: null, ... }.
+ */
+async function myWelcome(db, slug, body = {}, { now = new Date(), verifyLineToken = (token) => verifyLineIdToken(token, db), env = process.env } = {}) {
+  const shop = await findShop(db, slug);
+  if (!shop) throw notFound("ไม่พบร้าน");
+  if (typeof body.lineIdToken !== "string" || !body.lineIdToken) throw new AppError("FORBIDDEN", "กรุณาเปิดจาก LINE", 403);
+  const line = await verifyLineToken(body.lineIdToken);
+  if (!line?.sub) throw new AppError("FORBIDDEN", "ยืนยันตัวตน LINE ไม่สำเร็จ กรุณาเปิดจาก LINE อีกครั้ง", 403);
+
+  const { rows: [c] } = await db.query(
+    `select c.phone,
+            coalesce((select b.customer_name from public.bookings b where b.customer_id = c.id and b.customer_name is not null
+                        order by b.created_at desc limit 1), c.name) as name,
+            (select count(*)::int from public.bookings b where b.customer_id = c.id and b.status = 'completed') as visits
+       from public.customers c where c.business_id = $1 and c.line_user_id = $2`,
+    [shop.id, line.sub]
+  );
+  const { rows: [n] } = await db.query(
+    `select b.id, b.status, b.start_at, b.line_manage_token, o.name as offering
+       from public.bookings b join public.customers c on c.id = b.customer_id join public.offerings o on o.id = b.offering_id
+      where b.business_id = $1 and c.business_id = $1 and c.line_user_id = $2 and b.end_at > $3
+        and (b.status in ('pending', 'confirmed', 'checked_in') or (b.status = 'held' and b.hold_expires_at > $3))
+      order by b.start_at limit 1`,
+    [shop.id, line.sub, now.toISOString()]
+  );
+  let next = null;
+  if (n) {
+    const start = msToLocal(new Date(n.start_at).getTime(), shop.timezone);
+    const token = openLink(n.id, n.line_manage_token, env);
+    next = { status: n.status, date: start.date, start: start.time, offering: n.offering, link: token ? `/b/${shop.slug}/manage/${token}` : null };
+  }
+  // what they had last time (not cancelled), for "จองซ้ำ": the service and who did it
+  const { rows: [l] } = await db.query(
+    `select b.offering_id, o.name as offering, o.active,
+            (select r.id from public.booking_resources br join public.resources r on r.id = br.resource_id
+              where br.booking_id = b.id and br.addon_id is null and r.active order by r.sort_order, r.name limit 1) as resource_id,
+            (select r.name from public.booking_resources br join public.resources r on r.id = br.resource_id
+              where br.booking_id = b.id and br.addon_id is null and r.active order by r.sort_order, r.name limit 1) as resource
+       from public.bookings b join public.customers c on c.id = b.customer_id join public.offerings o on o.id = b.offering_id
+      where b.business_id = $1 and c.business_id = $1 and c.line_user_id = $2 and b.status in ('confirmed', 'checked_in', 'completed')
+      order by b.start_at desc limit 1`,
+    [shop.id, line.sub]
+  );
+  const last = l?.active ? { offeringId: l.offering_id, offering: l.offering, resourceId: l.resource_id ?? null, resource: l.resource ?? null } : null;
+  const card = await memberCard(db, shop, line.sub).catch(() => null);
+  return {
+    last,
+    customer: c ? { name: c.name ?? "", phone: c.phone ?? "", visits: c.visits } : null,
+    points: card ? { name: card.name, balance: card.balance, tier: card.tier ? { name: card.tier.name } : null, usable: card.rewards.filter((r) => r.usable).length } : null,
+    next
+  };
+}
+
+module.exports = { myBookings, myMemberCode, myRewards, myWelcome };

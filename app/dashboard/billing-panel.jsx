@@ -412,6 +412,82 @@ export function PlanCards({ wallet, cycle = "month", onPick, onSchedule }) {
   );
 }
 
+/**
+ * แจ้งเตือนทาง LINE (B8, src/v2/owner-notices.js): ผูก LINE ของคนที่ล็อกอินอยู่ แล้ว Kiwmee จะแจ้งเมื่อ
+ * แพ็กเกจใกล้หมด เงินไม่พอต่ออายุ เข้าช่วงผ่อนผัน หรือใช้งานเกิน 80% · `initial` = สถานะเริ่มต้น (ใช้ในเทสต์)
+ */
+export function LineNotices({ initial = null }) {
+  const [status, setStatus] = useState(initial);
+  const [link, setLink] = useState(null); // { url, qr, expiresAt }
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+  const [error, setError] = useState("");
+
+  const refresh = useCallback(() => api("POST", "/api/dashboard/line-link", { action: "status" }).then(setStatus, (e) => setError(e.message)), []);
+  useEffect(() => { if (!initial) refresh(); }, [initial, refresh]);
+  // while the QR is open, notice the moment the phone finishes linking
+  useEffect(() => {
+    if (!link) return;
+    const timer = setInterval(() => {
+      api("POST", "/api/dashboard/line-link", { action: "status" }).then((s) => {
+        if (s.linked) { setStatus(s); setLink(null); setNote("เชื่อม LINE แล้ว · ส่งข้อความต้อนรับไปที่ LINE ของคุณแล้ว"); }
+      }, () => {});
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [link]);
+  const closeLink = useCallback(() => setLink(null), []);
+
+  async function run(action) {
+    setBusy(true);
+    setError("");
+    setNote("");
+    try {
+      const result = await api("POST", "/api/dashboard/line-link", { action });
+      if (action === "start") setLink(result);
+      if (action === "unlink") setStatus(result);
+      if (action === "test") setNote(result.delivered ? "ส่งข้อความทดสอบแล้ว ดูใน LINE ได้เลย" : "ส่งไม่ถึง · เพิ่ม Kiwmee เป็นเพื่อนใน LINE ก่อน แล้วลองอีกครั้ง");
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="ad-card bl-line">
+      <span className="bl-line-icon" aria-hidden="true">🔔</span>
+      <div className="bl-line-text">
+        <h2>แจ้งเตือนทาง LINE</h2>
+        {!status && !error && <p className="ad-muted">กำลังโหลด…</p>}
+        {status && !status.linked && <p className="ad-muted">รับแจ้งเตือนใน LINE เมื่อแพ็กเกจใกล้หมด (7/3/1 วัน) เงินในกระเป๋าไม่พอต่ออายุ เข้าช่วงผ่อนผัน หรือการจอง/ข้อความ/ตรวจสลิปใช้เกิน 80%</p>}
+        {status?.linked && <p className="ad-muted">✓ ส่งแจ้งเตือนไปที่ LINE{status.lineName ? ` “${status.lineName}”` : ""} · เชื่อมเมื่อ {thDate(status.linkedAt)}</p>}
+        {note && <p className="bl-line-note" role="status">{note}</p>}
+        {error && <p className="ad-error" role="alert">{error}</p>}
+      </div>
+      <div className="bl-line-actions">
+        {status && !status.linked && <button type="button" className="ad-primary bl-line-button" disabled={busy} onClick={() => run("start")}>เชื่อม LINE</button>}
+        {status?.linked && (
+          <>
+            <button type="button" className="ad-secondary" disabled={busy} onClick={() => run("test")}>ส่งข้อความทดสอบ</button>
+            <button type="button" className="ad-link" disabled={busy} onClick={() => run("unlink")}>เลิกเชื่อม</button>
+          </>
+        )}
+      </div>
+      {link && (
+        <Sheet title="เชื่อม LINE" onClose={closeLink}>
+          <div className="bl-line-sheet">
+            <p>สแกน QR ด้วยกล้องมือถือ หรือแอป LINE แล้วกดเข้าสู่ระบบ LINE</p>
+            <img src={link.qr} alt="QR สำหรับเชื่อม LINE" width={240} height={240} />
+            <a className="ad-secondary" href={link.url} target="_blank" rel="noreferrer">เปิดบนมือถือเครื่องนี้</a>
+            <small className="ad-muted">ลิงก์ใช้ได้ครั้งเดียว ถึง {new Date(link.expiresAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น. · หน้านี้จะเปลี่ยนเองเมื่อเชื่อมสำเร็จ</small>
+            <small className="ad-muted">ถ้ายังไม่ได้เป็นเพื่อนกับ Kiwmee ใน LINE ให้เพิ่มเพื่อนด้วย ไม่อย่างนั้นข้อความจะส่งไม่ถึง</small>
+          </div>
+        </Sheet>
+      )}
+    </section>
+  );
+}
+
 export default function BillingPanel({ brandId }) {
   const [wallet, setWallet] = useState(null);
   const [error, setError] = useState("");
@@ -549,6 +625,8 @@ export default function BillingPanel({ brandId }) {
           <p className="bl-wallet-note">โอนผ่านพร้อมเพย์แล้วแนบสลิป · ตรวจอัตโนมัติ เงินเข้าทันที</p>
         </section>
       </div>
+
+      <LineNotices />
 
       <section className="ad-card">
         <div className="ad-card-head bl-plans-head">

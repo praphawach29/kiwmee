@@ -1,7 +1,7 @@
 // LIFF opens its endpoint URL (https://kiwmee.up.railway.app/b) with the rest of the LIFF link in
 // ?liff.state= — https://liff.line.me/<liffId>/bloom-hair arrives as /b?liff.state=%2Fbloom-hair.
 // This turns that into the page to show: a shop's booking page, a booking's own link, or the
-// customer's bookings at that shop (/me), nothing else.
+// customer's bookings at that shop (/me), or a shop owner's LINE link page, nothing else.
 export function liffTarget(state) {
   if (typeof state !== "string" || state.length > 200) return null;
   let path = state;
@@ -13,6 +13,9 @@ export function liffTarget(state) {
   path = path.split(/[?#]/)[0].replace(/\/+$/, "");
   if (!path.startsWith("/")) path = `/${path}`;
   if (path.startsWith("/b/")) path = path.slice(2); // a LIFF link that repeats /b
+  // a shop owner linking LINE for Kiwmee's notices (B8, app/b/owner-line/[code])
+  const owner = /^\/owner-line\/([A-Za-z0-9_-]{24})$/.exec(path);
+  if (owner) return `/b/owner-line/${owner[1]}`;
   const match = /^\/([a-z0-9][a-z0-9-]{1,40})(\/manage\/[A-Za-z0-9_-]{32}|\/me|\/services|\/review(?:\/[A-Za-z0-9_-]+)?|\/line-preview)?$/.exec(path);
   return match ? `/b/${match[1]}${match[2] ?? ""}` : null;
 }

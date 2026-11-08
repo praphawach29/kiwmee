@@ -1,0 +1,39 @@
+/* B8: the page a shop owner opens in LINE to link it to Kiwmee's notices */
+.ol-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  background: #f7f5ff;
+  color: #1b1640;
+  font-family: var(--font-body, system-ui), sans-serif;
+}
+.ol-card {
+  width: 100%;
+  max-width: 420px;
+  background: #fff;
+  border: 1px solid #e8e4f8;
+  border-radius: 20px;
+  padding: 28px 22px;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(106, 76, 255, 0.08);
+}
+.ol-logo { height: 34px; margin: 0 auto 14px; display: block; }
+.ol-card h1 { font-family: var(--font-display, sans-serif); font-weight: 500; font-size: 1.3rem; margin: 0 0 14px; }
+.ol-text { color: #5f5a7a; line-height: 1.6; margin: 0 0 12px; }
+.ol-ok { color: #0b7a50; font-weight: 600; font-size: 1.1rem; margin: 0 0 12px; }
+.ol-error { color: #b42318; line-height: 1.6; margin: 0; }
+.ol-hint { background: #fff7ed; color: #b54708; border-radius: 12px; padding: 10px 12px; line-height: 1.6; margin: 0 0 12px; }
+.ol-button {
+  display: inline-block;
+  min-height: 46px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 999px;
+  background: #06c755;
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}

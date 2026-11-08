@@ -11,6 +11,7 @@ const { bookingCard, manageLink, openLink, pushLine } = require("./line-notify")
 const { sendExpiryNotices } = require("./loyalty-expiry");
 const { directionsLink } = require("./directions");
 const { renewDuePlans } = require("./wallet");
+const { sendOwnerNotices } = require("./owner-notices");
 
 const KINDS = [
   // kind, from (before the start), until (before the start)
@@ -132,6 +133,9 @@ function startReminderLoop(getDb, { everyMs = 5 * 60 * 1000 } = {}) {
         lastRenewalAt = Date.now();
         const renewals = await renewDuePlans();
         if (renewals.renewed) console.log(`[wallet] renewed ${renewals.renewed} plan(s)`);
+        // then tell owners in LINE what is coming (src/v2/owner-notices.js, B8), daytime only
+        const notices = await sendOwnerNotices(getDb());
+        if (notices.sent) console.log(`[owner-notices] sent ${notices.sent}`);
       }
       lastError = null;
     } catch (error) {

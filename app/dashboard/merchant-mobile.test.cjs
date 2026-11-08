@@ -123,3 +123,15 @@ test('bookings month calendar: weekday heads, the month in as many weeks as it n
   // February 2026 starts on a Sunday and has 28 days: four weeks
   assert.equal((render(BookingCalendar, { slug: 'x', day: '2026-02-03', onDay() {} }).match(/role="gridcell"/g) || []).length, 28);
 });
+
+test('members and points: the logo is a small button under the card, only for the brand owner', () => {
+  const { LogoButtons } = load('[slug]/shop-admin-client.jsx', '\nexport { LogoButtons };');
+  const none = render(LogoButtons, { data: { brand: { logoUrl: null } }, edit: true, slug: 'x', onSaved() {} });
+  assert.match(none, /class="ad-secondary ad-small-btn"/);
+  assert.match(none, /\+ ใส่โลโก้/);
+  assert.doesNotMatch(none, /เอาออก/);
+  const has = render(LogoButtons, { data: { brand: { logoUrl: 'https://example.com/l.png' } }, edit: true, slug: 'x', onSaved() {} });
+  assert.match(has, /เปลี่ยนโลโก้/);
+  assert.match(has, /เอาออก/);
+  assert.equal(render(LogoButtons, { data: { brand: {} }, edit: false, slug: 'x', onSaved() {} }), '');
+});

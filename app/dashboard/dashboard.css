@@ -1096,3 +1096,70 @@
   .ad-tier-reach.ad-tier-grid .ad-field:first-child { grid-column: auto; }
 }
 .ad-tier-preview-note { margin: 0; font-size: .8rem; text-align: center; }
+
+/* ---------- Shop settings (ตั้งค่าร้าน) ---------- */
+/* a list with no editor open takes the whole width; the editor column only appears while editing */
+.ad-split[data-solo="true"] { grid-template-columns: minmax(0, 1fr); }
+.ad-editor-col { scroll-margin-top: 16px; }
+.ad-count { display: inline-grid; place-items: center; min-width: 24px; height: 22px; margin-left: 6px; padding: 0 7px; border-radius: 11px; background: var(--selected); color: var(--grape-deep); font-size: 12px; font-weight: 600; vertical-align: 2px; }
+
+.ad-list.ad-tiles { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.ad-list.ad-tiles > li { padding: 0; border: 0; }
+.ad-split:not([data-solo="true"]) .ad-list.ad-tiles { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.ad-list-item.ad-tile { grid-template-columns: 64px minmax(0, 1fr); align-items: center; gap: 12px; height: 100%; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+.ad-list-item.ad-tile:hover { border-color: var(--grape); }
+.ad-tile .ad-resource-thumbnail { display: grid; place-items: center; width: 64px; height: 64px; overflow: hidden; border-radius: 10px; background: var(--selected); }
+.ad-tile .ad-resource-thumbnail img { width: 100%; height: 100%; object-fit: cover; }
+.ad-tile .ad-resource-thumbnail > span { padding: 4px; text-align: center; font-size: .66rem; line-height: 1.25; }
+.ad-tile-body { display: grid; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
+.ad-tile-body strong { font-size: 15px; }
+.ad-tile-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 3px; }
+.ad-tag { display: inline-block; padding: 2px 9px; border-radius: 999px; background: var(--selected); color: var(--grape-deep); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.ad-tag[data-tone="premium"] { background: #fff4d6; color: #8a5a00; }
+.ad-tag[data-tone="off"] { background: var(--line-soft, #eee); color: var(--muted); }
+.ad-list-item.ad-tile[data-off="true"] .ad-resource-thumbnail { opacity: .5; }
+
+/* booking flow: settings on the left, the customer's view stays in sight on the right */
+@media (min-width: 1100px) {
+  .merchant-layout .ad-split.ad-flow-layout { grid-template-columns: minmax(0, 1fr) minmax(360px, 420px); }
+  .ad-flow-preview { position: sticky; top: 16px; }
+  .ad-flow-preview .ad-phone { height: 600px; }
+}
+
+/* shop & hours: section cards, a section menu, and a save bar that stays in reach */
+.ad-settings { display: grid; gap: 16px; align-items: start; }
+.ad-settings > .ad-stack, .ad-settings form.ad-stack { min-width: 0; }
+.ad-settings .ad-fieldset { gap: 16px; }
+.ad-card-head { display: grid; gap: 2px; }
+.ad-card-head h2 { margin: 0; }
+.ad-card-head p { margin: 0; }
+.ad-settings .ad-card h3 { margin: 6px 0 0; padding-top: 14px; border-top: 1px solid var(--line-soft, var(--line)); font-size: 1rem; }
+.ad-settings .ad-card { scroll-margin-top: 16px; }
+#set-closures { scroll-margin-top: 16px; }
+.ad-settings-nav { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 4px; scrollbar-width: none; }
+.ad-settings-nav::-webkit-scrollbar { display: none; }
+.ad-settings-nav button { flex: none; padding: 7px 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.ad-settings-nav button:hover { border-color: var(--grape); color: var(--grape-deep); }
+.ad-savebar { position: sticky; bottom: 12px; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: 0 8px 24px rgba(27, 22, 64, .08); }
+.ad-savebar[data-dirty="true"] { border-color: var(--grape); }
+.ad-savebar-note { margin-right: auto; color: var(--muted); font-size: 13px; }
+.ad-savebar[data-dirty="true"] .ad-savebar-note { color: var(--grape-deep); font-weight: 600; }
+.ad-savebar .ad-primary, .ad-savebar .ad-secondary { width: auto; min-width: 0; padding-inline: 20px; }
+.ad-savebar > :not(button):not(.ad-savebar-note) { flex-basis: 100%; order: -1; margin: 0; }
+.merchant-layout:has(.merchant-tabbar) .ad-savebar { bottom: calc(80px + env(safe-area-inset-bottom)); }
+
+@media (min-width: 1100px) {
+  .merchant-layout .ad-settings { grid-template-columns: 180px minmax(0, 860px); }
+  .merchant-layout .ad-settings-nav { position: sticky; top: 16px; flex-direction: column; overflow: visible; padding: 0; }
+  .merchant-layout .ad-settings-nav button { text-align: left; border-color: transparent; background: none; border-radius: 10px; padding: 9px 12px; }
+  .merchant-layout .ad-settings-nav button:hover { background: var(--selected); }
+}
+.ad-thumb-letter { color: var(--grape-deep); font-family: var(--font-display, inherit); font-size: 24px; font-weight: 600; }
+/* the bar only follows the page while there is something to save */
+.ad-savebar:not([data-dirty="true"]) { position: static; box-shadow: none; }
+@media (max-width: 599px) {
+  .ad-savebar { flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
+  .ad-savebar-note { flex: 1 1 100%; font-size: 12px; }
+  .ad-savebar .ad-primary, .ad-savebar .ad-secondary { flex: 1 1 0; padding-inline: 12px; }
+  .ad-savebar .ad-primary { flex-grow: 2; }
+}

@@ -2223,7 +2223,7 @@ function FlowTab({ slug, catalog, version, onSaved }) {
   if (catalog.shop.role !== "owner") return null;
 
   return (
-    <div className="ad-split">
+    <div className="ad-split ad-flow-layout">
       <section className="ad-card">
         <h2>ขั้นตอนจองของลูกค้า</h2>
         <Locked>
@@ -2319,7 +2319,7 @@ function FlowTab({ slug, catalog, version, onSaved }) {
         </Locked>
       </section>
 
-      <section className="ad-card">
+      <section className="ad-card ad-flow-preview">
         <h2>ตัวอย่างที่ลูกค้าจะเห็น {changed && <small className="ad-badge">ยังไม่บันทึก</small>}</h2>
         {flow.entry.length > 1 && <p className="ad-muted">หน้าแรกมีปุ่มให้ลูกค้าเลือก: {flow.entry.map((e) => paths.find((p) => p.entry === e).steps[0].label).join(" หรือ ")}</p>}
         {paths.map((path) => (
@@ -2381,6 +2381,18 @@ function priceSummary(o) {
   return `${o.prices.length > 1 ? "เริ่ม " : ""}${money(base.amount)} ${UNITS[base.unit]}`;
 }
 
+// When an editor opens and the layout puts it below the list (phones, narrow desktops), scroll to it
+function useRevealEditor(key) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!key || !el) return;
+    const top = el.getBoundingClientRect().top;
+    if (top > window.innerHeight * 0.6 || top < 0) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [key]);
+  return ref;
+}
+
 function OfferingsTab({ slug, catalog, onSaved }) {
   const [editing, setEditing] = useState(null);
   const [group, setGroup] = useState(null); // the add-on group being edited
@@ -2399,23 +2411,33 @@ function OfferingsTab({ slug, catalog, onSaved }) {
     setGroup((g) => (g?.id ? structuredClone((catalog.addonGroups ?? []).find((x) => x.id === g.id) ?? null) : null));
   }, [catalog]);
   const groups = catalog.addonGroups ?? [];
+  const solo = !editing && !group;
+  const editorRef = useRevealEditor(editing ? editing.id ?? "new" : group ? `g:${group.id ?? "new"}` : null);
 
   return (
-    <div className="ad-split">
+    <div className="ad-split" data-solo={solo}>
       <div className="ad-stack">
         <section className="ad-card">
           <div className="ad-row ad-between">
-            <h2>บริการ</h2>
+            <h2>บริการ <small className="ad-count">{catalog.offerings.length}</small></h2>
             {!readOnly && <button className="ad-secondary" onClick={() => open(null)}>+ เพิ่มบริการ</button>}
           </div>
-          {catalog.offerings.length === 0 && <p className="ad-muted">ยังไม่มีบริการ</p>}
-          <ul className="ad-list">
+          {catalog.offerings.length === 0 && <p className="ad-empty">ยังไม่มีบริการ · กด “+ เพิ่มบริการ” เพื่อเริ่ม</p>}
+          <ul className="ad-list ad-tiles">
             {catalog.offerings.map((o) => (
               <li key={o.id}>
-                <button className="ad-list-item" data-active={editing?.id === o.id} data-off={!o.active} onClick={() => open(o)}>
-                  <strong>{o.name}{!o.active && " (ปิดอยู่)"}</strong>
-                  <span className="ad-muted">
-                    {o.durationMode === "days" ? `เช่า ${o.minDays}–${o.maxDays} วัน` : o.durationMode === "fixed" ? minutes(o.durationMinutes) : `${minutes(o.minMinutes)}–${minutes(o.maxMinutes)}`} · {priceSummary(o)}
+                <button className="ad-list-item ad-tile" data-active={editing?.id === o.id} data-off={!o.active} onClick={() => open(o)}>
+                  <ResourceListThumbnail key={o.media?.[0]?.url || "empty"} resource={o} letter />
+                  <span className="ad-tile-body">
+                    <strong>{o.name}</strong>
+                    <span className="ad-muted">
+                      {o.category ? `${o.category} · ` : ""}{o.durationMode === "days" ? `เช่า ${o.minDays}–${o.maxDays} วัน` : o.durationMode === "fixed" ? minutes(o.durationMinutes) : `${minutes(o.minMinutes)}–${minutes(o.maxMinutes)}`}
+                    </span>
+                    <span className="ad-tile-tags">
+                      <span className="ad-tag">{priceSummary(o)}</span>
+                      {o.premium && <span className="ad-tag" data-tone="premium">พรีเมียม</span>}
+                      {!o.active && <span className="ad-tag" data-tone="off">ปิดอยู่</span>}
+                    </span>
                   </span>
                 </button>
               </li>
@@ -2429,7 +2451,7 @@ function OfferingsTab({ slug, catalog, onSaved }) {
           </div>
           <p className="ad-muted">ของที่ลูกค้าเลือกเพิ่มได้ เช่น เช่าไม้ ห้องอาบน้ำ ทรีตเมนต์เพิ่ม · จัดเป็นกลุ่ม แล้วเลือกว่าใช้กับบริการไหน</p>
           {groups.length === 0 && <p className="ad-empty">ยังไม่มีตัวเลือกเสริม</p>}
-          <ul className="ad-list">
+          <ul className="ad-list ad-tiles">
             {groups.map((g) => (
               <li key={g.id}>
                 <button className="ad-list-item" data-active={group?.id === g.id} data-off={!g.active} onClick={() => openGroup(g)}>
@@ -2443,8 +2465,12 @@ function OfferingsTab({ slug, catalog, onSaved }) {
           </ul>
         </section>
       </div>
-      {editing && <OfferingEditor key={editing.id ?? "new"} slug={slug} catalog={catalog} initial={editing} onSaved={onSaved} onClose={() => setEditing(null)} />}
-      {group && <AddonGroupEditor key={group.id ?? "new-group"} slug={slug} catalog={catalog} initial={group} onSaved={onSaved} onClose={() => setGroup(null)} />}
+      {!solo && (
+        <div className="ad-stack ad-editor-col" ref={editorRef}>
+          {editing && <OfferingEditor key={editing.id ?? "new"} slug={slug} catalog={catalog} initial={editing} onSaved={onSaved} onClose={() => setEditing(null)} />}
+          {group && <AddonGroupEditor key={group.id ?? "new-group"} slug={slug} catalog={catalog} initial={group} onSaved={onSaved} onClose={() => setGroup(null)} />}
+        </div>
+      )}
     </div>
   );
 }
@@ -2855,45 +2881,54 @@ function emptyResource(catalog) {
   };
 }
 
-function ResourceListThumbnail({ resource }) {
+function ResourceListThumbnail({ resource, letter = false }) {
   const item = (Array.isArray(resource.media) ? resource.media : []).find((image) => isSafeMediaUrl(image?.url));
   const [failed, setFailed] = useState(false);
   const demo = item?.url.startsWith("/demo-media/");
-  return <span className="ad-resource-thumbnail">{item && !failed ? <img src={item.url} alt={`${demo ? "ILLUSTRATION · ภาพประกอบ ไม่ใช่ภาพสถานที่จริง · " : ""}${item.alt || resource.name}`} loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(true)} /> : <span className="ad-muted">{failed ? "โหลดภาพไม่สำเร็จ" : "ยังไม่มีภาพ"}</span>}</span>;
+  return <span className="ad-resource-thumbnail">{item && !failed ? <img src={item.url} alt={`${demo ? "ILLUSTRATION · ภาพประกอบ ไม่ใช่ภาพสถานที่จริง · " : ""}${item.alt || resource.name}`} loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(true)} /> : letter && !failed ? <b className="ad-thumb-letter" role="img" aria-label="ยังไม่มีภาพ">{(resource.name || "").match(/[ก-ฮA-Za-z0-9]/)?.[0]?.toUpperCase() ?? "?"}</b> : <span className="ad-muted">{failed ? "โหลดภาพไม่สำเร็จ" : "ยังไม่มีภาพ"}</span>}</span>;
 }
 
 function ResourcesTab({ slug, catalog, onSaved }) {
   const [editing, setEditing] = useState(null);
   const readOnly = useContext(ReadOnly);
   useEffect(() => setEditing((e) => (e?.id ? structuredClone(catalog.resources.find((r) => r.id === e.id) ?? null) : null)), [catalog]);
+  const editorRef = useRevealEditor(editing ? editing.id ?? "new" : null);
 
   return (
-    <div className="ad-split">
+    <div className="ad-split" data-solo={!editing}>
+      <div className="ad-stack">
       <section className="ad-card">
         <div className="ad-row ad-between">
-          <h2>ช่าง / สนาม / ห้อง</h2>
+          <h2>ช่าง / สนาม / ห้อง <small className="ad-count">{catalog.resources.length}</small></h2>
           {!readOnly && <button className="ad-secondary" onClick={() => setEditing(emptyResource(catalog))}>+ เพิ่ม</button>}
         </div>
         <p className="ad-muted">สิ่งที่ถูกจองแล้วคนอื่นใช้ช่วงเวลาเดียวกันไม่ได้ ความจุมากกว่า 1 = รับหลายคนพร้อมกัน (เช่น คลาสโยคะ 12 ที่)</p>
-        {catalog.resources.length === 0 && <p className="ad-muted">ยังไม่มี</p>}
-        <ul className="ad-list">
+        {catalog.resources.length === 0 && <p className="ad-empty">ยังไม่มี · กด “+ เพิ่ม” เพื่อเริ่ม</p>}
+        <ul className="ad-list ad-tiles">
           {catalog.resources.map((r) => (
             <li key={r.id}>
-              <button className="ad-list-item ad-resource-item" data-active={editing?.id === r.id} data-off={!r.active} onClick={() => setEditing(structuredClone(r))}>
-                <ResourceListThumbnail key={r.media?.[0]?.url || "empty"} resource={r} />
-                <span className="ad-resource-details">
-                <strong>{r.name}{!r.active && " (ปิดอยู่)"}</strong>
-                <span className="ad-muted">
-                  {RESOURCE_KINDS[r.kind] ?? r.kind}{r.capacity > 1 ? ` · ${r.capacity} ที่` : ""} · ทำ {r.offeringIds.length} บริการ
-                </span>
+              <button className="ad-list-item ad-tile" data-active={editing?.id === r.id} data-off={!r.active} onClick={() => setEditing(structuredClone(r))}>
+                <ResourceListThumbnail key={r.media?.[0]?.url || "empty"} resource={r} letter />
+                <span className="ad-tile-body">
+                  <strong>{r.name}</strong>
+                  <span className="ad-muted">{RESOURCE_KINDS[r.kind] ?? r.kind}{r.capacity > 1 ? ` · ${r.capacity} ที่` : ""}</span>
+                  <span className="ad-tile-tags">
+                    <span className="ad-tag">ทำ {r.offeringIds.length} บริการ</span>
+                    {!r.active && <span className="ad-tag" data-tone="off">ปิดอยู่</span>}
+                  </span>
                 </span>
               </button>
             </li>
           ))}
         </ul>
       </section>
-      {editing && <ResourceEditor key={editing.id ?? "new"} slug={slug} catalog={catalog} initial={editing} onSaved={onSaved} onClose={() => setEditing(null)} />}
       {catalog.resources.some((r) => r.active) && <LayoutEditor slug={slug} catalog={catalog} onSaved={onSaved} />}
+      </div>
+      {editing && (
+        <div className="ad-stack ad-editor-col" ref={editorRef}>
+          <ResourceEditor key={editing.id ?? "new"} slug={slug} catalog={catalog} initial={editing} onSaved={onSaved} onClose={() => setEditing(null)} />
+        </div>
+      )}
     </div>
   );
 }
@@ -3210,112 +3245,149 @@ function HoursTab({ slug, catalog, onSaved }) {
     if (await save.run(() => api("PUT", shopPath(slug), { ...form, settings }))) onSaved();
   }
 
+  const dirty = JSON.stringify(form) !== JSON.stringify(initial);
+  const sections = [
+    ["set-shop", "ข้อมูลร้าน"],
+    ["set-place", "ที่ตั้ง"],
+    ["set-hours", "เวลาทำการ"],
+    ["set-rules", "กติกาการจอง"],
+    ["set-deposit", "มัดจำ"],
+    ["set-more", "แจ้งเตือน · เอกสาร"],
+    ["set-closures", "วันหยุดร้าน"]
+  ];
+  // the tabs live in the URL hash, so the section menu scrolls instead of linking
+  const jump = (id) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+
   return (
-    <div className="ad-split">
-      <form className="ad-card" onSubmit={submit}>
-        <Locked>
-        <h2>ร้าน</h2>
-        <div className="ad-grid">
-          <label className="ad-field">ชื่อร้าน<input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
-          <label className="ad-field">
-            ประเภท
-            <select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
-              {Object.entries(SHOP_KINDS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-            </select>
-          </label>
-        </div>
-        <MediaEditor slug={slug} disabled={save.busy} label="ภาพร้าน" value={form.media} onChange={(media) => setForm((f) => ({ ...f, media }))} />
-        <label className="ad-field">
-          เกี่ยวกับร้าน (ไม่บังคับ · ลูกค้าเห็นในหน้าจอง)
-          <textarea rows={3} maxLength={1000} value={form.about} placeholder="เช่น สนามหญ้าเทียมมาตรฐาน 7 คน เปิดถึงเที่ยงคืน ใกล้ BTS" onChange={(e) => setForm({ ...form, about: e.target.value })} />
-        </label>
-        <label className="ad-field">
-          ที่อยู่ร้าน (ลูกค้าเห็นในหน้าจอง และใช้กับปุ่ม “นำทางไปร้าน”)
-          <textarea rows={2} maxLength={300} value={form.address} placeholder="เช่น 99/9 ซ.สุขุมวิท 77 แขวงอ่อนนุช เขตสวนหลวง กรุงเทพฯ" onChange={(e) => setForm({ ...form, address: e.target.value })} />
-        </label>
-        <label className="ad-field">
-          ลิงก์แผนที่ (ไม่บังคับ · แม่นกว่าที่อยู่)
-          <input type="url" inputMode="url" maxLength={500} value={form.mapUrl} placeholder="https://maps.app.goo.gl/…" onChange={(e) => setForm({ ...form, mapUrl: e.target.value })} />
-          <span className="ad-muted">เปิด Google Maps → ค้นหาร้าน → แชร์ → คัดลอกลิงก์ แล้ววางที่นี่ · ไม่ใส่ ปุ่มนำทางจะค้นหาจากที่อยู่</span>
-        </label>
-        <div className="ad-field">
-          สิ่งอำนวยความสะดวก (ลูกค้าเห็นเป็นไอคอนในหน้าจอง)
-          <div className="ad-checks ad-amenities">
-            {AMENITIES.map((a) => (
-              <label key={a.code}>
-                <input
-                  type="checkbox"
-                  checked={form.amenities.includes(a.code)}
-                  onChange={(e) => setForm((f) => ({ ...f, amenities: e.target.checked ? [...f.amenities, a.code] : f.amenities.filter((c) => c !== a.code) }))}
-                />
-                <span aria-hidden="true">{a.icon}</span> {a.label}
+    <div className="ad-settings">
+      <nav className="ad-settings-nav" aria-label="หมวดการตั้งค่า">
+        {sections.map(([id, label]) => <button key={id} type="button" onClick={() => jump(id)}>{label}</button>)}
+      </nav>
+      <div className="ad-stack">
+        <form className="ad-stack" onSubmit={submit}>
+          <Locked>
+          <section className="ad-card" id="set-shop">
+            <div className="ad-card-head"><h2>ข้อมูลร้าน</h2><p className="ad-muted">ชื่อ รูป และคำแนะนำร้านที่ลูกค้าเห็นในหน้าจอง</p></div>
+            <div className="ad-grid">
+              <label className="ad-field">ชื่อร้าน<input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
+              <label className="ad-field">
+                ประเภท
+                <select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
+                  {Object.entries(SHOP_KINDS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
               </label>
-            ))}
+            </div>
+            <MediaEditor slug={slug} disabled={save.busy} label="ภาพร้าน" value={form.media} onChange={(media) => setForm((f) => ({ ...f, media }))} />
+            <label className="ad-field">
+              เกี่ยวกับร้าน (ไม่บังคับ · ลูกค้าเห็นในหน้าจอง)
+              <textarea rows={3} maxLength={1000} value={form.about} placeholder="เช่น สนามหญ้าเทียมมาตรฐาน 7 คน เปิดถึงเที่ยงคืน ใกล้ BTS" onChange={(e) => setForm({ ...form, about: e.target.value })} />
+            </label>
+          </section>
+          <section className="ad-card" id="set-place">
+            <div className="ad-card-head"><h2>ที่ตั้งและสิ่งอำนวยความสะดวก</h2></div>
+            <label className="ad-field">
+              ที่อยู่ร้าน (ลูกค้าเห็นในหน้าจอง และใช้กับปุ่ม “นำทางไปร้าน”)
+              <textarea rows={2} maxLength={300} value={form.address} placeholder="เช่น 99/9 ซ.สุขุมวิท 77 แขวงอ่อนนุช เขตสวนหลวง กรุงเทพฯ" onChange={(e) => setForm({ ...form, address: e.target.value })} />
+            </label>
+            <label className="ad-field">
+              ลิงก์แผนที่ (ไม่บังคับ · แม่นกว่าที่อยู่)
+              <input type="url" inputMode="url" maxLength={500} value={form.mapUrl} placeholder="https://maps.app.goo.gl/…" onChange={(e) => setForm({ ...form, mapUrl: e.target.value })} />
+              <span className="ad-muted">เปิด Google Maps → ค้นหาร้าน → แชร์ → คัดลอกลิงก์ แล้ววางที่นี่ · ไม่ใส่ ปุ่มนำทางจะค้นหาจากที่อยู่</span>
+            </label>
+            <div className="ad-field">
+              สิ่งอำนวยความสะดวก (ลูกค้าเห็นเป็นไอคอนในหน้าจอง)
+              <div className="ad-checks ad-amenities">
+                {AMENITIES.map((a) => (
+                  <label key={a.code}>
+                    <input
+                      type="checkbox"
+                      checked={form.amenities.includes(a.code)}
+                      onChange={(e) => setForm((f) => ({ ...f, amenities: e.target.checked ? [...f.amenities, a.code] : f.amenities.filter((c) => c !== a.code) }))}
+                    />
+                    <span aria-hidden="true">{a.icon}</span> {a.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </section>
+          <section className="ad-card" id="set-hours">
+            <div className="ad-card-head"><h2>เวลาทำการ</h2><p className="ad-muted">ติ๊ก “เปิด” วันที่ร้านเปิด · “ใช้กับทุกวัน” คัดลอกเวลาไปวันอื่น</p></div>
+            <table className="ad-table">
+              <tbody>
+                {form.hours.map((h) => (
+                  <tr key={h.dayOfWeek}>
+                    <td>{DAYS[h.dayOfWeek]}</td>
+                    <td><label className="ad-check"><input type="checkbox" checked={h.isOpen} onChange={(e) => setDay(h.dayOfWeek, { isOpen: e.target.checked })} />เปิด</label></td>
+                    <td>
+                      {h.isOpen && (
+                        <span className="ad-inline">
+                          <input type="time" required value={h.open} onChange={(e) => setDay(h.dayOfWeek, { open: e.target.value })} aria-label={`เปิดวัน${DAYS[h.dayOfWeek]}`} />–
+                          <input type="time" required value={h.close} onChange={(e) => setDay(h.dayOfWeek, { close: e.target.value })} aria-label={`ปิดวัน${DAYS[h.dayOfWeek]}`} />
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      {h.isOpen && (
+                        <button type="button" className="ad-link ad-nowrap" onClick={() => copyHours(h)} title={`ใช้เวลา ${h.open}–${h.close} กับทุกวัน`}>
+                          ใช้กับทุกวัน
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+          <section className="ad-card" id="set-rules">
+            <div className="ad-card-head"><h2>กติกาการจอง</h2></div>
+            <div className="ad-grid">
+              <label className="ad-field">จองล่วงหน้าอย่างน้อย (นาที)<input type="number" min={0} required value={form.settings.minLeadMinutes} onChange={(e) => setSetting("minLeadMinutes", e.target.value)} /></label>
+              <label className="ad-field">เวลาเริ่มทุก ๆ (นาที)<input type="number" min={5} required value={form.settings.slotIntervalMinutes} onChange={(e) => setSetting("slotIntervalMinutes", e.target.value)} /></label>
+              <label className="ad-field">เปิดให้จองล่วงหน้า (วัน)<input type="number" min={1} max={365} required value={form.settings.maxAdvanceDays} onChange={(e) => setSetting("maxAdvanceDays", e.target.value)} /></label>
+            </div>
+            <h3>ลูกค้าเปลี่ยนการจองเอง</h3>
+            <p className="ad-muted">หลังจอง ลูกค้าได้ลิงก์ของการจองนั้น ใช้ดู เลื่อน หรือยกเลิกเองได้ตามที่ร้านอนุญาต</p>
+            <div className="ad-grid">
+              <label className="ad-check"><input type="checkbox" checked={form.settings.customerCanReschedule} onChange={(e) => setSetting("customerCanReschedule", e.target.checked)} />ให้ลูกค้าเลื่อนนัดเอง</label>
+              <label className="ad-check"><input type="checkbox" checked={form.settings.customerCanCancel} onChange={(e) => setSetting("customerCanCancel", e.target.checked)} />ให้ลูกค้ายกเลิกเอง</label>
+              <label className="ad-field">
+                ทำได้ถึงก่อนนัด (ชั่วโมง)
+                <input type="number" min={0} max={720} required value={form.settings.customerChangeCutoffHours} onChange={(e) => setSetting("customerChangeCutoffHours", e.target.value)} />
+              </label>
+            </div>
+          </section>
+          <section className="ad-card" id="set-deposit">
+            <DepositSettings settings={form.settings} setSetting={setSetting} />
+          </section>
+          <section className="ad-card" id="set-more">
+            <div className="ad-card-head"><h2>แจ้งเตือนลูกค้าทาง LINE</h2></div>
+            <p className="ad-muted">ลูกค้าที่จองผ่าน LINE ได้การ์ดยืนยันทันที และการ์ดเตือนนัด 1 วันก่อน กับ 2 ชั่วโมงก่อนถึงเวลา (ต้องเป็นเพื่อนกับ LINE OA ของ Kiwmee)</p>
+            <label className="ad-check"><input type="checkbox" checked={form.settings.lineReminders !== false} onChange={(e) => setSetting("lineReminders", e.target.checked)} />ส่งการ์ดเตือนนัด</label>
+            <h3>เอกสารประกอบการเช่า</h3>
+            <p className="ad-muted">รูปบัตรประชาชน/ใบขับขี่ที่ลูกค้าส่งมา (เฉพาะบริการที่ติ๊ก “ขอเอกสาร”) เก็บแบบเข้ารหัส เห็นได้เฉพาะคนในร้าน และลบเองอัตโนมัติตามนี้ · ยกเลิกการจอง = ลบทันที</p>
+            <label className="ad-field ad-short">
+              เก็บไว้กี่วันหลังคืนของ
+              <input type="number" min={1} max={365} value={form.settings.documentRetentionDays ?? 30} onChange={(e) => setSetting("documentRetentionDays", e.target.value)} />
+            </label>
+          </section>
+          <div className="ad-savebar" data-dirty={dirty}>
+            <span className="ad-savebar-note">{dirty ? "มีการแก้ไขที่ยังไม่บันทึก" : "บันทึกล่าสุดแล้ว"}</span>
+            <Status save={save} />
+            {dirty && <button type="button" className="ad-secondary" disabled={save.busy} onClick={() => setForm(initial)}>ยกเลิก</button>}
+            <button className="ad-primary" disabled={save.busy || !dirty}>บันทึกการตั้งค่า</button>
           </div>
-        </div>
-        <h2>เวลาทำการ</h2>
-        <table className="ad-table">
-          <tbody>
-            {form.hours.map((h) => (
-              <tr key={h.dayOfWeek}>
-                <td>{DAYS[h.dayOfWeek]}</td>
-                <td><label className="ad-check"><input type="checkbox" checked={h.isOpen} onChange={(e) => setDay(h.dayOfWeek, { isOpen: e.target.checked })} />เปิด</label></td>
-                <td>
-                  {h.isOpen && (
-                    <span className="ad-inline">
-                      <input type="time" required value={h.open} onChange={(e) => setDay(h.dayOfWeek, { open: e.target.value })} aria-label={`เปิดวัน${DAYS[h.dayOfWeek]}`} />–
-                      <input type="time" required value={h.close} onChange={(e) => setDay(h.dayOfWeek, { close: e.target.value })} aria-label={`ปิดวัน${DAYS[h.dayOfWeek]}`} />
-                    </span>
-                  )}
-                </td>
-                <td>
-                  {h.isOpen && (
-                    <button type="button" className="ad-link ad-nowrap" onClick={() => copyHours(h)} title={`ใช้เวลา ${h.open}–${h.close} กับทุกวัน`}>
-                      ใช้กับทุกวัน
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <h2>กติกาการจอง</h2>
-        <div className="ad-grid">
-          <label className="ad-field">จองล่วงหน้าอย่างน้อย (นาที)<input type="number" min={0} required value={form.settings.minLeadMinutes} onChange={(e) => setSetting("minLeadMinutes", e.target.value)} /></label>
-          <label className="ad-field">เวลาเริ่มทุก ๆ (นาที)<input type="number" min={5} required value={form.settings.slotIntervalMinutes} onChange={(e) => setSetting("slotIntervalMinutes", e.target.value)} /></label>
-          <label className="ad-field">เปิดให้จองล่วงหน้า (วัน)<input type="number" min={1} max={365} required value={form.settings.maxAdvanceDays} onChange={(e) => setSetting("maxAdvanceDays", e.target.value)} /></label>
-        </div>
-        <h2>ลูกค้าเปลี่ยนการจองเอง</h2>
-        <p className="ad-muted">หลังจอง ลูกค้าได้ลิงก์ของการจองนั้น ใช้ดู เลื่อน หรือยกเลิกเองได้ตามที่ร้านอนุญาต</p>
-        <div className="ad-grid">
-          <label className="ad-check"><input type="checkbox" checked={form.settings.customerCanReschedule} onChange={(e) => setSetting("customerCanReschedule", e.target.checked)} />ให้ลูกค้าเลื่อนนัดเอง</label>
-          <label className="ad-check"><input type="checkbox" checked={form.settings.customerCanCancel} onChange={(e) => setSetting("customerCanCancel", e.target.checked)} />ให้ลูกค้ายกเลิกเอง</label>
-          <label className="ad-field">
-            ทำได้ถึงก่อนนัด (ชั่วโมง)
-            <input type="number" min={0} max={720} required value={form.settings.customerChangeCutoffHours} onChange={(e) => setSetting("customerChangeCutoffHours", e.target.value)} />
-          </label>
-        </div>
-        <DepositSettings settings={form.settings} setSetting={setSetting} />
-        <h2>แจ้งเตือนลูกค้าทาง LINE</h2>
-        <p className="ad-muted">ลูกค้าที่จองผ่าน LINE ได้การ์ดยืนยันทันที และการ์ดเตือนนัด 1 วันก่อน กับ 2 ชั่วโมงก่อนถึงเวลา (ต้องเป็นเพื่อนกับ LINE OA ของ Kiwmee)</p>
-        <label className="ad-check"><input type="checkbox" checked={form.settings.lineReminders !== false} onChange={(e) => setSetting("lineReminders", e.target.checked)} />ส่งการ์ดเตือนนัด</label>
-        <h2>เอกสารประกอบการเช่า</h2>
-        <p className="ad-muted">รูปบัตรประชาชน/ใบขับขี่ที่ลูกค้าส่งมา (เฉพาะบริการที่ติ๊ก “ขอเอกสาร”) เก็บแบบเข้ารหัส เห็นได้เฉพาะคนในร้าน และลบเองอัตโนมัติตามนี้ · ยกเลิกการจอง = ลบทันที</p>
-        <label className="ad-field ad-short">
-          เก็บไว้กี่วันหลังคืนของ
-          <input type="number" min={1} max={365} value={form.settings.documentRetentionDays ?? 30} onChange={(e) => setSetting("documentRetentionDays", e.target.value)} />
-        </label>
-        <Status save={save} />
-        <button className="ad-primary" disabled={save.busy}>บันทึก</button>
-        </Locked>
-      </form>
-      <DaysOff
+          </Locked>
+        </form>
+        <div id="set-closures">
+  <DaysOff
         title="วันหยุดร้าน"
         items={catalog.closures}
         add={(body) => api("POST", shopPath(slug, "/closures"), body)}
         remove={(id) => api("DELETE", shopPath(slug, `/closures/${id}`))}
         onSaved={onSaved}
       />
+        </div>
+      </div>
     </div>
   );
 }
@@ -3329,7 +3401,7 @@ function DepositSettings({ settings, setSetting }) {
   const setInfo = (key, value) => setSetting("paymentInfo", { ...info, [key]: value });
   return (
     <>
-      <h2>มัดจำ (โอนเงิน)</h2>
+      <div className="ad-card-head"><h2>มัดจำ (โอนเงิน)</h2></div>
       <p className="ad-muted">เปิดแล้ว การจองออนไลน์จะถูกกันคิวไว้ระหว่างรอลูกค้าโอนและแนบสลิป ร้านตรวจสลิปแล้วกด “ยืนยันมัดจำ” ในหน้าการจอง ยอดมัดจำจะไปอยู่ในบิล</p>
       <div className="ad-grid">
         <label className="ad-field">

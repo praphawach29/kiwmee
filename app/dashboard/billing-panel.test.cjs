@@ -64,3 +64,11 @@ test('a cheaper plan shows "when the current plan ends" instead of a buy button 
   assert.equal((html.match(/ได้เมื่อแพ็กเกจปัจจุบันหมดอายุ/g) || []).length, 2);
   assert.match(html, />ต่ออายุ 1 เดือน</);
 });
+
+test('the launch offer: paying for Pro early adds a month after it; another plan starts today', () => {
+  const { purchaseOutcome } = load();
+  const now = new Date('2026-11-08T00:00:00Z');
+  const gift = { effective: 'pro', valid_until: '2027-01-31T16:59:59Z', complimentary: true };
+  assert.equal(purchaseOutcome(gift, 'pro', now).until.toISOString(), '2027-03-02T16:59:59.000Z');
+  assert.equal(purchaseOutcome(gift, 'starter', now).until.toISOString(), '2026-12-08T00:00:00.000Z');
+});

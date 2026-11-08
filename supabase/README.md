@@ -47,10 +47,12 @@ on conflict (business_id, user_id) do update set role = 'owner';
 
 ## ตั้งแพ็กเกจของแบรนด์ (Kiwmee ทำเอง จนกว่าจะมีระบบเก็บเงิน)
 
-แพ็กเกจ `free` / `starter` มีได้ 1 สาขา · `pro` / `loyalty` มีได้หลายสาขา · `valid_until` เลยแล้วกลับเป็น `free` (ข้อมูลไม่หาย)
+ร้านซื้อแพ็กเกจเองได้จากกระเป๋าเงิน (`docs/WALLET.md`) · ตารางสิทธิ์อยู่ที่ `src/v2/plans.js` = `public.plan_limit()`/`plan_has()` (migration `…004100`)
+`free` / `starter` มีได้ 1 สาขา · `pro` / `loyalty` 2 สาขา · `valid_until` เลยแล้วกลับเป็น `free` (ข้อมูลไม่หาย)
+`complimentary = true` = ให้ใช้ฟรี (ไม่ต่ออายุจากกระเป๋า) · `valid_until = null` = ไม่หมดอายุ
 
 ```sql
-update public.brand_plans set plan = 'pro', valid_until = '2027-12-31'
+update public.brand_plans set plan = 'pro', valid_until = '2027-12-31', complimentary = true
 where brand_id = (select brand_id from public.businesses where slug = 'ชื่อลิงก์ของร้าน');
 ```
 

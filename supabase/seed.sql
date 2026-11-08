@@ -8,6 +8,10 @@ insert into public.businesses (id, slug, name, kind) values
   ('b1000000-0000-4000-8000-000000000001', 'bloom-hair', 'Bloom Hair & Beauty', 'salon'),
   ('b2000000-0000-4000-8000-000000000002', 'gentleman-barber', 'Gentleman Barber', 'barber');
 
+-- The demo brands use every feature (Pro, no end date): limits are tested on brands made in the tests
+update public.brand_plans set plan = 'pro', valid_until = null
+ where brand_id in (select brand_id from public.businesses where id in ('b1000000-0000-4000-8000-000000000001', 'b2000000-0000-4000-8000-000000000002'));
+
 insert into public.business_booking_settings (business_id, min_lead_minutes, slot_interval_minutes, max_advance_days) values
   ('b1000000-0000-4000-8000-000000000001', 30, 15, 30),
   ('b2000000-0000-4000-8000-000000000002', 15, 15, 14);

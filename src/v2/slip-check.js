@@ -116,8 +116,12 @@ function judge(read, { depositDue, bookedAt, paymentInfo }) {
  */
 async function checkSlip(db, slipId, jpeg, { env = process.env, fetchImpl = fetch, onConfirmed = null } = {}) {
   try {
+    // the brand's automatic checks this month: its plan's allowance plus packs bought (migration …004100)
+    const quota = await slipQuota(db, slipId);
+    if (quota && !quota.allowed) return null; // used up: the shop checks this slip by eye, as before
     const read = await readSlip(db, jpeg, { env, fetchImpl });
     if (!read) return null;
+    if (quota?.brandId) await db.query("select public.usage_add($1, 0, 1)", [quota.brandId]).catch(() => {});
     const { rows: [s] } = await db.query(
       `select s.booking_id, b.business_id, b.deposit_due, b.created_at, b.status, st.payment_info, coalesce(st.slip_auto_confirm, false) as auto
          from public.payment_slips s join public.bookings b on b.id = s.booking_id
@@ -152,4 +156,31 @@ async function checkSlip(db, slipId, jpeg, { env = process.env, fetchImpl = fetc
   }
 }
 
-module.exports = { checkSlip, judge, readSlip, readEasySlip, receiverMatch, maskedMatches, REASON_TEXT };
+/** May this slip's brand still use an automatic check this month? null when it cannot be read (then check) */
+async function slipQuota(db, slipId) {
+  try {
+    const { rows: [q] } = await db.query(
+      `select b.brand_id,
+              public.plan_limit(public.brand_plan(b.brand_id), 'slip_checks') as included,
+              coalesce((select u.slips_used from public.usage_counters u
+                         where u.brand_id = b.brand_id
+                           and u.period = date_trunc('month', (now() at time zone 'Asia/Bangkok'))::date), 0) as used,
+              (select count(*)::int * 100 from public.wallet_orders o
+                where o.brand_id = b.brand_id and o.sku = 'slip:100' and o.status = 'paid'
+                  and o.created_at >= date_trunc('month', now() at time zone 'Asia/Bangkok') at time zone 'Asia/Bangkok') as purchased
+         from public.payment_slips s
+         join public.bookings k on k.id = s.booking_id
+         join public.businesses b on b.id = k.business_id
+        where s.id = $1`,
+      [slipId]
+    );
+    if (!q) return null;
+    const allowed = q.included === null || q.used < q.included + q.purchased;
+    return { brandId: q.brand_id, allowed };
+  } catch (error) {
+    console.error("[slip-check] quota not read:", error.message);
+    return null;
+  }
+}
+
+module.exports = { slipQuota, checkSlip, judge, readSlip, readEasySlip, receiverMatch, maskedMatches, REASON_TEXT };

@@ -1861,3 +1861,4 @@ a.bk-points-button { display: inline-flex; align-items: center; text-decoration:
 @media (min-width: 1024px) {
   .customer-workspace[data-has-aside="true"] .bk-submit-bar[data-has-price] .bk-submit-total { justify-content: space-between; }
 }
+.bk-closed { text-align: center; justify-items: center; }

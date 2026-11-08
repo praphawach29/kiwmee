@@ -1356,3 +1356,11 @@
   .bl-plan { scroll-snap-align: start; }
 }
 @media (min-width: 1100px) { .merchant-layout .bl-plan { padding: 16px 12px 12px; } .merchant-layout .bl-plan-list { font-size: 12px; } }
+/* plan locks and the online-booking quota (migration …004100) */
+.ad-plan-lock { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0; padding: 12px 14px; border: 1px dashed var(--grape); border-radius: 12px; background: var(--selected); color: var(--grape-deep); font-size: 14px; }
+.ad-plan-lock > span:nth-child(2) { flex: 1 1 220px; }
+.ad-plan-lock-compact { padding: 8px 12px; font-size: 13px; }
+.ad-plan-lock[data-tone="warn"] { border-style: solid; border-color: #F5A524; background: #FFF4E5; color: #B54708; }
+.ad-plan-lock[data-tone="full"] { border-style: solid; border-color: var(--danger, #C62828); background: #FDECEC; color: var(--danger, #C62828); }
+.bl-alert[data-tone="gift"] { display: grid; gap: 2px; background: #E3FAF0; color: #0F6B44; }
+.bl-alert small { font-weight: 400; }

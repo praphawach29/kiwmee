@@ -7,6 +7,7 @@
 // check that the caller owns the shop and that the shop keeps at least one owner.
 
 const { AppError, notFound } = require("../errors");
+const { planRefusal } = require("./plans");
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ROLES = ["owner", "staff"];
@@ -20,6 +21,8 @@ const REASON_TEXT = {
 };
 
 function rpcError(error) {
+  const plan = planRefusal(error, AppError);
+  if (plan) return plan;
   if (error?.code === "BK404") return notFound(REASON_TEXT.NOT_FOUND);
   if (error?.code === "BK422") return new AppError("UNAVAILABLE", REASON_TEXT[error.message] ?? error.message, 422, { reason: error.message });
   return error;

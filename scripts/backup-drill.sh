@@ -80,11 +80,14 @@ SQL
 
 echo "== 3/4 restore into $(db_of "$target_url")"
 # auth.users first: public rows (business_members.user_id, platform_admins.user_id) point at it.
+# Rows go back exactly as they were, so the load runs with triggers off (session_replication_role =
+# replica): the plan guards (…004100) would otherwise judge each row against a brand_plans table that
+# is not loaded yet, and other triggers would stamp times or write activity a second time.
 if [ -f "$work/users.sql" ]; then
   psql "$target_url" -v ON_ERROR_STOP=1 -q -c 'truncate table auth.users cascade'
-  psql "$target_url" -v ON_ERROR_STOP=1 -q -f "$work/users.sql"
+  PGOPTIONS='-c session_replication_role=replica' psql "$target_url" -v ON_ERROR_STOP=1 -q -f "$work/users.sql"
 fi
-psql "$target_url" -v ON_ERROR_STOP=1 -q -f "$work/public.sql"
+PGOPTIONS='-c session_replication_role=replica' psql "$target_url" -v ON_ERROR_STOP=1 -q -f "$work/public.sql"
 
 psql "$target_url" -v ON_ERROR_STOP=1 -q <<'SQL'
 do $$

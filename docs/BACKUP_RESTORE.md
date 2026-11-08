@@ -56,6 +56,7 @@ restore verification passed: 45 tables, 120 functions match
 1. **หยุดการเขียนก่อน** — ปิด service บน Railway (หรือเอา `BOOKING_DB_URL` ออก) เพื่อไม่ให้มีข้อมูลใหม่ทับระหว่างกู้
 2. **snapshot สภาพปัจจุบันไว้ก่อนเสมอ** — แม้ฐานจะเสีย การ dump ครั้งสุดท้ายอาจยังกู้บางตารางได้
 3. restore ลง **ฐานข้อมูลใหม่** ก่อน ไม่ทับของเดิม แล้วตรวจด้วย `scripts/verify-restore.js` เทียบกับ dump
+   · โหลดข้อมูลด้วย `PGOPTIONS='-c session_replication_role=replica' psql …` (ปิด trigger ระหว่างโหลด) — ไม่อย่างนั้น trigger ตรวจแพ็กเกจ (migration `…004100`) จะปฏิเสธแถวที่โหลดก่อนตาราง `brand_plans` เหมือนที่ `scripts/backup-drill.sh` ทำ
 4. สลับ `BOOKING_DB_URL` มาที่ฐานใหม่ → deploy → เปิด `/api/health` ต้องได้ `status: ok`
 5. ทดสอบจริงหนึ่งรอบ: เปิดหน้าจองของร้านทดสอบ → จอง → ปิดบิล → ดูคะแนนเข้า → ยกเลิก → คะแนนคืน
 6. ตรวจ Storage: รูปและสลิปยังเปิดได้ (ถ้ากู้ bucket ไม่ครบ ให้กู้จากสำเนา bucket)

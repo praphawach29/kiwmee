@@ -4,6 +4,7 @@
 // connection, after LINE confirmed who they are).
 
 const { AppError, notFound } = require("../errors");
+const { planRefusal } = require("./plans");
 const { themeOf } = require("./tier-themes");
 const { pushLine, shopLink } = require("./line-notify");
 const { publicOrigin } = require("./scan-codes");
@@ -109,6 +110,8 @@ function tierStanding(tiers, t) {
 }
 
 function rpcError(error) {
+  const plan = planRefusal(error, AppError);
+  if (plan) return plan;
   if (error.code === "42501") return new AppError("FORBIDDEN", "เฉพาะเจ้าของแบรนด์ตั้งค่าคะแนนได้", 403);
   if (["BK422", "BK404"].includes(error.code)) {
     return new AppError(error.message, RPC_TEXT[error.message] ?? error.message, error.code === "BK404" ? 404 : 422, { reason: error.message });

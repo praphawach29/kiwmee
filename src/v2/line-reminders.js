@@ -37,6 +37,7 @@ async function dueReminders(db, now, limit) {
        cross join (values ${KINDS.map((_, i) => `($${i * 3 + 3}::text, $${i * 3 + 4}::interval, $${i * 3 + 5}::interval)`).join(", ")}) k(kind, lead, stop)
       where b.status = 'confirmed'
         and coalesce(s.line_reminders, true)
+        and public.plan_has(public.brand_plan(biz.brand_id), 'reminders')   -- starter and pro (migration …004100)
         and $1::timestamptz >= b.start_at - k.lead and $1::timestamptz < b.start_at - k.stop
         and b.created_at <= b.start_at - k.lead
         and not exists (select 1 from public.booking_reminders r where r.booking_id = b.id and r.kind = k.kind)

@@ -103,11 +103,11 @@ async function billingInfo(client) {
 async function planOf(client, brandId) {
   const { rows: [row] } = await client.query(
     `select p.plan, p.valid_until, (p.valid_until is not null and p.valid_until < now()) as expired,
-            public.brand_plan(p.brand_id) as effective
+            public.brand_plan(p.brand_id) as effective, coalesce(p.complimentary, false) as complimentary
        from public.brand_plans p where p.brand_id = $1`,
     [brandId]
   );
-  return row ?? { plan: "free", valid_until: null, expired: false, effective: "free" };
+  return row ?? { plan: "free", valid_until: null, expired: false, effective: "free", complimentary: false };
 }
 
 async function usageOf(client, brandId) {
@@ -316,7 +316,7 @@ async function renewDuePlans(now = new Date()) {
       `select p.brand_id, p.plan, p.valid_until, coalesce(a.balance, 0)::float8 as balance
          from public.brand_plans p
          left join public.wallet_accounts a on a.brand_id = p.brand_id
-        where p.plan <> 'free' and p.valid_until is not null
+        where p.plan <> 'free' and p.valid_until is not null and not coalesce(p.complimentary, false)
           and p.valid_until <= now() + interval '${RENEW_WITHIN_DAYS} days'`
     );
     let renewed = 0;
@@ -352,7 +352,8 @@ async function renewDuePlans(now = new Date()) {
 
 /** Would buying `planId` now cut short a dearer plan that is still paid for? */
 function downgradeLosesDays(current, planId, now = new Date()) {
-  if (!current || current.effective === "free" || !current.valid_until) return false;
+  // a plan Kiwmee gave for free (the launch offer) may be replaced by any paid plan
+  if (!current || current.effective === "free" || !current.valid_until || current.complimentary) return false;
   if (new Date(current.valid_until) <= now) return false;
   return (PLAN_PRICES[planId] ?? 0) < (PLAN_PRICES[current.effective] ?? 0);
 }
@@ -396,7 +397,9 @@ async function buy(brandId, userId, sku) {
       await client.query(
         `update public.brand_plans
             set plan = $2,
-                valid_until = greatest(coalesce(valid_until, now()), now()) + interval '30 days'
+                -- days run on from the current end; a different plan replacing a free (complimentary) one starts now
+                valid_until = case when complimentary and plan <> $2 then now() else greatest(coalesce(valid_until, now()), now()) end + interval '30 days',
+                complimentary = false
           where brand_id = $1`,
         [brandId, item.plan]
       );

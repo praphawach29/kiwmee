@@ -93,6 +93,10 @@ test("add_branch copies active resource galleries only when copyResources is ena
   assert.ok(copied.resources.length > 0);
   assert.ok(!copied.resources.some((r) => r.name === "Inactive gallery"));
   for (const resource of copied.resources) assert.deepEqual(resource.media, gallery);
+  // Pro holds two branches: make room for the next one
+  await db.query("reset role");
+  await db.query("delete from public.businesses where slug = 'resource-gallery-copy'");
+  await admin.actAs(db, OWNER);
   await brands.addBranch(db, brand, { name: "No resources", slug: "resource-gallery-no-copy", copyFrom: "bloom-hair" });
   assert.deepEqual((await admin.getCatalog(db, await admin.memberShop(db, "resource-gallery-no-copy"))).resources, []);
 }));

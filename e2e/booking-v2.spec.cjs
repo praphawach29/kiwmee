@@ -590,3 +590,26 @@ test("desktop: steps in the header, the summary beside the page leads on, and ed
   await expect(page.getByRole("heading", { name: "ข้อมูลผู้รับบริการ" })).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test("a shop whose plan takes no online bookings shows the customer a closed notice, not the booking steps", async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  const { Client } = require("pg");
+  const db = new Client({ connectionString: process.env.BOOKING_DB_URL || "postgres://postgres@127.0.0.1:54329/booking_test" });
+  await db.connect();
+  const brand = "(select brand_id from public.businesses where slug = 'gentleman-barber')";
+  try {
+    // the loyalty-only plan has no online booking (migration …004100)
+    await db.query(`update public.brand_plans set plan = 'loyalty', valid_until = null where brand_id = ${brand}`);
+    await page.goto("/b/gentleman-barber");
+    await expect(page.getByRole("heading", { name: "ร้านปิดรับจองออนไลน์ชั่วคราว" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "เลือกบริการ" })).toHaveCount(0);
+    await expect(page.locator(".bk-shop-monogram")).toBeVisible(); // the shop is still introduced
+  } finally {
+    await db.query(`update public.brand_plans set plan = 'pro', valid_until = null where brand_id = ${brand}`);
+    await db.end();
+  }
+  await page.goto("/b/gentleman-barber");
+  await expect(page.getByRole("heading", { name: "ร้านปิดรับจองออนไลน์ชั่วคราว" })).toHaveCount(0);
+  expect(errors).toEqual([]);
+});

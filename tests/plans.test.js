@@ -55,3 +55,22 @@ test("buying a cheaper plan mid-cycle is refused so paid days are never lost; re
   assert.equal(downgradeLosesDays({ effective: "pro", valid_until: "2026-11-01T00:00:00Z" }, "starter", now), false, "an expired plan can be replaced");
   assert.equal(downgradeLosesDays({ effective: "free", valid_until: null }, "starter", now), false);
 });
+
+test("the launch offer (a complimentary plan) can be replaced by any paid plan without the downgrade guard", () => {
+  const { downgradeLosesDays } = require("../src/v2/wallet");
+  const now = new Date("2026-11-08T00:00:00Z");
+  const gift = { effective: "pro", valid_until: "2027-01-31T16:59:59Z", complimentary: true };
+  assert.equal(downgradeLosesDays(gift, "starter", now), false);
+  assert.equal(downgradeLosesDays({ ...gift, complimentary: false }, "starter", now), true);
+});
+
+test("plan refusals read as Thai sentences; other database errors pass through", () => {
+  const { planRefusal, PLAN_REASON_TEXT } = require("../src/v2/plans");
+  const { AppError } = require("../src/errors");
+  const e = planRefusal({ code: "BK422", message: "PLAN_RESOURCES" }, AppError);
+  assert.equal(e.status, 422);
+  assert.equal(e.details.reason, "PLAN_RESOURCES");
+  assert.equal(e.message, PLAN_REASON_TEXT.PLAN_RESOURCES);
+  assert.equal(planRefusal({ code: "BK422", message: "FULLY_BOOKED" }, AppError), null);
+  assert.equal(planRefusal({ code: "23505", message: "PLAN_RESOURCES" }, AppError), null);
+});

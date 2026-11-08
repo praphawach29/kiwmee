@@ -35,7 +35,9 @@ export function limitText(value, unit = "") {
 
 /** The plan the shop holds and what buying `plan` would give: { until, switching } */
 export function purchaseOutcome(current, planId, now = new Date()) {
-  const from = Math.max(now.getTime(), current?.valid_until ? new Date(current.valid_until).getTime() : 0);
+  // a different plan replacing a free (complimentary) one starts today; otherwise days run on
+  const restart = current?.complimentary && current.effective !== planId;
+  const from = Math.max(now.getTime(), !restart && current?.valid_until ? new Date(current.valid_until).getTime() : 0);
   return { until: new Date(from + 30 * DAY), switching: Boolean(current && current.effective !== planId && current.effective !== "free") };
 }
 
@@ -366,7 +368,13 @@ export default function BillingPanel({ brandId }) {
 
   return (
     <div className="ad-stack bl-page">
-      {soon && (
+      {wallet.plan.complimentary && wallet.plan.valid_until && (
+        <p className="bl-alert" data-tone="gift">
+          🎁 ร้านของคุณใช้แพ็กเกจ{plan.name}ฟรีถึง {thDate(wallet.plan.valid_until)} · ไม่ตัดเงินจากกระเป๋า · หลังจากนั้นกลับเป็นแพ็กเกจฟรี ถ้ายังไม่ได้เลือกแพ็กเกจ
+          <small>ซื้อแพ็กเกจ{plan.name}ล่วงหน้าได้ วันใช้งานจะต่อจากวันที่ใช้ฟรีหมด</small>
+        </p>
+      )}
+      {soon && !wallet.plan.complimentary && (
         <p className="bl-alert" data-tone={wallet.balance >= plan.monthly ? "info" : "warn"}>
           {daysLeft <= 0 ? `แพ็กเกจ${plan.name}หมดอายุแล้ว` : `แพ็กเกจ${plan.name}จะหมดอายุในอีก ${daysLeft} วัน`}
           {wallet.balance >= plan.monthly ? " · ระบบจะต่ออายุจากกระเป๋าให้อัตโนมัติ" : ` · เติมเงินอีก ${money(plan.monthly - wallet.balance)} บาทเพื่อต่ออายุอัตโนมัติ`}
@@ -382,7 +390,9 @@ export default function BillingPanel({ brandId }) {
               <h2>{plan.name}</h2>
               <p className="ad-muted">{paid ? (wallet.plan.valid_until ? `ใช้ได้ถึง ${thDate(wallet.plan.valid_until)}${daysLeft > 0 ? ` (อีก ${daysLeft} วัน)` : ""}` : "ไม่มีวันหมดอายุ") : "ใช้ได้ไม่มีค่าใช้จ่าย"}</p>
             </div>
-            {paid && <span className="ad-status" data-tone="ok">ต่ออายุอัตโนมัติจากกระเป๋า</span>}
+            {paid && (wallet.plan.complimentary
+              ? <span className="ad-status" data-tone="info">ข้อเสนอเปิดตัว · ใช้ฟรี</span>
+              : <span className="ad-status" data-tone="ok">ต่ออายุอัตโนมัติจากกระเป๋า</span>)}
           </div>
           <div className="bl-meters">
             <Meter label="การจองออนไลน์เดือนนี้" used={wallet.counts.bookings} limit={plan.limits.bookingsPerMonth} unit="ครั้ง" />
@@ -397,7 +407,7 @@ export default function BillingPanel({ brandId }) {
         <section className="ad-card bl-wallet">
           <p className="ad-muted">ยอดในกระเป๋าเงิน</p>
           <p className="bl-balance">{money(wallet.balance)} <small>บาท</small></p>
-          <p className="ad-muted">{paid ? (months > 0 ? `พอต่อแพ็กเกจ${plan.name}ได้อีก ${months} เดือน` : `ยังไม่พอต่อแพ็กเกจ${plan.name} (${money(plan.monthly)} บาท)`) : "ใช้ซื้อแพ็กเกจและแพ็กเสริม"}</p>
+          <p className="ad-muted">{paid && wallet.plan.complimentary ? "ใช้ซื้อแพ็กเกจล่วงหน้าและแพ็กเสริม" : paid ? (months > 0 ? `พอต่อแพ็กเกจ${plan.name}ได้อีก ${months} เดือน` : `ยังไม่พอต่อแพ็กเกจ${plan.name} (${money(plan.monthly)} บาท)`) : "ใช้ซื้อแพ็กเกจและแพ็กเสริม"}</p>
           <button type="button" className="ad-primary" onClick={() => setTopup(paid && wallet.balance < plan.monthly ? Math.max(wallet.limits.min, Math.ceil(plan.monthly - wallet.balance)) : 1000)}>เติมเงิน</button>
           {pending.length > 0 && <p className="bl-pending">⏳ สลิปรอตรวจ {pending.length} ใบ · รวม {money(pending.reduce((s, t) => s + t.amount, 0))} บาท</p>}
           <p className="bl-wallet-note">โอนผ่านพร้อมเพย์แล้วแนบสลิป · ตรวจอัตโนมัติ เงินเข้าทันที</p>

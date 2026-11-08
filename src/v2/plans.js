@@ -77,6 +77,26 @@ const ADDONS = [
 
 const planById = (id) => PLANS.find((p) => p.id === id) ?? PLANS[0];
 
+// What the shop reads when the database refuses something its plan does not include
+// (migration …004100 raises BK422 with these messages)
+const PLAN_REASON_TEXT = {
+  PLAN_RESOURCES: "แพ็กเกจของคุณเปิดช่าง/สนาม/ห้องได้เต็มจำนวนแล้ว · ปิดตัวที่ไม่ใช้ หรืออัปเกรดแพ็กเกจ",
+  PLAN_MEMBERS: "แพ็กเกจของคุณมีบัญชีพนักงานครบจำนวนแล้ว · อัปเกรดแพ็กเกจเพื่อเพิ่มคน",
+  PLAN_FEATURE_LAYOUT: "แผนผังสนามใช้ได้ในแพ็กเกจโปร",
+  PLAN_FEATURE_ADDONS: "ตัวเลือกเสริมใช้ได้ตั้งแต่แพ็กเกจเริ่มต้น",
+  PLAN_FEATURE_RENTALS: "การเช่ารายวันใช้ได้ในแพ็กเกจโปร",
+  PLAN_FEATURE_LOYALTY: "ระบบสมาชิกและคะแนนใช้ได้ในแพ็กเกจโปรหรือแพ็กเกจสมาชิก",
+  PLAN_BOOKINGS_FULL: "ร้านรับจองออนไลน์ครบจำนวนของเดือนนี้แล้ว กรุณาติดต่อร้านโดยตรง",
+  PLAN_ONLINE_OFF: "ร้านนี้ไม่ได้เปิดรับจองออนไลน์ กรุณาติดต่อร้านโดยตรง",
+  PLAN_LIMIT: "แพ็กเกจของแบรนด์นี้มีสาขาครบจำนวนแล้ว · อัปเกรดแพ็กเกจเพื่อเพิ่มสาขา"
+};
+
+/** A refusal from the plan guards as the shop should read it, or null for any other error */
+function planRefusal(error, AppError) {
+  if (error?.code !== "BK422" || !PLAN_REASON_TEXT[error.message] || !error.message.startsWith("PLAN_")) return null;
+  return new AppError("PLAN_LIMIT", PLAN_REASON_TEXT[error.message], 422, { reason: error.message });
+}
+
 /** Everything the wallet can sell, by SKU: one month of each paid plan, then the add-on packs. */
 function buildSkus() {
   const skus = {};
@@ -101,4 +121,4 @@ function planCatalog() {
   };
 }
 
-module.exports = { PLANS, ADDONS, LIMIT_ROWS, FEATURE_ROWS, EVERY_PLAN, UNLIMITED, planById, buildSkus, planCatalog, PLAN_PRICES, PLAN_MESSAGES };
+module.exports = { PLAN_REASON_TEXT, planRefusal, PLANS, ADDONS, LIMIT_ROWS, FEATURE_ROWS, EVERY_PLAN, UNLIMITED, planById, buildSkus, planCatalog, PLAN_PRICES, PLAN_MESSAGES };

@@ -176,6 +176,46 @@ function DateInput({ value, onChange, min, max, required = false, "aria-label": 
   );
 }
 
+// ---------- what the brand's plan allows (migration …004100) ----------
+
+/** Online bookings this month against a plan that limits them: shown from 80% */
+export function BookingQuotaBanner({ plan }) {
+  const limit = plan?.limits?.bookingsPerMonth;
+  if (!plan || limit === null || limit === undefined || limit === 0) return null;
+  const used = plan.used?.bookings ?? 0;
+  if (used < limit * 0.8) return null;
+  const full = used >= limit;
+  return (
+    <p className="ad-plan-lock" data-tone={full ? "full" : "warn"} role="status">
+      <span aria-hidden="true">{full ? "⛔" : "⚠️"}</span>
+      <span>{full
+        ? `จองออนไลน์เดือนนี้ครบ ${limit} ครั้งแล้ว · ลูกค้าจองออนไลน์ไม่ได้จนถึงต้นเดือนหน้า (ร้านยังเพิ่มการจองเองได้)`
+        : `จองออนไลน์เดือนนี้ ${used}/${limit} ครั้ง · ครบแล้วลูกค้าจะจองออนไลน์ไม่ได้จนถึงต้นเดือนหน้า`}</span>
+      <a className="ad-link" href="#billing">อัปเกรดเพื่อจองไม่จำกัด</a>
+    </p>
+  );
+}
+// The database refuses anything the plan lacks; these say so before the shop fills in a form.
+const UPGRADE_FOR = { layout: "โปร", rentals: "โปร", loyalty: "โปร หรือ สมาชิก", addons: "เริ่มต้น หรือ โปร", reminders: "เริ่มต้น หรือ โปร" };
+
+/** A note with a way to the billing tab. compact: one line under a button */
+function PlanLock({ children, compact = false }) {
+  return (
+    <p className={compact ? "ad-plan-lock ad-plan-lock-compact" : "ad-plan-lock"}>
+      <span aria-hidden="true">🔒</span>
+      <span>{children}</span>
+      <a className="ad-link" href="#billing">ดูแพ็กเกจ</a>
+    </p>
+  );
+}
+
+const planAllows = (catalog, feature) => catalog.plan?.features?.[feature] !== false;
+/** Room left under a plan limit: { full, limit } (limit null = no limit) */
+function planRoom(catalog, key, used) {
+  const limit = catalog.plan?.limits?.[key];
+  return { limit: limit ?? null, full: limit !== null && limit !== undefined && used >= limit };
+}
+
 function Status({ save }) {
   if (save.error) return <p className="ad-error" role="alert">{save.error}</p>;
   if (save.done) return <p className="ad-ok" role="status">{save.done}</p>;
@@ -314,6 +354,7 @@ export default function ShopAdmin({ slug }) {
       {signOutError && <p className="ad-error" role="alert">{signOutError}</p>}
       {role === "staff" && <p className="ad-notice">พนักงานจัดการการจอง ขายหน้าร้าน และปิดบิลได้ · การตั้งค่าร้านและคืนเงินเฉพาะเจ้าของร้าน</p>}
       {!tab && <p className="ad-error" role="alert">คุณไม่มีสิทธิ์เข้าถึงเมนูจัดการร้านนี้ กรุณาติดต่อเจ้าของร้าน</p>}
+      {role === "owner" && tab !== "billing" && <BookingQuotaBanner plan={catalog.plan} />}
       <ReadOnly.Provider value={readOnly}>
         {tab === "overview" && <OverviewTab slug={slug} catalog={catalog} onNavigate={show} onOpenBooking={openBooking} onAddBooking={addBooking} />}
         {tab === "bookings" && <BookingsTab key={`${bookingDay ?? "today"}:${focusBooking ?? ""}:${adding}`} slug={slug} catalog={catalog} initialDay={bookingDay} focusId={focusBooking} startAdding={adding > 0} />}
@@ -324,7 +365,7 @@ export default function ShopAdmin({ slug }) {
         {tab === "offerings" && <OfferingsTab slug={slug} catalog={catalog} onSaved={reload} />}
         {tab === "resources" && <ResourcesTab slug={slug} catalog={catalog} onSaved={reload} />}
         {tab === "hours" && <HoursTab slug={slug} catalog={catalog} onSaved={reload} />}
-        {tab === "team" && <TeamTab slug={slug} />}
+        {tab === "team" && <TeamTab slug={slug} catalog={catalog} />}
         {tab === "billing" && (catalog.shop.brandOwner
           ? <BillingPanel brandId={catalog.shop.brandId} />
           : <section className="ad-card"><h2>แพ็กเกจและการชำระเงิน</h2><p className="ad-muted">แพ็กเกจและกระเป๋าเงินเป็นของแบรนด์ · เฉพาะเจ้าของแบรนด์จัดการได้</p></section>)}
@@ -1047,6 +1088,14 @@ function LoyaltyTab({ slug, catalog }) {
   const tierName = (rank) => data.tiers.find((t) => t.rank === rank)?.name ?? `ระดับ ${rank + 1}`;
   return (
     <div className="ad-stack ad-loyalty">
+      {!planAllows(catalog, "loyalty") && (
+        <PlanLock>
+          ระบบสมาชิกและคะแนนใช้ได้ในแพ็กเกจ{UPGRADE_FOR.loyalty} ·{" "}
+          {data.program.active
+            ? `โปรแกรมที่เปิดไว้แล้วยังทำงานต่อ แต่ถ้าปิดจะเปิดใหม่ในแพ็กเกจ${catalog.plan.name}ไม่ได้`
+            : `แพ็กเกจ${catalog.plan.name}ตั้งค่าไว้ก่อนได้ แต่เปิดใช้ไม่ได้`}
+        </PlanLock>
+      )}
       {/* the programme at a glance: the card members see, whether it is on, the rule, and the numbers */}
       <section className="ad-card ad-loy-hero" aria-label="ภาพรวมบัตรสมาชิก">
         <div className="ad-loy-card">
@@ -2565,9 +2614,10 @@ function OfferingsTab({ slug, catalog, onSaved }) {
         <section className="ad-card">
           <div className="ad-row ad-between">
             <h2>ตัวเลือกเสริม</h2>
-            {!readOnly && <button className="ad-secondary" onClick={() => openGroup(null)}>+ เพิ่มกลุ่ม</button>}
+            {!readOnly && planAllows(catalog, "addons") && <button className="ad-secondary" onClick={() => openGroup(null)}>+ เพิ่มกลุ่ม</button>}
           </div>
           <p className="ad-muted">ของที่ลูกค้าเลือกเพิ่มได้ เช่น เช่าไม้ ห้องอาบน้ำ ทรีตเมนต์เพิ่ม · จัดเป็นกลุ่ม แล้วเลือกว่าใช้กับบริการไหน</p>
+          {!planAllows(catalog, "addons") && <PlanLock>ตัวเลือกเสริมใช้ได้ในแพ็กเกจ{UPGRADE_FOR.addons}</PlanLock>}
           {groups.length === 0 && <p className="ad-empty">ยังไม่มีตัวเลือกเสริม</p>}
           <ul className="ad-list ad-tiles">
             {groups.map((g) => (
@@ -2815,7 +2865,7 @@ function OfferingEditor({ slug, catalog, initial, onSaved, onClose }) {
         <div className="ad-checks">
           <label><input type="radio" checked={o.durationMode === "fixed"} onChange={() => set({ durationMode: "fixed" })} />ตายตัว</label>
           <label><input type="radio" checked={o.durationMode === "customer_choice"} onChange={() => set({ durationMode: "customer_choice", prices: o.prices.map((p) => (p.unit === "per_booking" && p.amount === "" ? { ...p, unit: "per_hour" } : p)) })} />ลูกค้าเลือกเอง (เช่น เช่าสนามรายชั่วโมง)</label>
-          <label><input type="radio" checked={o.durationMode === "days"} onChange={() => set({ durationMode: "days", minDays: o.minDays ?? 1, maxDays: o.maxDays ?? 7, prices: o.prices.map((p) => (p.amount === "" ? { ...p, unit: "per_day" } : p)) })} />หลายวัน (เช่ารายวัน เช่น รถ กล้อง)</label>
+          <label className={!planAllows(catalog, "rentals") && o.durationMode !== "days" ? "ad-disabled" : ""}><input type="radio" disabled={!planAllows(catalog, "rentals") && o.durationMode !== "days"} checked={o.durationMode === "days"} onChange={() => set({ durationMode: "days", minDays: o.minDays ?? 1, maxDays: o.maxDays ?? 7, prices: o.prices.map((p) => (p.amount === "" ? { ...p, unit: "per_day" } : p)) })} />หลายวัน (เช่ารายวัน เช่น รถ กล้อง){!planAllows(catalog, "rentals") && " 🔒 แพ็กเกจโปร"}</label>
         </div>
       </div>
       {o.durationMode === "days" ? (
@@ -3015,6 +3065,7 @@ function ResourcesTab({ slug, catalog, onSaved }) {
   const readOnly = useContext(ReadOnly);
   useEffect(() => setEditing((e) => (e?.id ? structuredClone(catalog.resources.find((r) => r.id === e.id) ?? null) : null)), [catalog]);
   const closeEditor = useCallback(() => setEditing(null), []);
+  const resourceRoom = planRoom(catalog, "resources", catalog.plan?.used?.resources ?? 0);
 
   return (
     <div className="ad-split" data-solo="true">
@@ -3022,9 +3073,10 @@ function ResourcesTab({ slug, catalog, onSaved }) {
       <section className="ad-card">
         <div className="ad-row ad-between">
           <h2>ช่าง / สนาม / ห้อง <small className="ad-count">{catalog.resources.length}</small></h2>
-          {!readOnly && <button className="ad-secondary" onClick={() => setEditing(emptyResource(catalog))}>+ เพิ่ม</button>}
+          {!readOnly && <button className="ad-secondary" disabled={resourceRoom.full} onClick={() => setEditing(emptyResource(catalog))}>+ เพิ่ม</button>}
         </div>
         <p className="ad-muted">สิ่งที่ถูกจองแล้วคนอื่นใช้ช่วงเวลาเดียวกันไม่ได้ ความจุมากกว่า 1 = รับหลายคนพร้อมกัน (เช่น คลาสโยคะ 12 ที่)</p>
+        {resourceRoom.full && <PlanLock compact>แพ็กเกจ{catalog.plan.name}เปิดช่าง/สนาม/ห้องได้ {resourceRoom.limit} รายการ (ทุกสาขารวมกัน) · ปิดรายการที่ไม่ใช้ หรืออัปเกรด</PlanLock>}
         {catalog.resources.length === 0 && <p className="ad-empty">ยังไม่มี · กด “+ เพิ่ม” เพื่อเริ่ม</p>}
         <ul className="ad-list ad-tiles">
           {catalog.resources.map((r) => (
@@ -3044,7 +3096,9 @@ function ResourcesTab({ slug, catalog, onSaved }) {
           ))}
         </ul>
       </section>
-      {catalog.resources.some((r) => r.active) && <LayoutEditor slug={slug} catalog={catalog} onSaved={onSaved} />}
+      {catalog.resources.some((r) => r.active) && (planAllows(catalog, "layout")
+        ? <LayoutEditor slug={slug} catalog={catalog} onSaved={onSaved} />
+        : <section className="ad-card"><h2>แผนผังที่ลูกค้าเห็น</h2><PlanLock>แผนผังสนามให้ลูกค้าแตะเลือกที่ว่างจากผัง ใช้ได้ในแพ็กเกจ{UPGRADE_FOR.layout}</PlanLock></section>)}
       </div>
       {editing && (
         <EditorSheet title={editing.id ? `แก้ · ${editing.name}` : `เพิ่ม${resourceWord(catalog)}ใหม่`} onClose={closeEditor}>
@@ -3576,7 +3630,7 @@ function DepositSettings({ settings, setSetting }) {
 const TEAM_ROLES = { owner: "เจ้าของร้าน", staff: "พนักงาน" };
 
 /** Who works at the shop: invite by email, change role, remove (the shop keeps one owner) */
-function TeamTab({ slug }) {
+function TeamTab({ slug, catalog = null }) {
   const [team, setTeam] = useState(null);
   const [error, setError] = useState("");
   const [form, setForm] = useState({ email: "", role: "staff" });
@@ -3668,6 +3722,9 @@ function TeamTab({ slug }) {
           </label>
         </div>
         <Status save={save} />
+        {catalog && planRoom(catalog, "members", catalog.plan?.used?.people ?? 0).full && (
+          <PlanLock compact>แพ็กเกจ{catalog.plan.name}มีบัญชีได้ {catalog.plan.limits.members} คน (รวมคำเชิญที่ยังไม่ตอบ) · อัปเกรดเพื่อเพิ่มคน</PlanLock>
+        )}
         <div className="ad-row">
           <button className="ad-primary" disabled={save.busy}>เชิญ</button>
         </div>

@@ -39,6 +39,8 @@ async function inTx(fn) {
     await admin.actAs(db, USERS.barber);
     await admin.createShop(db, { name: "ร้านอื่น", slug: "team-other" });
     await db.query("reset role");
+    // a new shop starts on the free plan (one person): these tests are about the team, so give it Pro
+    await db.query("update public.brand_plans set plan = 'pro', valid_until = null where brand_id in (select brand_id from public.businesses where slug in ('team-shop', 'team-other'))");
     return await fn();
   } finally {
     await db.query("rollback");

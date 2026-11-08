@@ -111,7 +111,9 @@ async function shopInfo(db, slug, { now = Date.now() } = {}) {
             (select coalesce(jsonb_object_agg(r.id, r.media), '{}'::jsonb)
                from public.resources r where r.business_id = b.id and r.active) as resource_media,
             (select coalesce(jsonb_object_agg(r.id, jsonb_build_object('row', r.layout_row, 'col', r.layout_col, 'w', r.layout_w, 'h', r.layout_h)), '{}'::jsonb)
-               from public.resources r where r.business_id = b.id and r.active and r.layout_row is not null) as resource_layout
+               from public.resources r where r.business_id = b.id and r.active and r.layout_row is not null
+                and public.plan_has(public.brand_plan(b.brand_id), 'layout')) as resource_layout,
+            public.business_online_open(b.id) as online_open
        from public.businesses b where b.id = $1`, [shop.id]
   );
   const pickable = new Set(
@@ -131,6 +133,8 @@ async function shopInfo(db, slug, { now = Date.now() } = {}) {
     name: shop.name,
     kind: shop.kind,
     timezone: shop.timezone,
+    // false: the plan has no online booking, or this month's online bookings are used up (…004100)
+    onlineOpen: gallery.online_open !== false,
     media: gallery.media,
     amenities: amenityList(gallery.amenities).map((a) => a.code),
     about: gallery.about ?? "",

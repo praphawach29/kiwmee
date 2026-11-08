@@ -10,7 +10,7 @@ import CustomerFrame from "./customer-frame.jsx";
 import { useLiff } from "./use-liff.jsx";
 import { CheckinQr } from "./qr.jsx";
 import { bookingCode } from "../../../src/v2/scan-codes.js";
-import { BookingProgress, BookingReview, BookingSubmitBar, CustomerTabs, DepositBox, DocumentsBox, OfferingDetails, ShopAbout, ShopHeader, ShopHero, OfferingThumbnail, ResourceChoice, ResourceThumbnail, groupTimes, withMedia } from "./booking-presentation.jsx";
+import { BookingProgress, BookingReview, BookingSubmitBar, CustomerTabs, DepositBox, DirectionsButton, DocumentsBox, OfferingDetails, ShopAbout, ShopHeader, ShopHero, OfferingThumbnail, ResourceChoice, ResourceThumbnail, groupTimes, withMedia } from "./booking-presentation.jsx";
 
 const RESOURCE_WORD = { staff: "ช่าง", court: "สนาม", room: "ห้อง", equipment: "อุปกรณ์" };
 const STEP_TITLE = {
@@ -490,6 +490,23 @@ export default function BookingV2Client({ shop, liffId, initialView = null }) {
         <main className="bk-shell">
           <BookingDone shop={shop} booking={booking} items={summaryItems} selected={selected} resourceWord={resourceWord} customerName={customer.name}
             onSlip={(view) => setBooking((b) => ({ ...b, status: view.booking.status, deposit: { ...b.deposit, slips: view.booking.deposit?.slips ?? 1 } }))} />
+          <PoweredBy />
+        </main>
+      </CustomerFrame>
+    );
+  }
+
+  // the shop's plan takes no online bookings, or this month's are used up (migration …004100)
+  if (shop.onlineOpen === false) {
+    return (
+      <CustomerFrame>
+        <main className="bk-shell">
+          <ShopHeader shop={shop} subtitle="จองคิวออนไลน์" />
+          <section className="bk-card bk-closed" role="status">
+            <h2>ร้านปิดรับจองออนไลน์ชั่วคราว</h2>
+            <p className="bk-empty">กรุณาติดต่อร้านโดยตรงเพื่อนัดหมาย{shop.address ? ` · ${shop.address}` : ""}</p>
+            {shop.directions && <DirectionsButton href={shop.directions} />}
+          </section>
           <PoweredBy />
         </main>
       </CustomerFrame>

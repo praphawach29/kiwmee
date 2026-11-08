@@ -10,6 +10,7 @@
 
 const { cleanSpot, overlap, layoutOf } = require("./resource-layout");
 const { AppError, badRequest, forbidden, notFound } = require("../errors");
+const { planRefusal, planById } = require("./plans");
 const { validateMedia } = require("./media-validation");
 const { AMENITY_CODES } = require("./amenities");
 const { validMapUrl } = require("./directions");
@@ -51,6 +52,8 @@ async function asUser(pool, user, fn) {
 // Database refusals as messages an owner can act on
 function dbError(error) {
   if (error instanceof AppError) return error;
+  const plan = planRefusal(error, AppError);
+  if (plan) return plan;
   switch (error?.code) {
     case "42501":
       return forbidden("ไม่มีสิทธิ์แก้ข้อมูลนี้ (เฉพาะเจ้าของร้าน)");
@@ -231,11 +234,33 @@ async function getCatalog(client, shop) {
     slip_auto_confirm: false,
     deposit_allow_full: true
   };
+  // the brand's plan and what it uses of it, so the screens can say what is locked (…004100)
+  const { rows: [use] } = await client.query(
+    `select public.brand_plan(b.brand_id) as plan, coalesce(p.complimentary, false) as complimentary, p.valid_until,
+            public.brand_month_online_bookings(b.brand_id) as bookings,
+            public.brand_people(b.brand_id) as people,
+            (select count(*)::int from public.resources r join public.businesses x on x.id = r.business_id
+              where x.brand_id = b.brand_id and r.active and r.kind <> 'equipment') as resources
+       from public.businesses b left join public.brand_plans p on p.brand_id = b.brand_id
+      where b.id = $1`,
+    [shop.id]
+  );
+  const planRow = planById(use?.plan ?? "free");
+  const plan = {
+    id: planRow.id,
+    name: planRow.name,
+    limits: planRow.limits,
+    features: planRow.features,
+    complimentary: Boolean(use?.complimentary),
+    validUntil: use?.valid_until ?? null,
+    used: { bookings: use?.bookings ?? 0, people: use?.people ?? 0, resources: use?.resources ?? 0 }
+  };
   const flow = flows[0] ?? { entry: ["date", "offering"], require: ["offering", "date", "time"], optional: ["resource"], then: ["customer"], options: {} };
   // A shop with no hours saved yet is open 10–19 every day (as the options engine assumes)
   const dayHours = (d) => hours.find((h) => h.day_of_week === d) ?? (hours.length ? null : { is_open: true, open_time: "10:00", close_time: "19:00" });
 
   return {
+    plan,
     shop: { slug: shop.slug, name: current.name, kind: current.kind, timezone: shop.timezone, role: shop.role, media: current.media, amenities: current.amenities ?? [], about: current.about ?? "", address: current.address ?? "", mapUrl: current.map_url ?? "", brandId: current.brand_id ?? null, brandOwner: current.brand_owner === true },
     settings: {
       minLeadMinutes: s.min_lead_minutes,

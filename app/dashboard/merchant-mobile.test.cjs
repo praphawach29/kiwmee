@@ -153,3 +153,31 @@ test('Thai date and time fields: 24-hour time with น., dates as Thai short dat
   assert.doesNotMatch(date, /type="date"/);
   assert.match(date, /required=""/);
 });
+
+test('plan limits: a quota banner from 80%, locks where the plan lacks a feature, and the add button stops at the limit', () => {
+  const { BookingQuotaBanner, ResourcesTab } = load('[slug]/shop-admin-client.jsx', '\nexport { ResourcesTab };');
+  const free = (used) => ({ id: 'free', name: 'ฟรี', limits: { bookingsPerMonth: 50, resources: 2, members: 1 }, features: { layout: false, addons: false, loyalty: false, rentals: false }, used });
+  assert.equal(render(BookingQuotaBanner, { plan: free({ bookings: 39 }) }), '');
+  assert.match(render(BookingQuotaBanner, { plan: free({ bookings: 40 }) }), /data-tone="warn".*40\/50 ครั้ง/);
+  assert.match(render(BookingQuotaBanner, { plan: free({ bookings: 50 }) }), /data-tone="full".*ครบ 50 ครั้งแล้ว.*href="#billing"/);
+  assert.equal(render(BookingQuotaBanner, { plan: { ...free({ bookings: 999 }), limits: { bookingsPerMonth: null } } }), '');
+
+  const catalog = {
+    shop: { kind: 'court' },
+    plan: free({ resources: 2 }),
+    offerings: [],
+    resources: [
+      { id: 'r1', kind: 'court', name: 'คอร์ต 1', capacity: 1, active: true, offeringIds: [], media: [] },
+      { id: 'r2', kind: 'court', name: 'คอร์ต 2', capacity: 1, active: true, offeringIds: [], media: [] }
+    ]
+  };
+  const html = render(ResourcesTab, { slug: 's', catalog, onSaved() {} });
+  assert.match(html, /<button class="ad-secondary" disabled="">\+ เพิ่ม<\/button>/);
+  assert.match(html, /เปิดช่าง\/สนาม\/ห้องได้ 2 รายการ/);
+  assert.match(html, /แผนผังสนาม.*ใช้ได้ในแพ็กเกจโปร/);
+  assert.doesNotMatch(html, /ad-layout-grid/);
+  // no limit: the add button works (the court map itself is rendered by the booking-presentation tests)
+  const roomy = render(ResourcesTab, { slug: 's', catalog: { ...catalog, plan: { ...catalog.plan, limits: { resources: null } } }, onSaved() {} });
+  assert.match(roomy, /<button class="ad-secondary">\+ เพิ่ม<\/button>/);
+  assert.doesNotMatch(roomy, /เปิดช่าง\/สนาม\/ห้องได้/);
+});

@@ -62,6 +62,13 @@ async function setPlan(shopId, plan, validUntil = null) {
   await db.query("update public.brand_plans set plan = $2, valid_until = $3 where brand_id = $1", [await brandOf(shopId), plan, validUntil]);
 }
 
+// make room for the next branch inside a test (Pro holds two)
+async function dropBranch(slug) {
+  await db.query("reset role");
+  await db.query("delete from public.businesses where slug = $1", [slug]);
+  await as(USERS.owner);
+}
+
 async function refused(fn, check) {
   await db.query("savepoint expect_error");
   try {
@@ -93,6 +100,7 @@ test("every shop is a branch of a brand; a new shop starts its own brand on the 
 test("a branch needs a plan with room for it, and is set up like the branch it copies", { skip }, async () => {
   await inTx(async () => {
     const brand = await brandOf(SALON);
+    await setPlan(SALON, "free"); // the demo brands are on Pro (seed.sql)
     await as(USERS.owner);
     await refused(() => brands.addBranch(db, brand, { name: "Bloom สาขา 2", slug: "bloom-2", copyFrom: "bloom-hair" }), (e) => e.status === 422 && e.details.reason === "PLAN_LIMIT");
 
@@ -113,6 +121,10 @@ test("a branch needs a plan with room for it, and is set up like the branch it c
     const settings = (await db.query("select min_lead_minutes, max_advance_days from public.business_booking_settings where business_id = $1", [b2])).rows[0];
     assert.deepEqual(settings, { min_lead_minutes: 30, max_advance_days: 30 });
 
+    // Pro includes two branches: a third waits for a free place (B6 sells more)
+    await refused(() => brands.addBranch(db, brand, { name: "Bloom สาขา 3", slug: "bloom-3" }), (e) => e.details.reason === "PLAN_LIMIT");
+    await dropBranch("bloom-2");
+
     // with the stylists: same people, same weekly schedule, same "who does what"
     await brands.addBranch(db, brand, { name: "Bloom สาขา 3", slug: "bloom-3", copyFrom: "bloom-hair", copyResources: true });
     const b3 = await shopId("bloom-3");
@@ -131,8 +143,10 @@ test("a branch needs a plan with room for it, and is set up like the branch it c
     assert.deepEqual(colourOnly, ["ทำสีผม"]);
 
     // a blank branch, and a link that is taken
+    await dropBranch("bloom-3");
     await brands.addBranch(db, brand, { name: "สาขาว่าง", slug: "bloom-blank" });
     assert.equal(await count("offerings", await shopId("bloom-blank")), 0);
+    await dropBranch("bloom-blank");
     await refused(() => brands.addBranch(db, brand, { name: "ซ้ำ", slug: "gentleman-barber" }), (e) => e.code === "23505");
     await refused(() => brands.addBranch(db, brand, { name: "x", slug: "Bad Slug" }), (e) => e.status === 422);
     await refused(() => brands.addBranch(db, brand, { name: "x", slug: "bloom-x", copyFrom: "gentleman-barber" }), (e) => e.status === 404);
@@ -240,6 +254,7 @@ test("an expired plan is the free plan again", { skip }, async () => {
 
 test("shops opened separately can be brought into one brand", { skip }, async () => {
   await inTx(async () => {
+    await setPlan(SALON, "free"); // the demo brands are on Pro (seed.sql)
     await as(USERS.owner);
     await admin.createShop(db, { name: "Bloom สาขาเก่า", slug: "bloom-old" });
     const old = await shopId("bloom-old");
@@ -298,6 +313,6 @@ test("the shop dashboard still lists its brands when the invite migration is mis
     await as(USERS.owner);
     const list = await brands.listBrands(db);
     assert.ok(list.length >= 1, "brands are listed even without the invite function");
-    assert.equal(list[0].plan, "free");
+    assert.ok(["free", "pro"].includes(list[0].plan));
   });
 });

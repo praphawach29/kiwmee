@@ -16,8 +16,11 @@ async function listAllBrands(pool) {
     select br.id, br.name, public.brand_plan(br.id) as plan,
            public.brand_branch_limit(public.brand_plan(br.id)) as branch_limit,
            (select count(*)::int from public.businesses x where x.brand_id = br.id) as branch_count,
+           p.valid_until, coalesce(p.complimentary, false) as complimentary, coalesce(p.trial, false) as trial, p.grace_until,
+           coalesce((select a.balance::float8 from public.wallet_accounts a where a.brand_id = br.id), 0) as balance,
            coalesce((select u.email from public.brand_members bm join auth.users u on u.id = bm.user_id where bm.brand_id = br.id order by bm.user_id limit 1), null) as owner_email
       from public.brands br
+      left join public.brand_plans p on p.brand_id = br.id
      order by br.name
   `);
   return rows.map((r) => ({
@@ -27,6 +30,11 @@ async function listAllBrands(pool) {
     branchLimit: r.branch_limit,
     branchCount: r.branch_count,
     ownerEmail: r.owner_email,
+    validUntil: r.valid_until ?? null,
+    complimentary: r.complimentary === true,
+    trial: r.trial === true,
+    graceUntil: r.grace_until ?? null,
+    balance: Number(r.balance) || 0,
   }));
 }
 

@@ -36,3 +36,18 @@ test("Thai labels preserve unknown values and booking paths only encode the actu
   assert.equal(bookingPath("shop?token=secret"), "/b/shop%3Ftoken%3Dsecret");
   assert.equal(bookingPath(null), null);
 });
+
+test("brand status: grace, trial, free gift, expiring, paid, no end date, free", async () => {
+  const { brandStatus, filterBrands } = await import("../app/super/catalog-view.mjs");
+  const now = new Date("2026-11-08T00:00:00Z");
+  const day = (n) => new Date(now.getTime() + n * 864e5).toISOString();
+  assert.equal(brandStatus({ plan: "starter", validUntil: day(-1), graceUntil: day(6) }, now).key, "grace");
+  assert.equal(brandStatus({ plan: "pro", validUntil: day(9), trial: true, complimentary: true }, now).key, "trial");
+  assert.equal(brandStatus({ plan: "pro", validUntil: day(80), complimentary: true }, now).key, "gift");
+  assert.deepEqual(brandStatus({ plan: "pro", validUntil: day(5) }, now), { key: "expiring", label: "หมดใน 5 วัน", tone: "warn" });
+  assert.equal(brandStatus({ plan: "pro", validUntil: day(25) }, now).key, "paid");
+  assert.equal(brandStatus({ plan: "pro", validUntil: null }, now).key, "forever");
+  assert.equal(brandStatus({ plan: "free" }, now).key, "free");
+  const brands = [{ id: "a", name: "A", plan: "pro", validUntil: day(5) }, { id: "b", name: "B", plan: "pro", validUntil: day(25) }];
+  assert.deepEqual(filterBrands(brands, { status: "expiring", now }).map((b) => b.id), ["a"]);
+});

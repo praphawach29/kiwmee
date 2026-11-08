@@ -672,3 +672,18 @@
   }
   .sp-topup-table td:last-child::before { display: none; }
 }
+
+/* B7: plan status in the brand list, and the plan / wallet tools in a brand's detail */
+.super-plan-status { display: block; margin-top: 2px; color: var(--muted, #6b6880); font-size: 12px; }
+.super-plan-status.warn { color: #B54708; font-weight: 600; }
+.super-plan-status.ok { color: #138A55; }
+.super-billing { display: grid; gap: 12px; margin: 8px 0 16px; padding: 16px; border: 1px solid var(--line, #DCD6F5); border-radius: 12px; }
+.super-billing h3, .super-billing h4 { margin: 0; }
+.super-billing h4 { margin-top: 6px; font-size: 14px; }
+.super-billing-form { display: grid; gap: 10px; padding: 12px; border-radius: 10px; background: var(--bg, #F7F5FF); }
+.super-billing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; align-items: end; }
+.super-billing-form .super-btn { justify-self: start; }
+.super-check { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.super-history { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.super-history li { display: grid; gap: 2px; padding: 8px 10px; border: 1px solid var(--line, #DCD6F5); border-radius: 8px; }
+.super-history small { color: var(--muted, #6b6880); font-size: 12px; }
